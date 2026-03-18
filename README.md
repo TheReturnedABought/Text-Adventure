@@ -95,8 +95,11 @@ text_adventure/
 │   └── map_data.py
 ├── utils/
 │   ├── __init__.py
+│   ├── constants.py
 │   ├── helpers.py
-│   └── constants.py
+│   ├── display.py
+│   ├── actions.py
+│   └── combat.py
 └── assets/
     └── data/
 ```
