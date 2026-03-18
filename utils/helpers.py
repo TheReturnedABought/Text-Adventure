@@ -6,6 +6,14 @@ from utils.constants import MAX_AP, MAX_MANA
 BLUE  = "\033[94m"
 RESET = "\033[0m"
 
+# Rarity colours (used when displaying relic names)
+RARITY_COLORS = {
+    "Common":    "\033[37m",    # grey/white
+    "Uncommon":  "\033[32m",    # green
+    "Rare":      "\033[34m",    # blue
+    "Legendary": "\033[33m",    # gold/yellow
+}
+
 
 def print_slow(text, delay=0.02):
     for char in str(text):
@@ -28,3 +36,9 @@ def print_status(player):
 def make_bar(current, maximum, length=20, fill="█", empty="░"):
     filled = int((current / max(maximum, 1)) * length)
     return fill * filled + empty * (length - filled)
+
+
+def rarity_colored(relic):
+    """Return the relic's name wrapped in its rarity colour."""
+    color = RARITY_COLORS.get(getattr(relic, "rarity", "Common"), "")
+    return f"{color}{relic.name}{RESET}"

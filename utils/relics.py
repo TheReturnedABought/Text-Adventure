@@ -9,30 +9,68 @@ from utils.status_effects import (
     apply_poison, apply_stun, apply_rage,
     apply_vulnerable, apply_weak, apply_block,
 )
-from utils.helpers import print_slow
+from utils.helpers import print_slow, RARITY_COLORS, RESET
 
 VOWELS = set("aeiou")
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _count(raw, letters):
-    """Count occurrences of any character in `letters` within raw string."""
-    return sum(raw.count(c) for c in letters)
-
-def _vowels_as_l(raw):
-    """Silent Lamb Wool: replace all vowels with 'l' before counting."""
-    return "".join("l" if c in VOWELS else c for c in raw)
+# Rarity tiers
+COMMON    = "Common"
+UNCOMMON  = "Uncommon"
+RARE      = "Rare"
+LEGENDARY = "Legendary"
 
 
-# ── Relics ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  CLASS STARTER RELICS
+# ══════════════════════════════════════════════════════════════════════════════
+
+class IronCastHelm(Relic):
+    """Soldier starter relic."""
+    name        = "Iron-Cast Helm"
+    description = "Gain 12 Block at the start of each combat."
+    rarity      = UNCOMMON
+
+    def on_combat_start(self, player, enemy):
+        apply_block(player, 12)
+        print_slow(f"  🪖 Iron-Cast Helm — +12 Block at combat start!")
+
+
+class SleightmakersGlove(Relic):
+    """Rogue starter relic — passive, checked in combat.py before AP is spent."""
+    name        = "Sleightmaker's Glove"
+    description = "Actions with an AP cost of 4 or less cost 1 fewer AP."
+    rarity      = RARE
+
+
+class AetherTapestry(Relic):
+    """Mage starter relic."""
+    name        = "Aether-Spun Tapestry"
+    description = "Max MP +2. Restore 1 MP at the start of each turn."
+    rarity      = RARE
+
+    def on_combat_start(self, player, enemy):
+        player.max_mana += 2
+        player.mana = min(player.mana + 2, player.max_mana)
+        print_slow(f"  🌌 Aether-Spun Tapestry — Max MP +2! ({player.mana}/{player.max_mana})")
+
+    def trigger(self, event, player, enemy, ctx):
+        if event == TRIGGER_TURN_START:
+            if player.mana < player.max_mana:
+                player.mana += 1
+                print_slow(f"  🌌 Aether-Spun Tapestry — +1 MP! ({player.mana}/{player.max_mana})")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  GENERAL RELICS
+# ══════════════════════════════════════════════════════════════════════════════
 
 class FrogStatue(Relic):
     name        = "Frog Statue"
-    description = "Each 'a' typed poisons the enemy for 1 stack."
+    description = "Each 'a' typed poisons the target for 1 stack."
+    rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
-        if event == TRIGGER_ON_ACTION and enemy.health > 0:
+        if event == TRIGGER_ON_ACTION and enemy and enemy.health > 0:
             n = ctx.get("raw", "").count("a")
             if n:
                 apply_poison(enemy, n)
@@ -40,16 +78,18 @@ class FrogStatue(Relic):
 
 class VenomGland(Relic):
     name        = "Venom Gland"
-    description = "Every attack poisons the enemy for 1 stack."
+    description = "Every attack poisons the target for 1 stack."
+    rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
-        if event == TRIGGER_ON_ATTACK and enemy.health > 0:
+        if event == TRIGGER_ON_ATTACK and enemy and enemy.health > 0:
             apply_poison(enemy, 1)
 
 
 class IronWill(Relic):
     name        = "Iron Will"
     description = "Gain 5 Block at the end of each turn."
+    rarity      = UNCOMMON
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_TURN_END:
@@ -58,7 +98,8 @@ class IronWill(Relic):
 
 class ThornBracelet(Relic):
     name        = "Thorn Bracelet"
-    description = "Each time you are hit, gain 1 Rage (doubles next attack)."
+    description = "Each time you are hit, gain 1 Rage."
+    rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_HIT and player.health > 0:
@@ -68,6 +109,7 @@ class ThornBracelet(Relic):
 class BerserkerHelm(Relic):
     name        = "Berserker Helm"
     description = "Each 'r' typed applies 2 Rage to yourself."
+    rarity      = UNCOMMON
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_ACTION:
@@ -78,10 +120,11 @@ class BerserkerHelm(Relic):
 
 class CursedEye(Relic):
     name        = "Cursed Eye"
-    description = "Each 'i' typed applies 1 Vulnerable to the enemy."
+    description = "Each 'i' typed applies 1 Vulnerable to the target."
+    rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
-        if event == TRIGGER_ON_ACTION and enemy.health > 0:
+        if event == TRIGGER_ON_ACTION and enemy and enemy.health > 0:
             n = ctx.get("raw", "").count("i")
             if n:
                 apply_vulnerable(enemy, n)
@@ -89,10 +132,11 @@ class CursedEye(Relic):
 
 class WhisperCharm(Relic):
     name        = "Whisper Charm"
-    description = "Each 'k' typed applies 2 Weak to the enemy."
+    description = "Each 'k' typed applies 2 Weak to the target."
+    rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
-        if event == TRIGGER_ON_ACTION and enemy.health > 0:
+        if event == TRIGGER_ON_ACTION and enemy and enemy.health > 0:
             n = ctx.get("raw", "").count("k")
             if n:
                 apply_weak(enemy, n * 2)
@@ -101,6 +145,7 @@ class WhisperCharm(Relic):
 class BlessedEye(Relic):
     name        = "Blessed Eye"
     description = "Each 'i' typed grants 2 Block."
+    rarity      = UNCOMMON
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_ACTION:
@@ -112,11 +157,11 @@ class BlessedEye(Relic):
 class SilentLambWool(Relic):
     name        = "Silent Lamb Wool"
     description = "All vowels (a/e/i/o/u) also count as 'l' when typed."
+    rarity      = RARE
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_ACTION:
             raw = ctx.get("raw", "")
-            # Keep originals, append one extra 'l' per vowel
             extra_ls = sum(1 for c in raw if c in VOWELS)
             ctx["raw"] = raw + ("l" * extra_ls)
 
@@ -124,6 +169,7 @@ class SilentLambWool(Relic):
 class BearsHide(Relic):
     name        = "Bear's Hide"
     description = "Each 'r' typed grants 1 AP."
+    rarity      = UNCOMMON
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_ACTION:
@@ -133,12 +179,13 @@ class BearsHide(Relic):
                 gained = min(n, MAX_AP - player.current_ap)
                 if gained > 0:
                     player.current_ap += gained
-                    print_slow(f"  🐻 Bear's Hide — +{gained} AP! (AP: {player.current_ap})")
+                    print_slow(f"  🐻 Bear's Hide — +{gained} AP! ({player.current_ap}/{MAX_AP})")
 
 
 class VampiricBlade(Relic):
     name        = "Vampiric Blade"
     description = "Each attack drains 2 HP from the enemy."
+    rarity      = RARE
 
     def trigger(self, event, player, enemy, ctx):
         if event == TRIGGER_ON_ATTACK:
@@ -146,20 +193,48 @@ class VampiricBlade(Relic):
             print_slow(f"  🩸 Vampiric Blade — +2 HP! (HP: {player.health})")
 
 
+class Whetstone(Relic):
+    name        = "Whetstone"
+    description = "Each 's' typed applies 1 Bleed to the target."
+    rarity      = COMMON
+
+    def trigger(self, event, player, enemy, ctx):
+        if event == TRIGGER_ON_ACTION and enemy and enemy.health > 0:
+            from utils.status_effects import apply_bleed
+            n = ctx.get("raw", "").count("s")
+            if n:
+                apply_bleed(enemy, n)
+
+
+class EchoChamber(Relic):
+    name        = "Echo Chamber"
+    description = "Echo triggers twice instead of once."
+    rarity      = RARE
+
+    # Passive — checked by name in combat.py's _resolve_turn_end
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 ALL_RELICS = {
-    "frog statue":      FrogStatue,
-    "venom gland":      VenomGland,
-    "iron will":        IronWill,
-    "thorn bracelet":   ThornBracelet,
-    "berserker helm":   BerserkerHelm,
-    "cursed eye":       CursedEye,
-    "whisper charm":    WhisperCharm,
-    "blessed eye":      BlessedEye,
-    "silent lamb wool": SilentLambWool,
-    "bears hide":       BearsHide,
-    "vampiric blade":   VampiricBlade,
+    # Class starters
+    "iron-cast helm":      IronCastHelm,
+    "sleightmakers glove": SleightmakersGlove,
+    "aether tapestry":     AetherTapestry,
+    # General
+    "frog statue":         FrogStatue,
+    "venom gland":         VenomGland,
+    "iron will":           IronWill,
+    "thorn bracelet":      ThornBracelet,
+    "berserker helm":      BerserkerHelm,
+    "cursed eye":          CursedEye,
+    "whisper charm":       WhisperCharm,
+    "blessed eye":         BlessedEye,
+    "silent lamb wool":    SilentLambWool,
+    "bears hide":          BearsHide,
+    "vampiric blade":      VampiricBlade,
+    "whetstone":           Whetstone,
+    "echo chamber":        EchoChamber,
 }
 
 

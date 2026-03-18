@@ -9,9 +9,12 @@ STATUS_ICONS = {
     "vulnerable": "💢",
     "weak":       "🌀",
     "block":      "🛡",
-    "volatile":   "💥",   # +50% dmg dealt, 50% chance 5 self-dmg per action, max 1 stack, 2 turns
-    "echo":       "🔊",   # repeats last action next turn automatically, max 1 stack, 1 turn
-    "disorient":  "🌪",   # 50% chance to miss attacks, max 1 stack, decays 1/turn
+    "volatile":   "💥",
+    "echo":       "🔊",
+    "disorient":  "🌪",
+    "bleed":      "🩸",   # fixed damage/turn, does NOT decay — must be cleansed
+    "regen":      "🌿",   # restore stacks HP at start of turn, decays 1/turn
+    "burden":     "⚖️",   # +1 AP cost per stack to every command (player); -2 dmg/stack (enemy)
 }
 
 
@@ -30,6 +33,9 @@ def apply_stun(entity, stacks=1):       _apply(entity, "stun", stacks)
 def apply_rage(entity, stacks=1):       _apply(entity, "rage", stacks)
 def apply_vulnerable(entity, stacks=1): _apply(entity, "vulnerable", stacks)
 def apply_weak(entity, stacks=1):       _apply(entity, "weak", stacks)
+def apply_bleed(entity, stacks=1):      _apply(entity, "bleed", stacks)
+def apply_regen(entity, stacks=1):      _apply(entity, "regen", stacks)
+def apply_burden(entity, stacks=1):     _apply(entity, "burden", stacks)
 
 def apply_volatile(entity):
     """Max 1 stack. Caps at 1 regardless of how many times applied."""
@@ -63,7 +69,10 @@ def is_raging(entity):     return entity.statuses.get("rage", 0) > 0
 def get_block(entity):     return entity.statuses.get("block", 0)
 def is_volatile(entity):   return entity.statuses.get("volatile", 0) > 0
 def is_disoriented(entity):return entity.statuses.get("disorient", 0) > 0
-def get_echo(entity):      return entity.statuses.get("echo", None)   # returns command str or None
+def get_echo(entity):      return entity.statuses.get("echo", None)
+def get_burden(entity):    return entity.statuses.get("burden", 0)
+def get_regen(entity):     return entity.statuses.get("regen", 0)
+def get_bleed(entity):     return entity.statuses.get("bleed", 0)
 
 
 # ── Consume (read + remove for one-shot effects) ──────────────────────────────
@@ -149,6 +158,29 @@ def tick_statuses(entity):
         if entity.statuses["disorient"] <= 0:
             del entity.statuses["disorient"]
             print_slow(f"  🌪 {name} is no longer disoriented.")
+
+    # Bleed — fixed damage, does NOT decay; must be cleansed
+    bleed = entity.statuses.get("bleed", 0)
+    if bleed > 0:
+        entity.health = max(0, entity.health - bleed)
+        print_slow(f"  🩸 {name} bleeds for {bleed} damage! (HP: {entity.health})")
+
+    # Regen — heal stacks HP, then decay by 1
+    regen = entity.statuses.get("regen", 0)
+    if regen > 0:
+        entity.health = min(getattr(entity, "max_health", entity.health + regen),
+                            entity.health + regen)
+        print_slow(f"  🌿 {name} regenerates {regen} HP! (HP: {entity.health})")
+        entity.statuses["regen"] -= 1
+        if entity.statuses["regen"] <= 0:
+            del entity.statuses["regen"]
+
+    # Burden — decrement duration
+    if entity.statuses.get("burden", 0) > 0:
+        entity.statuses["burden"] -= 1
+        if entity.statuses["burden"] <= 0:
+            del entity.statuses["burden"]
+            print_slow(f"  ⚖️ {name} is no longer burdened.")
 
 def clear_block(entity):
     """Clear block at the start of a new turn (StS: block doesn't carry over)."""
