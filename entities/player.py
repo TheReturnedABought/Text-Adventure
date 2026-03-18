@@ -1,5 +1,5 @@
 # entities/player.py
-from utils.constants import MAX_HEALTH, MAX_AP, XP_PER_LEVEL
+from utils.constants import MAX_HEALTH, MAX_AP, MAX_MANA, XP_PER_LEVEL
 
 
 class Player:
@@ -8,6 +8,8 @@ class Player:
         self.health      = MAX_HEALTH
         self.max_health  = MAX_HEALTH
         self.current_ap  = MAX_AP
+        self.mana        = MAX_MANA
+        self.max_mana    = MAX_MANA
         self.inventory   = []
         self.statuses    = {}
         self.relics      = []

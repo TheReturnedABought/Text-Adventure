@@ -79,29 +79,28 @@ The `.exe` will appear in the `dist/` folder.
 ```
 text_adventure/
 │
-├── main.py
+├── main.py                  # Entry point, game loop, command routing
 ├── game_engine/
-│   ├── __init__.py
-│   ├── engine.py
-│   └── parser.py
+│   ├── engine.py            # GameEngine initialiser (expandable)
+│   └── parser.py            # Command parser with single-letter aliases
 ├── entities/
-│   ├── __init__.py
-│   ├── player.py
-│   ├── enemy.py
-│   └── item.py
+│   ├── player.py            # Player stats, inventory, relics, XP/levelling
+│   ├── enemy.py             # Enemy class with weighted move selection
+│   ├── enemy_moves.py       # Reusable move effect functions and factory
+│   ├── relic.py             # Relic base class and trigger constants
+│   └── item.py              # Item base class
 ├── rooms/
-│   ├── __init__.py
-│   ├── room.py
-│   └── map_data.py
-├── utils/
-│   ├── __init__.py
-│   ├── constants.py
-│   ├── helpers.py
-│   ├── display.py
-│   ├── actions.py
-│   └── combat.py
-└── assets/
-    └── data/
+│   ├── room.py              # Room class (items, relics, enemies, connections)
+│   └── map_data.py          # World layout, enemy placement, relic placement
+│   └── enemy_data.py          # Enemy definitions
+└── utils/
+    ├── constants.py         # MAX_HEALTH, MAX_AP, MAX_MANA, XP_PER_LEVEL
+    ├── helpers.py           # print_slow, print_status, make_bar, ANSI colours
+    ├── display.py           # show_room, show_intro, show_help, show_levelup
+    ├── actions.py           # Exploration actions (move, take, drop, rest, etc.)
+    ├── combat.py            # Full combat loop, player turn, enemy turn
+    ├── status_effects.py    # All status apply/consume/tick logic
+    └── relics.py            # All relic class definitions and registry
 ```
 
 ---

@@ -1,6 +1,6 @@
 # utils/combat.py
 import random
-from utils.helpers import print_slow, print_status
+from utils.helpers import print_slow, print_status, BLUE, RESET
 from utils.actions import get_alive_enemies, spend_ap
 from utils.constants import MAX_AP
 from utils.status_effects import (
@@ -66,12 +66,16 @@ def do_attack(player, enemy, raw="attack"):
 
 
 def do_heal(player, enemy, raw="heal"):
+    if player.mana < 1:
+        print_slow(f"  {BLUE}Not enough Mana to heal! (0/{player.max_mana}){RESET}")
+        return False   # signal: action failed, AP already spent — caller handles refund
+    player.mana -= 1
     heal_amt = random.randint(8, 15)
     player.heal(heal_amt)
-    print_slow(f"  > You heal for {heal_amt} HP! (Your HP: {player.health})")
+    print_slow(f"  > You heal for {heal_amt} HP! (Your HP: {player.health})  {BLUE}[-1 MP → {player.mana}/{player.max_mana}]{RESET}")
     player.trigger_relics(TRIGGER_ON_HEAL,   enemy, {"raw": raw})
     player.trigger_relics(TRIGGER_ON_ACTION, enemy, {"raw": raw, "command": "heal"})
-
+    return True
 
 def do_block(player, enemy, raw="block"):
     apply_block(player, BASE_BLOCK)
@@ -80,44 +84,54 @@ def do_block(player, enemy, raw="block"):
 
 
 def enemy_counter(player, enemy):
+    # Tick cooldowns so moves become available again
+    enemy.tick_move_cooldowns()
+
     # Disorient — 50% miss chance for enemy
     if is_disoriented(enemy):
         if random.random() < 0.5:
             print_slow(f"  🌪 {enemy.name} is disoriented — attack misses!")
             return
 
-    raw_dmg = random.randint(4, enemy.attack_power)
+    # Choose a move from the enemy's list, or fall back to basic attack
+    chosen = enemy.choose_move()
 
-    rage_mult = consume_rage(enemy)
-    if rage_mult > 1:
-        print_slow(f"  🔥 {enemy.name} is enraged — DOUBLE DAMAGE!")
-    raw_dmg = int(raw_dmg * rage_mult)
-
-    # Volatile on enemy — they take +50% self-damage risk but deal more
-    if is_volatile(enemy):
-        raw_dmg = int(raw_dmg * 1.5)
-        print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
-        if random.random() < 0.5:
-            enemy.take_damage(5)
-            print_slow(f"  💥 Volatile backfires on {enemy.name} — 5 self-damage! (HP: {enemy.health})")
-
-    weak_mult = consume_weak(enemy)
-    if weak_mult < 1:
-        print_slow(f"  🌀 {enemy.name} is Weakened!")
-    raw_dmg = int(raw_dmg * weak_mult)
-
-    actual_dmg, absorbed = consume_block(player, raw_dmg)
-
-    if absorbed > 0:
-        print_slow(f"  {enemy.name} attacks for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual_dmg}! (Your HP: {player.health - actual_dmg if actual_dmg else player.health})")
+    if chosen:
+        print_slow(f"  [ {enemy.name} uses {chosen.name} ]")
+        chosen.use(enemy, player)
+        # Apply rage / volatile / weak multipliers to the move's raw damage
+        # (handled inside each effect fn — status effects apply on top)
     else:
-        print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
+        # Fallback: plain attack with status modifiers
+        raw_dmg = random.randint(4, enemy.attack_power)
 
-    if actual_dmg > 0:
-        player.take_damage(actual_dmg)
-        print_slow(f"  Your HP: {player.health}")
+        rage_mult = consume_rage(enemy)
+        if rage_mult > 1:
+            print_slow(f"  🔥 {enemy.name} is enraged — DOUBLE DAMAGE!")
+        raw_dmg = int(raw_dmg * rage_mult)
 
-    player.trigger_relics(TRIGGER_ON_HIT, enemy, {"damage": actual_dmg})
+        if is_volatile(enemy):
+            raw_dmg = int(raw_dmg * 1.5)
+            print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
+            if random.random() < 0.5:
+                enemy.take_damage(5)
+                print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP: {enemy.health})")
+
+        weak_mult = consume_weak(enemy)
+        if weak_mult < 1:
+            print_slow(f"  🌀 {enemy.name} is Weakened!")
+        raw_dmg = int(raw_dmg * weak_mult)
+
+        actual_dmg, absorbed = consume_block(player, raw_dmg)
+        if absorbed:
+            print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual_dmg}!")
+        else:
+            print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
+        if actual_dmg:
+            player.take_damage(actual_dmg)
+            print_slow(f"  Your HP: {player.health}")
+
+    player.trigger_relics(TRIGGER_ON_HIT, enemy, {"damage": 0})
 
 
 # ── Turn helpers ──────────────────────────────────────────────────────────────
@@ -162,7 +176,7 @@ def show_combat_status(player, enemy):
         print(f"  Status: [{player_s}]")
     if player.relics:
         print(f"  Relics: {', '.join(r.name for r in player.relics)}")
-    print(f"\n  attack(6) | heal(4) | block(5) | end")
+    print(f"\n  attack(6) | {BLUE}heal(4 AP + 1 MP){RESET} | block(5) | end")
 
 
 # ── Player turn ───────────────────────────────────────────────────────────────
@@ -209,7 +223,7 @@ def player_turn(player, enemy):
             continue
 
         if command in ["help", "?"]:
-            print_slow("  attack(6) | heal(4) | block(5) | end")
+            print_slow(f"  attack(6) | {BLUE}heal(4 AP + 1 MP){RESET} | block(5) | end")
             continue
 
         if command not in COMBAT_COMMANDS:
@@ -223,7 +237,10 @@ def player_turn(player, enemy):
         if command == "attack":
             do_attack(player, enemy, raw)
         elif command == "heal":
-            do_heal(player, enemy, raw)
+            success = do_heal(player, enemy, raw)
+            if not success:
+                player.current_ap += len(command)  # refund AP
+                continue
         elif command == "block":
             do_block(player, enemy, raw)
 
