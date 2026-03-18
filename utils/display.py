@@ -17,6 +17,8 @@ def show_room(room):
     print()
     if room.items:
         print(f"  Items  : {', '.join(room.items)}")
+    if room.relics:
+        print(f"  Relics : {', '.join(r.name for r in room.relics)}")
     if alive:
         print(f"  Enemies: {', '.join([f'{e.name} (HP:{e.health})' for e in alive])}")
     print(f"  Exits  : {', '.join(room.connections.keys())}")

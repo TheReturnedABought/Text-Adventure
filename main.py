@@ -8,7 +8,7 @@ from game_engine.engine import GameEngine
 from game_engine.parser import parse_command
 from utils.helpers import print_slow, print_status
 from utils.display import show_intro, show_room, show_help, show_combat_enter
-from utils.actions import do_move, do_take, do_drop, do_inventory, do_rest, get_alive_enemies
+from utils.actions import do_move, do_take, do_take_relic, do_drop, do_inventory, do_rest, get_alive_enemies
 from utils.combat import combat_loop
 
 BASE_PATH = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
@@ -20,11 +20,17 @@ def handle_command(command, args, player, room):
     if command in ["north", "south", "east", "west", "up", "down"]:
         return do_move(player, room, [command])
     if command in ["take", "pick", "grab"]:
-        do_take(player, room, args)
+        do_take_relic(player, room, args)
     elif command == "drop":
         do_drop(player, room, args)
     elif command in ["inventory", "inv", "i"]:
         do_inventory(player)
+    elif command in ["relics", "relic"]:
+        if player.relics:
+            for r in player.relics:
+                print_slow(f"  • {r}")
+        else:
+            print_slow("  You carry no relics.")
     elif command == "rest":
         do_rest(player, room)
     elif command in ["look", "l", "examine"]:

@@ -7,6 +7,7 @@ class Enemy:
         self.max_health = health
         self.attack_power = attack_power
         self.xp_reward = xp_reward
+        self.statuses = {}
 
     def take_damage(self, amount):
         self.health = max(0, self.health - amount)

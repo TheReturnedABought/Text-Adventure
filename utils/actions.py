@@ -35,6 +35,20 @@ def do_take(player, room, args):
         print_slow("No such item here.")
 
 
+def do_take_relic(player, room, args):
+    """Pick up a relic by partial name match."""
+    query = " ".join(args).lower() if args else ""
+    match = next((r for r in room.relics if query in r.name.lower()), None)
+    if match:
+        room.relics.remove(match)
+        player.add_relic(match)
+        print_slow(f"  ✦ You obtain the {match.name}!")
+        print_slow(f"    {match.description}")
+    else:
+        # Fall through to normal item take
+        do_take(player, room, args)
+
+
 def do_drop(player, room, args):
     item = args[0] if args else ""
     if item in player.inventory:

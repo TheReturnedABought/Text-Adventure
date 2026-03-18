@@ -1,6 +1,7 @@
 # rooms/map_data.py
 from rooms.room import Room
 from entities.enemy import Enemy
+from utils.relics import get_relic
 
 
 def setup_rooms():
@@ -23,6 +24,7 @@ def setup_rooms():
         "A dimly lit hall with cobwebs stretching from wall to wall.\n"
         "Torches flicker on the stone walls. Exits lead north and south.",
         items=["torch", "key"],
+        relics=[get_relic("frog statue")],
     )
 
     kitchen = Room(
@@ -31,6 +33,7 @@ def setup_rooms():
         "across the floor. A door leads north back to the hall, and south\n"
         "to what appears to be a garden.",
         items=["apple", "bread"],
+        relics=[get_relic("venom gland")],
     )
 
     garden = Room(
@@ -39,6 +42,7 @@ def setup_rooms():
         "glow faintly in the dark corners. The air smells of damp earth.\n"
         "You can go north back to the kitchen.",
         items=["mushroom"],
+        relics=[get_relic("thorn bracelet")],
     )
 
     crypt = Room(
@@ -47,6 +51,7 @@ def setup_rooms():
         "An inscription above the entrance reads: 'The dead do not sleep here.'\n"
         "The only exit is south.",
         items=["gold coin", "old scroll"],
+        relics=[get_relic("storm ring")],
     )
 
     # --- Link rooms ---
@@ -64,4 +69,4 @@ def setup_rooms():
     crypt_boss = Enemy("Crypt Warden", health=60, attack_power=18, xp_reward=50)
     crypt.enemies.append(crypt_boss)
 
-    return hall  # Starting room
+    return hall
