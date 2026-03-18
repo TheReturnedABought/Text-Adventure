@@ -20,42 +20,42 @@ A small, fun **text-based adventure game** in Python with combat, inventory, and
 
 1. Clone the repository:
 
-\```
+```
 git clone https://github.com/yourusername/text-adventure.git
 cd text-adventure
-\```
+```
 
 2. Create a Python virtual environment:
 
-\```
+```
 python -m venv venv
-\```
+```
 
 3. Activate the virtual environment:
 
 - **Windows:**
-\```
+```
 venv\Scripts\activate
-\```
+```
 
 - **macOS/Linux:**
-\```
+```
 source venv/bin/activate
-\```
+```
 
 4. Install dependencies:
 
-\```
+```
 pip install -r requirements.txt
-\```
+```
 
 ---
 
 ## Running the Game
 
-\```
+```
 python main.py
-\```
+```
 
 ---
 
@@ -63,9 +63,9 @@ python main.py
 
 Use PyInstaller to create a standalone `.exe`:
 
-\```
+```
 pyinstaller --onefile --add-data "assets:assets" main.py
-\```
+```
 
 - `--onefile`: packs everything into a single `.exe`.
 - `--add-data "assets:assets"`: ensures your ASCII art and JSON files are included.
@@ -76,7 +76,7 @@ The `.exe` will appear in the `dist/` folder.
 
 ## Folder Structure
 
-\```
+```
 text_adventure/
 │
 ├── main.py
@@ -86,7 +86,8 @@ text_adventure/
 ├── commands/
 ├── utils/
 └── assets/
-\```
+
+```
 
 ---
 
