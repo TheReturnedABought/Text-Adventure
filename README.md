@@ -81,12 +81,24 @@ text_adventure/
 │
 ├── main.py
 ├── game_engine/
+│   ├── __init__.py
+│   ├── engine.py
+│   └── parser.py
 ├── entities/
+│   ├── __init__.py
+│   ├── player.py
+│   ├── enemy.py
+│   └── item.py
 ├── rooms/
-├── commands/
+│   ├── __init__.py
+│   ├── room.py
+│   └── map_data.py
 ├── utils/
+│   ├── __init__.py
+│   ├── helpers.py
+│   └── constants.py
 └── assets/
-
+    └── data/
 ```
 
 ---
