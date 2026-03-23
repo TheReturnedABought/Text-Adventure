@@ -4,7 +4,7 @@ A text-based adventure game in Python with combat, inventory, multi-enemy encoun
 a letter-based AP economy, class selection, relic rarities, a puzzle system, locked
 doors, a listen command, ASCII art, a modular event system, a full status-effect
 system inspired by Slay the Spire, enemy telegraphing, an ASCII map, a journal/codex,
-auto-save/load, and command history.
+auto-save/load, command history, and a **4-panel terminal UI**.
 
 ---
 
@@ -26,14 +26,67 @@ pip install -r requirements.txt
 python main.py
 ```
 
+Minimum terminal size: **80 × 26**. Larger terminals give more log history.
+
+---
+
+## Terminal UI
+
+After the intro screen the game switches into a fixed 4-panel layout that
+fills the terminal automatically.
+
+```
+┌─ ⚔ COMBAT ────────────────────────────────────────────────────────────────┐
+│  [1] Crypt Warden      [2] Wraith          [3] Bone Archer               │
+│  HP[████████░░] 55/70  HP[██████░░░] 20/30  HP[████████] 25/25           │
+│  AP[◆◆◆◆◆◆◆◆◆◆]14/14  AP[◆◆◆◆◆◆◆◆] 8/10   AP[◆◆◆◆◆◆] 6/8              │
+│  →DEATH GRIP(9)+1      →Soul Drain(7)       →Venomous Shaft(6)           │
+│   /╔═══╗\              ~~~                   _____                        │
+│   |║ ☠ ║|             /o  o\               (o) (o)                        │
+│   \╠═══╣/            ( ~~~~ )               \___/                         │
+├─ STATUS ──────────────────────────────────────────────────────────────────┤
+│  HP [████████████░░░░░░] 62/100   AP [◆◆◆◆◆◆◆◆◆◆◆◆] 12/12               │
+│  MP [●●●●●] 5/5   Lv3   XP 45                                            │
+│  attack(6) heal(4+1MP) block(5)  │  cut(3) mark(4) venom(5)              │
+├─ LOG ─────────────────────────────────────────────────────────────────────┤
+│  You enter the Crypt Gate.                                                │
+│  The Crypt Warden turns its head — slowly, deliberately.                 │
+│  ⚔ COMBAT — Crypt Warden, Wraith, Bone Archer                            │
+│  → You strike Crypt Warden for 14! (HP: 56/70)                           │
+│  ☠ Bone Archer takes 2 poison damage! (HP: 23/25)                        │
+├─ INPUT ────────────────────────────────────────────────────────────────────┤
+│  > _                                                                      │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Panel breakdown
+
+| # | Panel | Content |
+|---|-------|---------|
+| 1 | **ART** | **Combat mode** — one card per living enemy: ASCII portrait (or stat block if no art), HP/AP bars, and the enemy's telegraphed next move. Up to 4 enemies side-by-side (2 × 2 for 3–4). **Explore mode** — room ASCII art + live summary of enemies, relics, items, events, puzzles, and exits. Updates instantly on room change. |
+| 2 | **STATUS** | HP / AP / MP progress bars with colour coding (green → yellow → red). Level, XP, active status effects, carried relics, and the full command list with AP costs. |
+| 3 | **LOG** | Scrolling output — story text, NPC dialogue, combat results, item pickups. All `print_slow` calls route here when the UI is active. Fills available terminal space; earlier lines scroll off the top. |
+| 4 | **INPUT** | Command prompt. Supports all existing commands and single-letter aliases. "Press Enter to continue" prompts show as a dimmed separator line in the log so they don't trigger a full redraw. |
+
+### How it integrates
+
+- `utils/ui.py` provides a singleton `ui` object.
+- `ui.enable()` is called once in `Game.setup()` / `Game._load_game()` after the
+  player and first room exist. From that point on:
+  - `builtins.print` and `builtins.input` are monkey-patched — no other file needs
+    to import the UI.
+  - `print_slow()` in `helpers.py` checks `ui._active` and calls `ui.log()` instead
+    of streaming to stdout directly.
+- `ui.set_explore(player, room)` is called on every room transition.
+- `ui.set_combat(player, room, enemies)` is called when combat starts.
+- `ui.set_explore(player, room)` is called again when combat ends.
+
 ---
 
 ## Single Source of Truth
 
 **Every numeric constant** lives in `utils/constants.py`.
-**Every command definition** (name, description, AP cost, MP cost) lives in `entities/class_data.py`.
-
-Change either file once — `show_help()`, the combat HUD, and the level-up screen all update automatically. No magic numbers anywhere else.
+**Every command definition** lives in `entities/class_data.py`.
 
 ### How command costs propagate
 
@@ -48,29 +101,8 @@ Change either file once — `show_help()`, the combat HUD, and the level-up scre
 }
 ```
 
-`display.py`'s `show_help()` calls `cmd_ap_cost(cmd_def)`.
-`combat.py`'s `_calc_ap_cost()` calls the same function.
-The level-up screen reads the same dict.
-
-### How base stats propagate
-
-```python
-# utils/constants.py
-BASE_ATTACK_MIN  = 8
-BASE_ATTACK_MAX  = 18
-BASE_HEAL_MIN    = 8
-BASE_HEAL_MAX    = 15
-BASE_BLOCK       = 7
-HEAL_MP_COST     = 1
-UNBREAKABLE_CAP  = 6
-BASE_COMMANDS    = {
-    "attack": {"ap_cost": 6, ...},
-    "heal":   {"ap_cost": 4, ...},
-    "block":  {"ap_cost": 5, ...},
-}
-```
-
-`combat.py` imports these directly. `show_help()` reads `BASE_COMMANDS`. Change a value once, every system sees it.
+`display.py`'s `show_help()`, `combat.py`'s `_calc_ap_cost()`, the level-up
+screen, and the **STATUS panel** all read from the same function `cmd_ap_cost()`.
 
 ---
 
@@ -108,10 +140,6 @@ BASE_COMMANDS    = {
 | Locked Hall | — | Stranger appears on 2nd visit; locked exits to Area 3 & 4 |
 | Kitchen | Goblin ×2 | Food items |
 
-#### Locked Hall — Stranger Event
-On the **second visit**, a hooded figure delivers a hint about the Catacomb Key in Area 2
-and then vanishes. The encounter is added to the journal automatically.
-
 ---
 
 ## Commands
@@ -121,17 +149,17 @@ and then vanishes. The encounter is added to the journal automatically.
 | Command | Description |
 |---------|-------------|
 | `north` / `south` / `east` / `west` | Move (🔒 = locked) |
-| `take <n>` | Pick up an item or relic (partial name match) |
+| `take <n>` | Pick up an item or relic |
 | `drop <item>` | Drop an item |
 | `use <item>` | Use a consumable |
 | `inventory` | List carried items |
 | `relics` | Show relics with ASCII art, rarity, description |
-| `interact` | Trigger the room event or NPC |
+| `interact` | Trigger room event or NPC |
 | `listen` | Hear sensory clues about neighbouring rooms |
 | `examine` | Read the puzzle or object in this room |
 | `solve <answer>` | Attempt a puzzle solution |
 | `look` | Redescribe the current room |
-| `rest` | Restore AP (safe rooms only) |
+| `rest` | Restore AP (safe rooms only) | <--- needs to be removed
 | `map` | ASCII map of all explored rooms |
 | `journal` | Codex: lore entries and enemy bestiary |
 | `help` | All commands including unlocked class commands |
@@ -142,7 +170,7 @@ Single-letter aliases: `n/s/e/w`, `i` (inventory), `l` (look), `m` (map), `j` (j
 ### Combat
 
 AP resets to full each turn. Command cost = letters in name.
-**Each enemy's planned next move is shown in the HUD** so you can react.
+**Each enemy's planned next move is shown in the ART panel and the combat HUD.**
 
 | Command | Cost | Notes |
 |---------|------|-------|
@@ -157,72 +185,41 @@ AP resets to full each turn. Command cost = letters in name.
 
 ## New Systems
 
+### 4-Panel Terminal UI
+See the **Terminal UI** section above. Activated automatically at game start;
+the intro and class-selection screens run in classic text mode first.
+
+Key files: `utils/ui.py`, `utils/ascii_art.py` (ENEMY_ART + ROOM_ART dicts).
+
 ### Enemy Telegraphing
-At the start of your turn, the HUD shows each enemy's planned move:
-
-```
-  [1] Crypt Warden   HP: 70/70  [💢2]   → DEATH GRIP
-  [2] Wraith         HP: 30/30          → Soul Drain
-  [3] Bone Archer    HP: 25/25          → Bone Arrow
-```
-
-The move is selected before you act. Stun still prevents it from firing.
-Stunned enemies show `→ ⚡ STUNNED` instead.
+Each enemy's planned move is shown both in the **ART panel** header card
+and in the inline combat HUD. Stun shows `⚡ STUNNED`.
 
 ### ASCII Map
-`map` renders a live grid of all **explored** rooms. Unvisited neighbours show as `[???]`.
-Your position is marked `[*Name]`. Locked exits show `🔒`.
-
-The map is generated dynamically via BFS from `game.start_room` —
-no manual layout required. When you add a new area, it appears automatically.
+`map` renders a live grid of all **explored** rooms. Unvisited neighbours
+show as `[???]`. Current position is marked `[*Name]`. Locked exits show 🔒.
 
 ### Journal / Codex
-`journal` opens two sections:
-
-**Lore** — entries added when reading scrolls, solving puzzles, or hearing NPC dialogue.
-Example: the Locked Hall stranger's hint is recorded automatically.
-
-**Bestiary** — one record per enemy type *defeated at least once*. Shows HP range,
-attack power, moves you've seen used against you, and observed drops.
+`journal` opens two sections: **Lore** (scrolls, puzzle solves, NPC dialogue)
+and **Bestiary** (HP range, attack power, moves seen, drops observed).
 
 ### Auto-Save / Load
-The game saves to `save_data/save.json` after every:
-- Room transition
-- Combat victory
-- Quit
-
-On startup, if a save exists:
-```
-  A save was found:
-    Hero the Rogue — Lvl 3 — The Crossroads
-  [1] Continue  [2] New game
-```
-
-Save captures: player stats, inventory, relic names, known commands, XP/level,
-journal, current room, all room states (enemies, items, relics, puzzles, events,
-visit counts, unlocked exits).
-
+Saves to `save_data/save.json` after every room transition, combat victory,
+and quit. On startup, a save is offered to continue or start fresh.
 Dying wipes the save.
 
 ### Command History
-Press **↑ / ↓** to cycle through the last 20 commands in any input prompt.
-Uses `readline` on Unix/macOS; `pyreadline3` on Windows. Silently skipped if neither is installed.
+Press **↑ / ↓** to cycle through the last 20 commands. Uses `readline` on
+Unix/macOS; `pyreadline3` on Windows.
 
-### Environmental Combat (Hook in place — not yet populated)
-Rooms can hold `EnvObject` instances. In combat, `use <object>` triggers the effect.
+### Environmental Combat *(hook in place)*
+Rooms can hold `EnvObject` instances. `use <object>` in combat triggers the effect.
 
 ```python
-# rooms/room.py — EnvObject contract
-EnvObject(name, use_fn, uses=1, combat_only=False)
-# use_fn(player, room, enemies) -> str
-
-# In an area file:
 room.env_objects = [
     EnvObject("lever", spike_trap_fn, uses=1, combat_only=True),
 ]
 ```
-
-`combat.py` already dispatches `use <x>` to `room.get_env_object(x)`. Drop objects into rooms to activate the system.
 
 ---
 
@@ -251,18 +248,19 @@ text_adventure/
 │
 ├── rooms/
 │   ├── room.py                    # Room — link/lock, listen, visit_count, EnvObject
-│   ├── puzzle.py                  # Puzzle — examine/attempt/reward_fn, mini flag
+│   ├── puzzle.py                  # Puzzle — examine/attempt/reward_fn
 │   ├── events.py                  # Event system — builders, opt(), Event, Merchant
-│   ├── enemy_data.py              # Enemy factories (make_goblin added)
-│   ├── area1.py                   # Updated layout: Crossroads hub, Alcove, Locked Hall, Kitchen
+│   ├── enemy_data.py              # Enemy factories
+│   ├── area1.py                   # Area 1 layout
 │   └── map_data.py                # World root — start_room for map + SaveManager
 │
 └── utils/
     ├── constants.py               # ★ Single source of truth — all numeric constants
-    ├── helpers.py                 # print_slow, print_status, BLUE, RESET, rarity colours
-    ├── ascii_art.py               # Room/relic ASCII art
-    ├── display.py                 # show_room/help/map/journal/levelup — reads from constants
-    ├── actions.py                 # Exploration actions + do_map/do_journal
+    ├── helpers.py                 # print_slow (routes through ui), BLUE, RESET, bars
+    ├── ui.py                      # ★ 4-panel terminal UI — UIManager singleton
+    ├── ascii_art.py               # Room/relic art + ENEMY_ART + ROOM_ART dicts
+    ├── display.py                 # show_room/help/map/journal/levelup
+    ├── actions.py                 # Exploration actions
     ├── combat.py                  # CombatSession — telegraphing HUD, journal hooks
     ├── status_effects.py          # All status apply/consume/tick logic
     └── relics.py                  # Relic class definitions and registry
@@ -274,15 +272,15 @@ text_adventure/
 
 1. Add a `CommandDef` dict to the correct class tier in `entities/class_data.py`.
 2. Write the effect function in `entities/class_commands.py` and register it in `COMMAND_EFFECTS`.
-3. Done — `show_help()`, the combat HUD, and the level-up screen pick it up automatically.
+3. Done — `show_help()`, the combat HUD, the **STATUS panel**, and the level-up screen pick it up automatically.
 
 ## Adding a New Area
 
 1. Create `rooms/area2.py` with `setup_area2()` following `area1.py`.
 2. Add enemy factories to `rooms/enemy_data.py`.
-3. Add room/relic art to `utils/ascii_art.py`.
+3. Add room/relic art to `utils/ascii_art.py` and register names in `ROOM_ART` / `ENEMY_ART`.
 4. In `rooms/map_data.py`, call `setup_area2()` and link its entrance to the Crypt Gate east exit.
-5. The map renderer and SaveManager discover the new rooms automatically via BFS.
+5. The map renderer, SaveManager, and UI art panel discover the new rooms/enemies automatically.
 
 ## Adding an Environmental Hazard
 
@@ -340,9 +338,9 @@ text_adventure/
 
 | Lvl | Command | AP | MP | Effect |
 |-----|---------|----|----|--------|
-| 2 | spark | 5 | 0 | 12–18 Lightning. *(free)* |
+| 2 | spark | 5 | 0 | 12–18 Lightning. |
 | 5 | bolt | 4 | 1 | 22–32 damage. |
-| 5 | coalesce | 8 | 0 | +17 Block; spells −1 MP for 2 turns. *(free)* |
+| 5 | coalesce | 8 | 0 | +17 Block; spells −1 MP for 2 turns. |
 | 5 | delay | 5 | 1 | Slow 1 on target. |
 | 10 | wave | 4 | 1 | 8–14 Lightning to all. |
 | 10 | storm | 5 | 2 | 18–24 to all. |
@@ -438,8 +436,9 @@ pyinstaller --onefile --add-data "assets:assets" --add-data "save_data:save_data
 
 ## Dependencies
 
-- Built-in: `os`, `sys`, `json`, `random`, `collections`, `readline` (Unix)
+- Built-in: `os`, `sys`, `json`, `random`, `collections`, `re`, `shutil`, `readline` (Unix)
 - Optional: `pyreadline3` (Windows command history), `colorama`, `pyinstaller`
+- No external packages required for the UI — all ANSI rendering uses built-in escape codes.
 
 ---
 

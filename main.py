@@ -6,7 +6,6 @@ BASE_PATH = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 
 # ── Command history (readline where available) ────────────────────────────────
 def _enable_history():
-    """Up/down-arrow command history. Silently skips if unavailable."""
     try:
         import readline
         readline.set_history_length(20)
@@ -37,17 +36,12 @@ from utils.actions  import (
 )
 from utils.combat   import combat_loop
 from utils.relics   import get_relic
+from utils.ui       import ui
 
 
 # ── CommandRouter ─────────────────────────────────────────────────────────────
 
 class CommandRouter:
-    """
-    Maps command strings to handler callables.
-    Signature: fn(game, args) -> None | Room
-    Movement handlers return the new Room; everything else returns None.
-    """
-
     def __init__(self, game):
         self.game = game
         self._table: dict = {}
@@ -57,13 +51,11 @@ class CommandRouter:
         g = self.game
         t = self._table
 
-        # Movement
         for alias in ["move", "go", "walk"]:
             t[alias] = lambda g, a: g._travel(a)
         for d in ["north", "south", "east", "west", "up", "down"]:
             t[d] = lambda g, a, _d=d: g._travel([_d])
 
-        # Items / relics
         for alias in ["take", "pick", "grab", "get"]:
             t[alias] = lambda g, a: do_take_relic(g.player, g.room, a)
         t["drop"]                     = lambda g, a: do_drop(g.player, g.room, a)
@@ -71,7 +63,6 @@ class CommandRouter:
         t["relics"]    = t["relic"]   = lambda g, a: show_relics(g.player)
         t["use"]                      = lambda g, a: use_item(g.player, g.room, a)
 
-        # Exploration
         t["listen"]   = t["hear"]     = lambda g, a: do_listen(g.player, g.room)
         t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room)
         t["examine"]  = t["inspect"]  = lambda g, a: do_examine(g.player, g.room, a)
@@ -82,7 +73,6 @@ class CommandRouter:
             show_help(g.player), input("  Press Enter to continue...")
         )
 
-        # New systems
         t["map"]                      = lambda g, a: show_map(g.start_room, g.room)
         t["journal"]                  = lambda g, a: show_journal(g.player)
 
@@ -102,13 +92,9 @@ class CommandRouter:
 # ── Game ──────────────────────────────────────────────────────────────────────
 
 class Game:
-    """Top-level game object. Owns player, current room, and the main loop."""
-
     def __init__(self):
         self.player     = None
         self.room       = None
-        # Root node for ASCII map renderer and SaveManager BFS.
-        # Set once in setup() and never changes.
         self.start_room = None
         self.router     = None
         self.engine     = None
@@ -117,9 +103,8 @@ class Game:
     # ── Setup ─────────────────────────────────────────────────────────────────
 
     def setup(self):
-        show_intro()
+        show_intro()   # shown BEFORE UI is active (classic text mode)
 
-        # ── Load or new game ───────────────────────────────────────────────
         saved_state = self.save_mgr.load()
         if saved_state:
             print_slow("\n  A save was found:")
@@ -135,7 +120,6 @@ class Game:
                     break
                 print("  Please enter 1 or 2.")
 
-        # ── Fresh new game ─────────────────────────────────────────────────
         name       = input("\nEnter your character's name: ").strip() or "Hero"
         char_class = show_class_selection()
 
@@ -148,15 +132,17 @@ class Game:
         self.engine.start_room = self.start_room
         self.router     = CommandRouter(self)
 
-        # Mark starting room as visited and fire its on_enter
         self.room.visit_count += 1
         self.room.on_enter(self.player)
 
         print(f"\nWelcome, {self.player.name} the {char_class.capitalize()}!"
               f" Your adventure begins...\n")
 
+        # ── Activate the UI now that player + room exist ───────────────────
+        ui.set_explore(self.player, self.room)
+        ui.enable()
+
     def _load_game(self, state):
-        """Restore a saved game onto a fresh room graph."""
         name       = state["player"]["name"]
         char_class = state["player"]["char_class"]
 
@@ -166,11 +152,14 @@ class Game:
         self.engine.start_room = self.start_room
         self.router     = CommandRouter(self)
 
-        # Apply saved state (player stats, inventory, room positions, etc.)
         self.save_mgr.apply(self, state)
 
         print_slow(f"\n  Welcome back, {self.player.name}!")
         print_slow(f"  You are in: {self.room.name}\n")
+
+        # ── Activate UI after state is restored ───────────────────────────
+        ui.set_explore(self.player, self.room)
+        ui.enable()
 
     def _give_starter_relic(self, char_class):
         starter = get_relic(CLASS_RELIC_NAMES[char_class])
@@ -190,18 +179,23 @@ class Game:
         while True:
             if self.player.health <= 0:
                 print_slow("\n  You have died. Game over.")
-                self.save_mgr.delete()   # wipe save on death
+                self.save_mgr.delete()
                 break
 
-            # Combat — room has living enemies
             if self.room.has_enemies:
+                # Switch to combat mode in the UI
+                ui.set_combat(self.player, self.room, self.room.alive_enemies)
                 input("\n  Press Enter to continue...")
                 show_combat_enter([e.name for e in self.room.alive_enemies])
                 combat_loop(self.player, self.room)
                 if self.player.health <= 0:
                     continue
-                self._autosave()   # auto-save after victory
+                # Back to explore mode after combat
+                ui.set_explore(self.player, self.room)
+                self._autosave()
 
+            # Refresh explore state before showing the room
+            ui.set_explore(self.player, self.room)
             show_room(self.room)
             print_status(self.player)
 
@@ -219,19 +213,16 @@ class Game:
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _travel(self, args):
-        """
-        Move the player in the given direction.
-        Increments visit_count, fires on_enter, auto-saves, returns new Room.
-        """
         new_room = do_move(self.player, self.room, args)
         if new_room is not self.room:
             new_room.visit_count += 1
             new_room.on_enter(self.player)
+            # Update UI with the new room immediately
+            ui.set_explore(self.player, new_room)
             self._autosave()
         return new_room
 
     def _autosave(self):
-        """Write current state to disk silently. Never crashes the game."""
         try:
             self.save_mgr.save(self)
         except Exception:

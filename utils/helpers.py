@@ -2,7 +2,8 @@
 """
 Low-level print utilities and shared ANSI colour constants.
 
-ANSI colours are defined here — import BLUE / RESET from here, never inline them.
+When the UI is active (utils/ui.py), print_slow() routes through
+ui.log() so output appears in the LOG panel instead of raw stdout.
 """
 import sys
 import time
@@ -12,16 +13,32 @@ from utils.constants import MAX_AP, MAX_MANA
 BLUE  = "\033[94m"
 RESET = "\033[0m"
 
-# Rarity colours — used when displaying relic names
 RARITY_COLORS = {
-    "Common":    "\033[37m",   # grey/white
-    "Uncommon":  "\033[32m",   # green
-    "Rare":      "\033[34m",   # blue
-    "Legendary": "\033[33m",   # gold/yellow
+    "Common":    "\033[37m",
+    "Uncommon":  "\033[32m",
+    "Rare":      "\033[34m",
+    "Legendary": "\033[33m",
 }
 
 
 def print_slow(text, delay=0.02):
+    """
+    Print text slowly.  When the terminal UI is enabled the text is
+    routed to the UI log panel (no character-by-character delay needed
+    there; the panel updates in real-time).  Otherwise the classic
+    character-streaming output is used.
+    """
+    try:
+        from utils.ui import ui
+        if ui._active:
+            ui.log(str(text))
+            # Brief pause proportional to text length to preserve the
+            # pacing feel even without per-character streaming.
+            time.sleep(min(0.06, delay * max(len(str(text)), 1) * 0.08))
+            return
+    except Exception:
+        pass
+    # ── Classic mode (UI not active) ──────────────────────────────────────────
     for char in str(text):
         sys.stdout.write(char)
         sys.stdout.flush()
