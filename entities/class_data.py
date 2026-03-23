@@ -1,96 +1,310 @@
 # entities/class_data.py
 """
-Class definitions, command tables, and metadata.
+Single source of truth for every class command.
 
-Unlock schedule:
-  Level  2 → 1 command, auto-unlocked
-  Level  5 → choose 1 of 3
-  Level 10 → choose 1 of 3
-  Level 15 → choose 1 of 3
-  Level 20 → choose 1 of 3
+Each command is a CommandDef dict:
+    {
+        "name":        str        — the typed command,
+        "desc":        str        — shown in help and level-up,
+        "ap_cost":     int|None   — None → len(name) rule applies,
+        "mp_cost":     int        — 0 for non-mage or free commands,
+        "unlock_mode": "auto"|"choice",
+    }
+
+Helpers (used by display.py, combat.py, level-up screen)
+---------------------------------------------------------
+cmd_ap_cost(cmd)         → int   resolves None → len(name)
+cmd_mp_cost(cmd)         → int
+get_command_def(cls, nm) → dict|None
+get_command_display(cmd) → "N AP" or "N AP +M MP"
+
+Changing a desc, ap_cost, or mp_cost here automatically propagates to:
+  • show_help()  (display.py)
+  • _calc_ap_cost() / combat HUD  (combat.py)
+  • show_levelup()  (display.py)
 """
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Command tables  {level: [{name, desc}, ...]}
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def cmd_ap_cost(cmd: dict) -> int:
+    """Return AP cost: explicit override, or len(name) if None."""
+    override = cmd.get("ap_cost")
+    return override if override is not None else len(cmd["name"])
+
+
+def cmd_mp_cost(cmd: dict) -> int:
+    return cmd.get("mp_cost", 0)
+
+
+def get_command_def(char_class: str, cmd_name: str) -> dict | None:
+    """Find a CommandDef by class and command name. Returns None if not found."""
+    for tier in CLASS_COMMANDS.get(char_class, {}).values():
+        for cmd in tier:
+            if cmd["name"] == cmd_name:
+                return cmd
+    return None
+
+
+def get_command_display(cmd: dict) -> str:
+    """Return a concise cost string: '6 AP' or '4 AP +1 MP'."""
+    ap = cmd_ap_cost(cmd)
+    mp = cmd_mp_cost(cmd)
+    return f"{ap} AP +{mp} MP" if mp else f"{ap} AP"
+
+
+# ── Unlock schedule ───────────────────────────────────────────────────────────
+#   Level  2 → 1 command, auto-unlocked
+#   Level  5 → choose 1 of 3
+#   Level 10 → choose 1 of 3
+#   Level 15 → choose 1 of 3
+#   Level 20 → choose 1 of 3
+
+
+# ── Soldier ───────────────────────────────────────────────────────────────────
 
 SOLDIER_COMMANDS = {
     2: [
-        {"name": "brace", "desc": "Gain 3 Block; if you have no Block, gain 8 instead."},
+        {
+            "name": "brace",
+            "desc": "Gain 3 Block; gain 10 instead if you currently have none.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
+        },
     ],
     5: [
-        {"name": "guard",      "desc": "Gain 8 Block; if the enemy breaks your Block, deal 10 damage back."},
-        {"name": "berserk",    "desc": "Gain Rage ×2 + Volatile."},
-        {"name": "discipline", "desc": "Remove all debuffs; gain 15 Block; cannot attack this turn."},
+        {
+            "name": "guard",
+            "desc": "Gain 8 Block; apply Counter 10 — if an attack breaks your Block, deal 10 damage back.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "berserk",
+            "desc": "Gain Rage ×2 + Volatile.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "discipline",
+            "desc": "Remove all debuffs (including Cursed, Slow, Soul Tax); gain 23 Block; cannot attack this turn.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     10: [
-        {"name": "rally",   "desc": "Gain 6 Block; your next attack deals +6 damage."},
-        {"name": "cleave",  "desc": "Hit all enemies twice for 75% damage each."},
-        {"name": "fortify", "desc": "Gain 5 Block now and at the end of every turn this combat."},
+        {
+            "name": "rally",
+            "desc": "Gain 6 Block; your next attack deals +6 damage.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "cleave",
+            "desc": "Hit all enemies twice for 75% damage each.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "fortify",
+            "desc": "Apply Fortify 5 — gain 5 Block at the start of every turn this combat.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     15: [
-        {"name": "warcry",     "desc": "Apply Weak 2 + Vulnerable 2 to all enemies."},
-        {"name": "sentinel",   "desc": "Gain 16 Block; enemies who hit you take 4 damage back."},
-        {"name": "execute",    "desc": "2× dmg; 3× if enemy <30% HP; +1× per 10 Block consumed."},
+        {
+            "name": "warcry",
+            "desc": "Apply Weak 2 + Vulnerable 2 to all enemies.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "sentinel",
+            "desc": "Gain 16 Block; enemies who hit you take 4 damage back.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "execute",
+            "desc": "2× dmg; 3× if enemy <30% HP; +1× per 10 Block consumed.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     20: [
-        {"name": "juggernaut",  "desc": "Attack; gain Block equal to damage dealt."},
-        {"name": "unbreakable", "desc": "Damage capped at 6; Block does not clear between turns."},
-        {"name": "overwhelm",   "desc": "Apply Weak 2 + Vulnerable 2 to target; Stun 1 if 3+ statuses."},
+        {
+            "name": "juggernaut",
+            "desc": "Attack; gain Block equal to damage dealt.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "unbreakable",
+            "desc": "Damage capped at 6; Block does not clear between turns.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "overwhelm",
+            "desc": "Apply Weak 2 + Vulnerable 2 to target; Stun 1 if 3+ statuses.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
 }
+
+
+# ── Rogue ─────────────────────────────────────────────────────────────────────
 
 ROGUE_COMMANDS = {
     2: [
-        {"name": "cut", "desc": "Deal 6–10 damage."},
+        {
+            "name": "cut",
+            "desc": "Deal 6–10 damage.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
+        },
     ],
     5: [
-        {"name": "flow",  "desc": "Actions cost −1 AP this turn; cannot repeat the same command."},
-        {"name": "feint", "desc": "Disorient target; your next attack this turn cannot miss."},
-        {"name": "mark",  "desc": "Apply Vulnerable 2; your next hit deals +5 damage."},
+        {
+            "name": "flow",
+            "desc": "Apply Speed 5 — your next 5 actions each cost 1 fewer AP.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "feint",
+            "desc": "Disorient target; your next attack this turn cannot miss.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "mark",
+            "desc": "Apply Vulnerable 2; your next hit deals +5 damage.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     10: [
-        {"name": "venom",  "desc": "Apply Poison 3; +1 stack if the target is Vulnerable."},
-        {"name": "flurry", "desc": "Strike 3 times (relic letter-effects count per hit except 'l' once, 'r' twice)."},
-        {"name": "dash",   "desc": "Gain 8 Block and deal 8 damage."},
+        {
+            "name": "venom",
+            "desc": "Apply Poison 3; +1 stack if the target is Vulnerable.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "flurry",
+            "desc": "Strike 3 times (relic letter-effects count per hit).",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "dash",
+            "desc": "Gain 8 Block, deal 8 damage, and gain 💨 Speed 1.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     15: [
-        {"name": "toxin",   "desc": "Double target's Poison stacks (max 8)."},
-        {"name": "assault", "desc": "Strike 3+ times; hits increase with prior actions this turn."},
-        {"name": "evade",   "desc": "Dodge the next enemy attack; if triggered, gain +2 AP next turn."},
+        {
+            "name": "toxin",
+            "desc": "Double target's Poison stacks (max 8).",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "assault",
+            "desc": "Strike 3+ times; hits increase with prior actions this turn.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "evade",
+            "desc": "Dodge the next enemy attack; if triggered, gain +2 AP next turn.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
     20: [
-        {"name": "pandemic",     "desc": "Apply Poison 6; +3 more if target is already Poisoned."},
-        {"name": "assassinate",  "desc": "Massive damage; 1.5× bonus if first action this turn."},
-        {"name": "shadowstrike", "desc": "Deal 6 × (total actions taken this combat) damage."},
+        {
+            "name": "pandemic",
+            "desc": "Apply Poison 6; +3 more if target is already Poisoned.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "assassinate",
+            "desc": "Massive damage; ×1.5 first action this turn or target <40% HP; ×2 if both.",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "shadowstrike",
+            "desc": "Deal 5 × (actions taken THIS turn) damage (cap 50).",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
     ],
 }
 
+
+# ── Mage ──────────────────────────────────────────────────────────────────────
+
 MAGE_COMMANDS = {
     2: [
-        {"name": "spark", "desc": "Deal 8–12 Lightning damage.  [1 MP]"},
+        {
+            "name": "spark",
+            "desc": "Deal 12–18 Lightning damage to one target.  [free — no MP]",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
+        },
     ],
     5: [
-        {"name": "bolt",  "desc": "Deal 18–26 damage.  [1 MP]"},
-        {"name": "ward",  "desc": "Gain 8 Block; spells cost −1 MP this turn.  [1 MP]"},
-        {"name": "curse", "desc": "Apply Vulnerable 2 + Weak 2.  [free]"},
+        {
+            "name": "bolt",
+            "desc": "Deal 22–32 damage to one target.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
+        {
+            "name": "coalesce",
+            "desc": "Mana solidifies — gain 17 Block; all spells cost −1 MP for 2 turns.  [free — no MP]",
+            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+        {
+            "name": "delay",
+            "desc": "Apply Slow 1 to target — each Slow stack gives a 50% chance to lose their turn.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
     ],
     10: [
-        {"name": "blaze", "desc": "Apply Burn 3 (Poison) + Volatile to target.  [2 MP]"},
-        {"name": "charm", "desc": "Stun target 1 turn; Charm cannot be reused until next turn.  [2 MP]"},
-        {"name": "drain", "desc": "Consume target's Poison; heal that many HP.  [1 MP]"},
+        {
+            "name": "wave",
+            "desc": "Deal 8–14 Lightning damage to ALL enemies.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
+        {
+            "name": "storm",
+            "desc": "Deal 18–24 damage to ALL enemies.",
+            "ap_cost": None, "mp_cost": 2, "unlock_mode": "choice",
+        },
+        {
+            "name": "drain",
+            "desc": "Consume target's Poison; heal that many HP.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
     ],
     15: [
-        {"name": "shatter", "desc": "Deal 10–18 × Vulnerable stacks (capped at ×4).  [2 MP]"},
-        {"name": "silence", "desc": "Stun target 1 turn; apply Weak 2.  [1 MP]"},
-        {"name": "torment", "desc": "Extend all debuffs on all enemies by 1 turn.  [2 MP]"},
+        {
+            "name": "rift",
+            "desc": "Restore 3 MP; apply Vulnerable 1 to yourself and all enemies.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
+        {
+            "name": "silence",
+            "desc": "Stun one target 1 turn; apply Weak 2.",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+        },
+        {
+            "name": "torment",
+            "desc": "Extend every debuff on every enemy by 1 turn.",
+            "ap_cost": None, "mp_cost": 2, "unlock_mode": "choice",
+        },
     ],
     20: [
-        {"name": "obliterate", "desc": "Deal 50–70 damage.  [3 MP]"},
-        {"name": "rift",       "desc": "Restore 3 MP; apply Vulnerable 1 to yourself and all enemies.  [1 MP]"},
-        {"name": "apocalypse", "desc": "Deal (total enemy status stacks) × 5 damage (cap 40).  [3 MP]"},
+        {
+            "name": "obliterate",
+            "desc": "Deal 60–80 damage to one target.",
+            "ap_cost": None, "mp_cost": 3, "unlock_mode": "choice",
+        },
+        {
+            "name": "tempest",
+            "desc": "Deal 30–45 damage to ALL enemies.",
+            "ap_cost": None, "mp_cost": 3, "unlock_mode": "choice",
+        },
+        {
+            "name": "apocalypse",
+            "desc": "Deal (total status stacks across ALL living enemies) × 5 (cap 60).",
+            "ap_cost": None, "mp_cost": 3, "unlock_mode": "choice",
+        },
     ],
 }
+
+
+# ── Master table ──────────────────────────────────────────────────────────────
 
 CLASS_COMMANDS = {
     "soldier": SOLDIER_COMMANDS,
@@ -98,9 +312,8 @@ CLASS_COMMANDS = {
     "mage":    MAGE_COMMANDS,
 }
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Class metadata
-# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Class metadata ────────────────────────────────────────────────────────────
 
 CLASS_RELIC_NAMES = {
     "soldier": "iron-cast helm",
@@ -119,7 +332,7 @@ CLASS_DESCRIPTIONS = {
         "🗡  ROGUE\n"
         "    A swift, cunning fighter living in the space between burst damage,\n"
         "    chained actions, and creeping poison.\n"
-        "    Starter relic: Sleightmaker's Glove — actions costing ≤4 AP cost 1 fewer AP."
+        "    Starter relic: Sleightmaker's Glove — the letter 'l' does not count toward AP cost."
     ),
     "mage": (
         "🔮  MAGE\n"
@@ -127,11 +340,4 @@ CLASS_DESCRIPTIONS = {
         "    Every spell costs MP — spend it wisely.\n"
         "    Starter relic: Aether-Spun Tapestry — Max MP +2; restore 1 MP each turn."
     ),
-}
-
-MAGE_MP_COSTS = {
-    "spark": 1, "bolt": 1, "ward": 1, "curse": 0,
-    "blaze": 2, "charm": 2, "drain": 1,
-    "shatter": 2, "silence": 1, "torment": 2,
-    "obliterate": 3, "rift": 1, "apocalypse": 3,
 }

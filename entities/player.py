@@ -1,52 +1,56 @@
 # entities/player.py
-from utils.constants import MAX_HEALTH, MAX_AP, MAX_MANA, XP_PER_LEVEL
+from utils.constants import MAX_HEALTH, MAX_AP, MAX_MANA, XP_PER_LEVEL, UNBREAKABLE_CAP
+from game_engine.journal import Journal
 
 
 class Player:
     def __init__(self, name, char_class="soldier"):
-        self.name        = name
-        self.char_class  = char_class.lower()
+        self.name       = name
+        self.char_class = char_class.lower()
 
-        # Stats
-        self.health      = MAX_HEALTH
-        self.max_health  = MAX_HEALTH
-        self.current_ap  = MAX_AP
-        self.mana        = MAX_MANA
-        self.max_mana    = MAX_MANA
+        # ── Stats ─────────────────────────────────────────────────────────────
+        self.health     = MAX_HEALTH
+        self.max_health = MAX_HEALTH
+        self.current_ap = MAX_AP
+        self.mana       = MAX_MANA
+        self.max_mana   = MAX_MANA
 
-        # Progression
+        # ── Progression ───────────────────────────────────────────────────────
         self.xp          = 0
         self.level       = 1
-        self.level_ups   = []   # queue of new levels for show_levelup
+        self.level_ups   = []               # queue of new levels for show_levelup
         self.pending_command_choices = []   # [(level, [cmd_dict, ...])]
-        self.auto_unlocked_commands  = []   # [(cmd_name, desc)] — shown in levelup screen
-        self.known_commands = set()   # class commands the player can use in combat
-        self.actions_this_combat = 0  # reset at combat start
+        self.auto_unlocked_commands  = []   # [(cmd_name, desc)]
+        self.known_commands          = set()
+        self.actions_this_combat     = 0    # reset at combat start
 
-        # Inventory / relics
-        self.inventory   = []
-        self.relics      = []
-        self.statuses    = {}
-        self.combat_flags = {}   # flags that persist for one full combat session
+        # ── Inventory / relics ────────────────────────────────────────────────
+        self.inventory    = []
+        self.relics       = []
+        self.statuses     = {}
+        self.combat_flags = {}
 
-        # Deprecated direct block flag (kept for safety)
-        self.defending         = False
-        self._block_reduction  = 0.5
+        # ── Pending combat-start effects ──────────────────────────────────────
+        # Each entry: (effect_name: str, value: int)
+        self.pending_combat_effects = []
 
-    # ── Healing / damage ─────────────────────────────────────────────────────
+        # ── Journal / Codex ───────────────────────────────────────────────────
+        self.journal = Journal()
+
+    # ── Healing / damage ──────────────────────────────────────────────────────
 
     def heal(self, amount):
         self.health = min(self.health + amount, self.max_health)
 
     def take_damage(self, amount):
         if self.combat_flags.get("unbreakable"):
-            amount = min(amount, 6)
+            amount = min(amount, UNBREAKABLE_CAP)
         self.health = max(0, self.health - amount)
 
     def is_alive(self):
         return self.health > 0
 
-    # ── XP / levelling ───────────────────────────────────────────────────────
+    # ── XP / levelling ────────────────────────────────────────────────────────
 
     def gain_xp(self, amount):
         self.xp += amount
@@ -63,12 +67,10 @@ class Player:
             return
         choices = tiers[new_level]
         if len(choices) == 1:
-            # Auto-unlock
             cmd = choices[0]
             self.known_commands.add(cmd["name"])
             self.auto_unlocked_commands.append((cmd["name"], cmd["desc"]))
         else:
-            # Player picks
             self.pending_command_choices.append((new_level, choices))
 
     # ── Relic helpers ─────────────────────────────────────────────────────────
@@ -87,5 +89,5 @@ class Player:
 
     def reset_combat_state(self):
         """Call at the start of each new combat."""
-        self.combat_flags = {}
+        self.combat_flags        = {}
         self.actions_this_combat = 0

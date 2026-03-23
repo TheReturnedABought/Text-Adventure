@@ -1,53 +1,64 @@
 # utils/combat.py
 """
-CombatSession — encapsulates one full fight between the player and a room's enemies.
+CombatSession — one full fight between the player and a room's enemies.
 
-Usage:
-    session = CombatSession(player, room)
-    session.run()        # blocks until combat ends
-
-Everything that was a module-level function is now a private method.
-The only public surface is run().
+Changes vs original
+───────────────────
+  • Enemy telegraphing: planned moves shown in HUD each player turn.
+    Each enemy's _planned_move is set before the player acts and consumed
+    when the enemy actually acts.
+  • All magic numbers (BASE_BLOCK, BASE_ATTACK_MIN/MAX, etc.) come from
+    utils.constants — nothing is hardcoded here.
+  • Base command AP costs read from constants.BASE_COMMANDS.
+  • class command AP costs read from class_data.cmd_ap_cost().
+  • Journal hooks: record defeated enemies, moves seen, and drops.
 """
 import random
-from utils.helpers import print_slow, print_status, BLUE, RESET
-from utils.constants import MAX_AP
+from utils.helpers  import print_slow, print_status, BLUE, RESET
+from utils.constants import (
+    MAX_AP, BASE_BLOCK,
+    BASE_ATTACK_MIN, BASE_ATTACK_MAX,
+    BASE_HEAL_MIN, BASE_HEAL_MAX, HEAL_MP_COST,
+    BASE_COMMANDS,
+)
 from utils.status_effects import (
-    tick_statuses, clear_block,
+    tick_statuses, clear_block, modified_heal,
     is_stunned, is_raging, is_volatile, is_disoriented, get_echo,
     apply_block, consume_block,
     consume_weak, consume_vulnerable, consume_rage,
     format_statuses, get_block,
-    get_burden, get_regen, apply_regen,
+    get_regen,
+    get_fortify, get_speed, get_slow, get_soul_tax, get_counter,
+    apply_speed, apply_slow,
 )
 from entities.relic import (
     TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HEAL,
     TRIGGER_ON_BLOCK, TRIGGER_ON_HIT, TRIGGER_TURN_END, TRIGGER_TURN_START,
 )
 from entities.class_commands import COMMAND_EFFECTS
+from entities.class_data import cmd_ap_cost, get_command_def
 from game_engine.parser import parse_command
 
 
-BASE_BLOCK = 7
+# Signals returned by _take_one_action
+_END  = "end"
+_NEXT = "next"
+_DONE = "done"
 
 
 class CombatSession:
-    """Runs one full combat encounter between `player` and all enemies in `room`."""
 
     def __init__(self, player, room):
         self.player  = player
         self.room    = room
-        self.enemies = room.enemies[:4]   # hard cap of 4
+        self.enemies = room.enemies[:4]
 
-    # ── Public entry point ────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Public
+    # ══════════════════════════════════════════════════════════════════════════
 
     def run(self):
-        self.player.reset_combat_state()
-        alive = self._alive()
-        for relic in self.player.relics:
-            if alive:
-                relic.on_combat_start(self.player, alive[0])
-
+        self._combat_start()
         while True:
             if not self._alive():
                 self._victory()
@@ -61,100 +72,424 @@ class CombatSession:
             if self.player.health <= 0:
                 break
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Setup / teardown
+    # ══════════════════════════════════════════════════════════════════════════
 
-    def _alive(self):
-        return [e for e in self.enemies if e.health > 0]
+    def _combat_start(self):
+        p = self.player
+        p.reset_combat_state()
+        alive = self._alive()
+
+        if p.pending_combat_effects:
+            print_slow("\n  The effect from before surges through you!")
+            for effect, value in p.pending_combat_effects:
+                self._apply_pending_effect(effect, value)
+            p.pending_combat_effects.clear()
+            input("  Press Enter to continue...")
+
+        for relic in p.relics:
+            if alive:
+                relic.on_combat_start(p, alive[0])
+
+        if p.has_relic("Warden's Brand"):
+            from utils.status_effects import apply_vulnerable
+            for e in alive:
+                apply_vulnerable(e, 1)
 
     def _victory(self):
         print()
         print_slow("  ✦ All enemies defeated! ✦")
         self._regen_ap()
         input("\n  Press Enter to continue...")
-        if (self.player.level_ups or self.player.pending_command_choices
-                or self.player.auto_unlocked_commands):
+        p = self.player
+        if p.level_ups or p.pending_command_choices or p.auto_unlocked_commands:
             from utils.display import show_levelup
-            show_levelup(self.player)
+            show_levelup(p)
 
-    # ── AP / block management ─────────────────────────────────────────────────
+    def _alive(self):
+        return [e for e in self.enemies if e.health > 0]
+
+    def _apply_pending_effect(self, effect, value):
+        from utils.status_effects import apply_rage, apply_regen, apply_block as _blk, apply_poison
+        p = self.player
+        dispatch = {
+            "rage":   lambda: apply_rage(p, value),
+            "regen":  lambda: apply_regen(p, value),
+            "block":  lambda: _blk(p, value),
+            "poison": lambda: apply_poison(p, value),
+        }
+        if effect in dispatch:
+            dispatch[effect]()
+
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Player turn
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _player_turn(self):
+        p = self.player
+        self._regen_ap()
+        self._plan_enemy_moves()                      # telegraphing
+        alive = self._alive()
+        p.trigger_relics(TRIGGER_TURN_START, alive[0] if alive else None, {})
+        self._show_status()
+
+        ctx = self._build_ctx()
+
+        while True:
+            if not self._alive():
+                return False
+            signal = self._take_one_action(ctx)
+            if signal == _DONE:
+                return False
+            if signal == _END:
+                self._resolve_turn_end(ctx)
+                return bool(self._alive())
+
+    def _plan_enemy_moves(self):
+        """Simulate each alive enemy's full turn sequence for HUD display."""
+        for enemy in self._alive():
+            enemy.plan_turn()
 
     def _regen_ap(self):
         p = self.player
-        p.current_ap = MAX_AP
+
+        # Burden reduces the AP ceiling; evade gives a flat bonus on top.
+        burden       = p.statuses.get("burden", 0)
+        effective_max = max(1, MAX_AP - burden)
+        p.current_ap  = effective_max
+        if burden:
+            print_slow(f"  ⚖️ Burden — max AP reduced to {effective_max}/{MAX_AP}!")
+
         if p.combat_flags.get("evade_bonus_ap", 0):
             bonus = p.combat_flags.pop("evade_bonus_ap")
             p.current_ap = min(MAX_AP, p.current_ap + bonus)
-            print_slow(f"  🗡 Evade bonus — +{bonus} AP this turn! ({p.current_ap}/{MAX_AP})")
+            print_slow(f"  🗡 Evade bonus — +{bonus} AP! ({p.current_ap}/{MAX_AP})")
+
         if not p.combat_flags.get("persistent_block"):
             clear_block(p)
-        # Regen — heal at start of turn
+
         regen = get_regen(p)
         if regen > 0:
             p.heal(regen)
             print_slow(f"  🌿 Regen — +{regen} HP! (HP: {p.health})")
 
-    # ── Target selection ──────────────────────────────────────────────────────
+        fortify = get_fortify(p)
+        if fortify > 0:
+            apply_block(p, fortify)
+            print_slow(f"  🏰 Fortify — +{fortify} Block!")
 
-    def _pick_target(self):
+    def _build_ctx(self):
+        p = self.player
+        return {
+            "actions_this_turn":   0,
+            "actions_this_combat": p.actions_this_combat,
+            "ward_active":         p.combat_flags.get("ward_turns_remaining", 0) > 0,
+            "feint_no_miss":       False,
+            "mark_bonus":          0,
+            "rally_bonus":         p.combat_flags.pop("rally_bonus_pending", 0),
+            "discipline_no_atk":   False,
+            "charm_cooldown":      p.combat_flags.pop("charm_cooldown", False),
+            "ap_spent_this_turn":  0,
+        }
+
+    def _resolve_turn_end(self, ctx):
+        p = self.player
+        alive = self._alive()
+
+        echo_cmd = get_echo(p)
+        if echo_cmd and alive:
+            repeats = 2 if p.has_relic("Echo Chamber") else 1
+            for i in range(repeats):
+                if not self._alive():
+                    break
+                label = f" (echo {i+1}/2)" if repeats > 1 else ""
+                print_slow(f"  🔊 Echo — '{echo_cmd}' repeats{label}!")
+                if echo_cmd == "attack":
+                    self._do_attack(self._alive()[0], echo_cmd, ctx)
+                elif echo_cmd == "heal":
+                    self._do_heal(echo_cmd, ctx)
+                elif echo_cmd == "block":
+                    self._do_block(echo_cmd, ctx)
+
+        first = self._alive()[0] if self._alive() else None
+        p.trigger_relics(TRIGGER_TURN_END, first, {})
+
+        if p.combat_flags.get("ward_turns_remaining", 0) > 0:
+            p.combat_flags["ward_turns_remaining"] -= 1
+            if p.combat_flags["ward_turns_remaining"] == 0:
+                del p.combat_flags["ward_turns_remaining"]
+                print_slow(f"  {BLUE}✦ Coalesce fades.{RESET}")
+
+        for e in self._alive():
+            tick_statuses(e)
+        tick_statuses(p)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Per-action helpers
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _take_one_action(self, ctx):
+        p   = self.player
+        raw = input("\n⚔ > ").lower().strip()
+        if not raw:
+            return _NEXT
+        command, _ = parse_command(raw)
+
+        if self._handle_meta(command):
+            if command in ["end", "done", "pass"]:
+                print_slow("  You end your turn.")
+                return _END
+            return _NEXT
+
+        is_base  = command in BASE_COMMANDS
+        is_class = command in p.known_commands and command in COMMAND_EFFECTS
+        if not is_base and not is_class:
+            print_slow(f"  Unknown command '{command}'. Type 'help' for options.")
+            return _NEXT
+
+        ap_cost = self._calc_ap_cost(command, ctx)
+        if p.current_ap < ap_cost:
+            print_slow(f"  Not enough AP! '{command}' costs {ap_cost}, you have {p.current_ap}.")
+            print_slow("  Type 'end' to end your turn.")
+            return _NEXT
+
+        p.current_ap -= ap_cost
+        ctx["ap_spent_this_turn"] += ap_cost
+
+        soul_tax = get_soul_tax(p)
+        if soul_tax and ap_cost > 0:
+            dmg = soul_tax * ap_cost
+            p.take_damage(dmg)
+            print_slow(f"  ⚰ Soul Tax — {soul_tax} × {ap_cost} AP = {dmg} damage! (HP: {p.health})")
+
+        success, action_target = self._dispatch(command, raw, ctx)
+        if not success:
+            p.current_ap += ap_cost
+            ctx["ap_spent_this_turn"] -= ap_cost
+            return _NEXT
+
+        result = self._post_action(command, raw, action_target, ctx)
+        if result == _DONE:
+            return _DONE
+
+        if p.current_ap == 0:
+            print_slow("  No AP remaining.")
+            confirm = input("  Press Enter to end your turn, or type a command: ").lower().strip()
+            if not confirm or confirm in ["yes", "y", "end", "done", "pass"]:
+                print_slow("  You end your turn.")
+                return _END
+        return _NEXT
+
+    def _handle_meta(self, command):
+        p = self.player
+        if command in ["end", "done", "pass"]:
+            return True
+        if command in ["move", "go", "north", "south", "east", "west",
+                       "flee", "run", "escape"]:
+            print_slow("  You cannot flee from combat!")
+            return True
+        if command in ["inventory", "inv", "i"]:
+            from utils.actions import do_inventory
+            do_inventory(p)
+            return True
+        if command in ["relics", "relic"]:
+            from utils.display import show_relics
+            show_relics(p)
+            return True
+        if command in ["look", "l"]:
+            names = ", ".join(e.name for e in self._alive())
+            print_slow(f"  You are fighting: {names}.")
+            return True
+        if command in ["help", "?"]:
+            from utils.display import show_help
+            show_help(p)
+            input("  Press Enter to continue...")
+            return True
+        if command in ["journal", "j"]:
+            from utils.display import show_journal
+            show_journal(p)
+            return True
+        return False
+
+    @staticmethod
+    def _claim_letters(command: str, free_letters: set,
+                       discounted: list, cap: int | None = None) -> int:
+        """
+        Scan `command` position-by-position. For each character that is in
+        `free_letters` and has not yet been claimed (tracked by the shared
+        `discounted` boolean list), mark it claimed and add 1 to the total.
+        Stops early when `cap` is reached.
+
+        Using positions rather than character types means two relics that both
+        want the same letter (e.g. Bear Skin and Sleightmaker's Glove via Wool
+        both wanting 'a') never double-count: the second relic finds every 'a'
+        position already True and claims 0.
+
+        This is the single shared function for all letter-based AP discounts.
+        To add a new discount relic, call this with its own free_letters/cap
+        AFTER existing relics, passing the same discounted list.
+        """
+        claimed = 0
+        for i, ch in enumerate(command):
+            if cap is not None and claimed >= cap:
+                break
+            if ch in free_letters and not discounted[i]:
+                discounted[i] = True
+                claimed += 1
+        return claimed
+
+    def _calc_ap_cost(self, command, ctx):
+        """
+        Return the final AP cost for `command`, applying all modifiers.
+
+        Letter-discount relics
+        ──────────────────────
+        All share a single `discounted` position list so each character in
+        the command can reduce AP at most once, regardless of how many relics
+        want it.
+
+        Sleightmaker's Glove : claims every 'l' (no cap).
+        Silent Lamb Wool     : paired with the Glove, expands its free-letter
+                               set to include all vowels.
+        Bear Skin            : claims 'a' characters not already claimed,
+                               hard cap of 2.
+
+        To add a new letter-discount relic: call _claim_letters() with your
+        letter set and cap, passing the same `discounted` list.
+
+        Floor: cost can never drop below 1 — enforced once at the return.
+        """
+        p = self.player
+
+        # ── Base cost ─────────────────────────────────────────────────────────
+        if command in BASE_COMMANDS:
+            cost = BASE_COMMANDS[command]["ap_cost"]
+        else:
+            cmd_def = get_command_def(p.char_class, command)
+            cost    = cmd_ap_cost(cmd_def) if cmd_def else len(command)
+
+        # Shared position tracker — True = this character already discounted.
+        # Every _claim_letters call receives this same list.
+        discounted = [False] * len(command)
+
+        # ── Sleightmaker's Glove ──────────────────────────────────────────────
+        if p.has_relic("Sleightmaker's Glove"):
+            free_letters = {"l"}
+            if p.has_relic("Silent Lamb Wool"):
+                free_letters |= set("aeiou")
+                print_slow("  🐑 Silent Lamb Wool — vowels count as 'l'!")
+            discount = self._claim_letters(command, free_letters, discounted)
+            if discount:
+                cost -= discount
+                print_slow(f"  🧤 Sleightmaker's Glove — {discount}× free letter(s)!")
+
+        # ── Bear Skin ─────────────────────────────────────────────────────────
+        # Passes the same discounted list — any 'a' the Glove already claimed
+        # (via Silent Lamb Wool) will be skipped, so no double-counting.
+        if p.has_relic("Bear Skin"):
+            discount = self._claim_letters(command, {"a"}, discounted, cap=2)
+            if discount:
+                cost -= discount
+                print_slow(f"  🐻 Bear Skin — {discount}× 'a' discount!")
+
+        # ── Speed ─────────────────────────────────────────────────────────────
+        if get_speed(p) > 0:
+            cost -= 1
+            p.statuses["speed"] -= 1
+            if p.statuses["speed"] <= 0:
+                del p.statuses["speed"]
+                print_slow("  💨 Speed fades.")
+            else:
+                print_slow(f"  💨 Speed — −1 AP! ({p.statuses.get('speed', 0)} left)")
+
+        # ── Slow ──────────────────────────────────────────────────────────────
+        if get_slow(p) > 0:
+            cost += 1
+            p.statuses["slow"] -= 1
+            if p.statuses["slow"] <= 0:
+                del p.statuses["slow"]
+                print_slow("  🕸 Slow fades.")
+            else:
+                print_slow(f"  🕸 Slow — +1 AP! ({p.statuses.get('slow', 0)} left)")
+
+        # Burden is applied as a max-AP ceiling in _regen_ap, not per-command.
+
+        # Single floor — no modifier can push cost to 0 or below.
+        return max(1, cost)
+    def _dispatch(self, command, raw, ctx):
+        p = self.player
+        action_target = None
+
+        if command == "attack":
+            action_target = self._pick_target()
+            if action_target:
+                self._do_attack(action_target, raw, ctx)
+            return True, action_target
+
+        if command == "heal":
+            success = self._do_heal(raw, ctx)
+            return success, None
+
+        if command == "block":
+            self._do_block(raw, ctx)
+            return True, None
+
+        fn, needs_target = COMMAND_EFFECTS[command]
+        action_target    = self._pick_target() if needs_target else None
+        success          = fn(p, self.enemies, action_target, ctx)
+        return success, action_target
+
+    def _post_action(self, command, raw, action_target, ctx):
+        p = self.player
+        ctx["actions_this_turn"]   += 1
+        p.actions_this_combat      += 1
+        ctx["actions_this_combat"]  = p.actions_this_combat
+
+        if "echo" in p.statuses:
+            p.statuses["echo"] = command
+
+        alive = self._alive()
+        if action_target is not None:
+            relic_target = action_target if action_target.health > 0 else None
+        else:
+            relic_target = alive[0] if alive else None
+        p.trigger_relics(TRIGGER_ON_ACTION, relic_target, {"raw": raw, "command": command})
+
         alive = self._alive()
         if not alive:
-            return None
-        if len(alive) == 1:
-            return alive[0]
-        print_slow("\n  Choose target:")
-        for i, e in enumerate(alive, 1):
-            s = format_statuses(e)
-            tag = f"  [{s}]" if s else ""
-            print(f"    [{i}] {e.name:<14} HP: {e.health}/{e.max_health}{tag}")
-        while True:
-            raw = input(f"  Target (1-{len(alive)}): ").strip()
-            if raw.isdigit() and 1 <= int(raw) <= len(alive):
-                return alive[int(raw) - 1]
-            print("  Invalid choice.")
+            return _DONE
 
-    # ── Status display ────────────────────────────────────────────────────────
+        self._show_mid_turn(alive)
+        return _NEXT
 
-    def _show_status(self):
-        alive = self._alive()
-        p = self.player
-        print(f"\n  {'─' * 50}")
-        for i, e in enumerate(alive, 1):
-            s = format_statuses(e)
-            tag = f"  [{s}]" if s else ""
-            print_slow(f"  [{i}] {e.name:<14} HP: {e.health}/{e.max_health}{tag}")
-        print(f"  {'─' * 50}")
-        print_status(p)
-        ps = format_statuses(p)
-        if ps:
-            print(f"  Status: [{ps}]")
-        if p.relics:
-            print(f"  Relics: {', '.join(r.name for r in p.relics)}")
-        known = sorted(p.known_commands)
-        base  = f"attack(6) | {BLUE}heal(4AP+1MP){RESET} | block(5)"
-        extra = (" | " + " | ".join(f"{c}({len(c)})" for c in known)) if known else ""
-        print(f"\n  {base}{extra} | end")
-
-    # ── Base actions ──────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Base actions — costs and ranges come from constants
+    # ══════════════════════════════════════════════════════════════════════════
 
     def _do_attack(self, enemy, raw, ctx):
         p = self.player
+
         if ctx.get("discipline_no_atk"):
             print_slow("  ⚔ Discipline active — you cannot attack this turn.")
             return
+
         if is_disoriented(p) and not ctx.get("feint_no_miss"):
             if random.random() < 0.5:
                 print_slow("  🌪 Disoriented — your attack misses!")
                 return
         ctx["feint_no_miss"] = False
 
-        dmg = random.randint(8, 18)
+        dmg = random.randint(BASE_ATTACK_MIN, BASE_ATTACK_MAX)
 
         if ctx.get("rally_bonus", 0):
             dmg += ctx.pop("rally_bonus")
-            print_slow(f"  ⚔ Rally bonus applied!")
+            print_slow("  ⚔ Rally bonus applied!")
+
         if ctx.get("mark_bonus", 0):
             dmg += ctx.pop("mark_bonus")
-            print_slow(f"  🗡 Mark bonus applied!")
+            print_slow("  🗡 Mark bonus applied!")
+
         if is_volatile(p):
             dmg = int(dmg * 1.5)
             print_slow("  💥 Volatile — +50% damage!")
@@ -179,6 +514,8 @@ class CombatSession:
         if enemy.health <= 0:
             print_slow(f"  > You defeated {enemy.name}! +{enemy.xp_reward} XP")
             p.gain_xp(enemy.xp_reward)
+            p.journal.record_enemy(enemy)      # bestiary
+            self._handle_drops(enemy)
             input("  Press Enter to continue...")
 
         if is_volatile(p) and random.random() < 0.5:
@@ -189,233 +526,111 @@ class CombatSession:
 
     def _do_heal(self, raw, ctx):
         p = self.player
-        if p.mana < 1:
+        if p.mana < HEAL_MP_COST:
             print_slow(f"  {BLUE}Not enough Mana to heal!{RESET}")
             return False
-        p.mana -= 1
-        amt = random.randint(8, 15)
+        p.mana -= HEAL_MP_COST
+        base = random.randint(BASE_HEAL_MIN, BASE_HEAL_MAX)
+        amt  = modified_heal(p, base)
         p.heal(amt)
-        print_slow(f"  > Healed {amt} HP! (HP: {p.health})  {BLUE}[-1 MP → {p.mana}/{p.max_mana}]{RESET}")
+        print_slow(f"  > Healed {amt} HP! (HP: {p.health})  {BLUE}[-{HEAL_MP_COST} MP → {p.mana}/{p.max_mana}]{RESET}")
         alive = self._alive()
         first = alive[0] if alive else None
         p.trigger_relics(TRIGGER_ON_HEAL, first, {"raw": raw})
         return True
 
     def _do_block(self, raw, ctx):
-        apply_block(self.player, BASE_BLOCK)
+        p = self.player
+        apply_block(p, BASE_BLOCK)
         alive = self._alive()
         first = alive[0] if alive else None
-        self.player.trigger_relics(TRIGGER_ON_BLOCK, first, {"raw": raw})
+        p.trigger_relics(TRIGGER_ON_BLOCK, first, {"raw": raw})
 
-    # ── Turn-end resolution ───────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Display helpers
+    # ══════════════════════════════════════════════════════════════════════════
 
-    def _resolve_turn_end(self, ctx):
-        p = self.player
+    def _show_status(self):
+        """Full combat HUD — shows enemy HP, statuses, and planned next move."""
+        p     = self.player
         alive = self._alive()
+        print(f"\n  {'─' * 50}")
+        for i, e in enumerate(alive, 1):
+            s   = format_statuses(e)
+            tag = f"  [{s}]" if s else ""
+            # Telegraphing — show planned move
+            if is_stunned(e):
+                intent = "  → ⚡ STUNNED"
+            elif e._planned_moves:
+                seq    = " → ".join(f"{m.name}({m.ap_cost})" for m in e._planned_moves)
+                intent = f"  → {seq}"
+            else:
+                intent = "  → ???"
+            ap_str = f"  AP:{e.current_ap}/{e.max_ap}"
+            print_slow(f"  [{i}] {e.name:<14} HP: {e.health}/{e.max_health}{ap_str}{tag}{intent}")
+        print(f"  {'─' * 50}")
+        print_status(p)
+        ps = format_statuses(p)
+        if ps:
+            print(f"  Status: [{ps}]")
+        if p.relics:
+            print(f"  Relics: {', '.join(r.name for r in p.relics)}")
+        # Command list — costs from constants / CommandDef
+        from entities.class_data import get_command_def, cmd_ap_cost as _ap
+        known = sorted(p.known_commands)
+        base_str = (
+            f"attack({BASE_COMMANDS['attack']['ap_cost']}) | "
+            f"{BLUE}heal({BASE_COMMANDS['heal']['ap_cost']}AP+{HEAL_MP_COST}MP){RESET} | "
+            f"block({BASE_COMMANDS['block']['ap_cost']})"
+        )
+        extra = ""
+        if known:
+            parts = []
+            for c in known:
+                d = get_command_def(p.char_class, c)
+                ap = _ap(d) if d else len(c)
+                parts.append(f"{c}({ap})")
+            extra = " | " + " | ".join(parts)
+        print(f"\n  {base_str}{extra} | end")
 
-        if p.combat_flags.get("fortify"):
-            apply_block(p, 5)
-            print_slow("  🛡 Fortify — +5 Block at turn end!")
+    def _show_mid_turn(self, alive):
+        p  = self.player
+        ps = format_statuses(p)
+        print_status(p)
+        for e in alive:
+            s = format_statuses(e)
+            if s:
+                print(f"  {e.name}: [{s}]")
+        if ps:
+            print(f"  You: [{ps}]")
 
-        echo_cmd = get_echo(p)
-        if echo_cmd and alive:
-            repeats = 2 if p.has_relic("Echo Chamber") else 1
-            for i in range(repeats):
-                if not self._alive():
-                    break
-                label = f" (echo {i+1}/2)" if repeats > 1 else ""
-                print_slow(f"  🔊 Echo — '{echo_cmd}' repeats{label}!")
-                if echo_cmd == "attack":
-                    self._do_attack(self._alive()[0], echo_cmd, ctx)
-                elif echo_cmd == "heal":
-                    self._do_heal(echo_cmd, ctx)
-                elif echo_cmd == "block":
-                    self._do_block(echo_cmd, ctx)
-
-        first = self._alive()[0] if self._alive() else None
-        p.trigger_relics(TRIGGER_TURN_END, first, {})
-        for e in self._alive():
-            tick_statuses(e)
-        tick_statuses(p)
-
-    # ── Player turn ───────────────────────────────────────────────────────────
-
-    def _player_turn(self):
-        """Run the player's turn. Returns True if combat should continue."""
-        p = self.player
-        self._regen_ap()
+    def _pick_target(self):
         alive = self._alive()
-        p.trigger_relics(TRIGGER_TURN_START, alive[0] if alive else None, {})
-        self._show_status()
-
-        ctx = {
-            "actions_this_turn":   0,
-            "actions_this_combat": p.actions_this_combat,
-            "ward_active":         False,
-            "flow_active":         False,
-            "flow_used":           set(),
-            "feint_no_miss":       False,
-            "mark_bonus":          0,
-            "rally_bonus":         p.combat_flags.pop("rally_bonus_pending", 0),
-            "discipline_no_atk":   False,
-            "charm_cooldown":      p.combat_flags.pop("charm_cooldown", False),
-            "glove_ap_given":      False,
-        }
-
+        if not alive:
+            return None
+        if len(alive) == 1:
+            return alive[0]
+        print_slow("\n  Choose target:")
+        for i, e in enumerate(alive, 1):
+            s   = format_statuses(e)
+            tag = f"  [{s}]" if s else ""
+            print(f"    [{i}] {e.name:<14} HP: {e.health}/{e.max_health}{tag}")
         while True:
-            alive = self._alive()
-            if not alive:
-                return False
+            raw = input(f"  Target (1-{len(alive)}): ").strip()
+            if raw.isdigit() and 1 <= int(raw) <= len(alive):
+                return alive[int(raw) - 1]
+            print("  Invalid choice.")
 
-            raw = input("\n⚔ > ").lower().strip()
-            if not raw:
-                continue
-            command, _ = parse_command(raw)
-
-            # ── Free / meta commands ──────────────────────────────────────────
-            if command in ["end", "done", "pass"]:
-                print_slow("  You end your turn.")
-                self._resolve_turn_end(ctx)
-                return bool(self._alive())
-
-            if command in ["move", "go", "north", "south", "east", "west",
-                           "flee", "run", "escape"]:
-                print_slow("  You cannot flee from combat!")
-                continue
-
-            if command in ["inventory", "inv", "i"]:
-                from utils.actions import do_inventory
-                do_inventory(p)
-                continue
-
-            if command in ["relics", "relic"]:
-                from utils.display import show_relics
-                show_relics(p)
-                continue
-
-            if command in ["look", "l"]:
-                names = ", ".join(e.name for e in alive)
-                print_slow(f"  You are fighting: {names}.")
-                continue
-
-            if command in ["help", "?"]:
-                from utils.display import show_help
-                show_help(p)
-                input("  Press Enter to continue...")
-                continue
-
-            # ── Validate command ──────────────────────────────────────────────
-            is_base  = command in ["attack", "heal", "block"]
-            is_class = command in p.known_commands and command in COMMAND_EFFECTS
-            if not is_base and not is_class:
-                print_slow(f"  Unknown command '{command}'. Type 'help' for options.")
-                continue
-
-            if ctx["flow_active"] and command in ctx["flow_used"]:
-                print_slow(f"  🗡 Flow — cannot repeat '{command}' this turn!")
-                continue
-
-            # ── AP cost ───────────────────────────────────────────────────────
-            ap_cost = len(command)
-            if ctx["flow_active"]:
-                ap_cost = max(1, ap_cost - 1)
-            if ap_cost <= 4 and p.has_relic("Sleightmaker's Glove"):
-                ap_cost = max(1, ap_cost - 1)
-                print_slow(f"  🧤 Sleightmaker's Glove — '{command}' costs {ap_cost} AP!")
-            burden = get_burden(p)
-            if burden > 0:
-                ap_cost += burden
-                print_slow(f"  ⚖️ Burdened — +{burden} AP cost! ({ap_cost} total)")
-
-            if p.current_ap < ap_cost:
-                print_slow(f"  Not enough AP! '{command}' costs {ap_cost}, you have {p.current_ap}.")
-                print_slow("  Type 'end' to end your turn.")
-                continue
-
-            p.current_ap -= ap_cost
-
-            # ── Execute ───────────────────────────────────────────────────────
-            success      = True
-            action_target = None
-
-            if command == "attack":
-                action_target = self._pick_target()
-                if action_target:
-                    self._do_attack(action_target, raw, ctx)
-
-            elif command == "heal":
-                success = self._do_heal(raw, ctx)
-                if not success:
-                    p.current_ap += ap_cost
-                    continue
-
-            elif command == "block":
-                self._do_block(raw, ctx)
-
-            else:
-                fn, needs_target = COMMAND_EFFECTS[command]
-                action_target = self._pick_target() if needs_target else None
-                success = fn(p, self.enemies, action_target, ctx)
-                if not success:
-                    p.current_ap += ap_cost
-                    continue
-
-            if not success:
-                continue
-
-            # ── Post-action bookkeeping ───────────────────────────────────────
-            ctx["actions_this_turn"]   += 1
-            p.actions_this_combat      += 1
-            ctx["actions_this_combat"]  = p.actions_this_combat
-            if ctx["flow_active"]:
-                ctx["flow_used"].add(command)
-            if "echo" in p.statuses:
-                p.statuses["echo"] = command
-
-            # ON_ACTION relic trigger — use actual target, never bleed onto others
-            alive = self._alive()
-            if action_target is not None:
-                relic_target = action_target if action_target.health > 0 else None
-            else:
-                relic_target = alive[0] if alive else None
-            p.trigger_relics(TRIGGER_ON_ACTION, relic_target, {"raw": raw, "command": command})
-
-            alive = self._alive()
-            if not alive:
-                return False
-
-            # Show updated state
-            ps = format_statuses(p)
-            print_status(p)
-            for e in alive:
-                s = format_statuses(e)
-                if s:
-                    print(f"  {e.name}: [{s}]")
-            if ps:
-                print(f"  You: [{ps}]")
-
-            # AP-out confirmation
-            if p.current_ap == 0:
-                print_slow("  No AP remaining.")
-                confirm = input("  Press Enter to end your turn, or type a command: ").lower().strip()
-                if not confirm or confirm in ["yes", "y", "end", "done", "pass"]:
-                    print_slow("  You end your turn.")
-                    self._resolve_turn_end(ctx)
-                    return bool(self._alive())
-                continue
-
-    # ── Enemies' turn ─────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════════
+    #  Enemy turn
+    # ══════════════════════════════════════════════════════════════════════════
 
     def _enemies_turn(self):
         input("\n  Press Enter for enemy turn...")
         print(f"\n  {'─' * 50}")
         for enemy in self._alive():
             print_slow(f"  {enemy.name}'s turn")
-            # Regen ticks at the start of the enemy's turn
-            regen = get_regen(enemy)
-            if regen > 0:
-                enemy.health = min(enemy.max_health, enemy.health + regen)
-                print_slow(f"  🌿 {enemy.name} regenerates {regen} HP! (HP: {enemy.health})")
+            self._enemy_turn_start_buffs(enemy)
             if is_stunned(enemy):
                 print_slow(f"  ⚡ {enemy.name} is stunned — loses their turn!")
                 tick_statuses(enemy)
@@ -426,84 +641,229 @@ class CombatSession:
                 return
         print()
 
+    def _enemy_turn_start_buffs(self, enemy):
+        """Apply Fortify and Regen at the start of each enemy's turn."""
+        fortify = enemy.statuses.get("fortify", 0)
+        if fortify:
+            apply_block(enemy, fortify)
+            print_slow(f"  🏰 {enemy.name} Fortify — +{fortify} Block!")
+        regen = get_regen(enemy)
+        if regen > 0:
+            enemy.health = min(enemy.max_health, enemy.health + regen)
+            print_slow(f"  🌿 {enemy.name} regenerates {regen} HP! (HP: {enemy.health})")
+
     def _enemy_act(self, enemy):
+        """
+        Execute the enemy's turn using their AP budget.
+
+        AP budget
+        ─────────
+        effective_ap = max(1, max_ap − burden_stacks)
+        Speed stacks add flat AP on top (consumed here, not per-action).
+
+        The enemy spends AP on moves greedily. No move may be used twice in
+        the same turn. When AP is exhausted (or only too-costly/too-cooled
+        moves remain) the loop ends. If no moves fired at all, fall back to
+        a basic attack.
+
+        Turn-level interrupts (evade, disorient, slow) can short-circuit
+        the entire turn before the AP loop runs.
+        """
         p = self.player
         enemy.tick_move_cooldowns()
 
+        # ── Compute effective AP ───────────────────────────────────────────
+        burden       = enemy.statuses.get("burden", 0)
+        effective_ap = max(1, enemy.max_ap - burden)
+        if burden:
+            print_slow(f"  ⚖️ {enemy.name} is Burdened — {effective_ap}/{enemy.max_ap} AP!")
+
+        # Speed: add flat bonus AP, consume all stacks now
+        speed = enemy.statuses.get("speed", 0)
+        if speed:
+            effective_ap += speed
+            del enemy.statuses["speed"]
+            print_slow(f"  💨 {enemy.name} is Hastened — +{speed} AP! ({effective_ap} total)")
+
+        enemy.current_ap = effective_ap
+
+        # ── Turn-level interrupts ──────────────────────────────────────────
         if p.combat_flags.get("evade"):
             p.combat_flags.pop("evade")
             p.combat_flags["evade_bonus_ap"] = 2
-            print_slow(f"  🗡 Evade triggered — you dodge {enemy.name}'s attack!")
+            print_slow(f"  🗡 Evade — you dodge {enemy.name}'s attack!")
+            enemy._planned_moves = []
+            enemy._planned_move  = None
             return
 
         if is_disoriented(enemy) and random.random() < 0.5:
-            print_slow(f"  🌪 {enemy.name} is disoriented — attack misses!")
+            print_slow(f"  🌪 {enemy.name} is disoriented — stumbles and wastes their turn!")
+            enemy._planned_moves = []
+            enemy._planned_move  = None
             return
 
-        chosen = enemy.choose_move()
-        if chosen:
-            print_slow(f"  [ {enemy.name} uses {chosen.name} ]")
+        # Slow: 50% chance to skip entire turn (consume 1 stack)
+        if get_slow(enemy) > 0:
+            enemy.statuses["slow"] -= 1
+            if enemy.statuses["slow"] <= 0:
+                del enemy.statuses["slow"]
+            if random.random() < 0.5:
+                print_slow(f"  🕸 {enemy.name} is Slowed — loses their turn!")
+                enemy._planned_moves = []
+                enemy._planned_move  = None
+                return
+            print_slow(f"  🕸 {enemy.name} is Slowed — pushes through!")
+
+        # ── AP-spending loop ───────────────────────────────────────────────
+        used_ids: set = set()   # prevent same move twice in one turn
+        actions_taken = 0
+
+        while enemy.current_ap > 0 and enemy.health > 0 and p.health > 0:
+            chosen = enemy.choose_affordable_move(enemy.current_ap, used_ids)
+            if not chosen:
+                break
+            print_slow(f"  [ {enemy.name} uses {chosen.name} ({chosen.ap_cost} AP) ]")
+            enemy.current_ap -= chosen.ap_cost
+            used_ids.add(id(chosen))
+            p.journal.record_move(enemy.name, chosen.name)
             chosen.use(enemy, p)
-        else:
+            self._handle_shield_allies(enemy)
+            actions_taken += 1
+
+        # Fallback if no moves fired (no moves defined, or all on cooldown)
+        if actions_taken == 0 and enemy.health > 0 and p.health > 0:
             self._enemy_basic_attack(enemy)
 
         p.trigger_relics(TRIGGER_ON_HIT, enemy, {"damage": 0})
 
     def _enemy_basic_attack(self, enemy):
-        p = self.player
+        """
+        Fallback — fires when the enemy has no moves or all are unaffordable.
+        Does not consume AP (it's already been accounted for by the empty loop).
+        """
+        p       = self.player
         raw_dmg = random.randint(4, enemy.attack_power)
 
-        # Burden — reduce damage per stack (min 1)
-        burden = get_burden(enemy)
-        if burden > 0:
-            reduction = burden * 2
-            raw_dmg = max(1, raw_dmg - reduction)
-            print_slow(f"  ⚖️ {enemy.name} is Burdened — -{reduction} damage!")
+        soul_tax = enemy.statuses.get("soul_tax", 0)
+        if soul_tax:
+            raw_dmg += soul_tax
+            print_slow(f"  ⚰ {enemy.name}'s cursed power surges — +{soul_tax} bonus damage!")
 
-        rage_mult = consume_rage(enemy)
-        if rage_mult > 1:
-            print_slow(f"  🔥 {enemy.name} is enraged — DOUBLE DAMAGE!")
-        raw_dmg = int(raw_dmg * rage_mult)
-
+        raw_dmg = int(raw_dmg * consume_rage(enemy))
         if is_volatile(enemy):
             raw_dmg = int(raw_dmg * 1.5)
             print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
             if random.random() < 0.5:
                 enemy.take_damage(5)
                 print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP: {enemy.health})")
-
-        weak_mult = consume_weak(enemy)
-        if weak_mult < 1:
-            print_slow(f"  🌀 {enemy.name} is Weakened!")
-        raw_dmg = int(raw_dmg * weak_mult)
+        raw_dmg = int(raw_dmg * consume_weak(enemy))
 
         actual, absorbed = consume_block(p, raw_dmg)
         if p.combat_flags.get("unbreakable"):
-            actual = min(actual, 6)
+            from utils.constants import UNBREAKABLE_CAP
+            actual = min(actual, UNBREAKABLE_CAP)
 
         if absorbed:
             print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual}!")
         else:
             print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
 
-        # Guard counter
-        if absorbed and actual > 0 and p.combat_flags.get("guard_counter", 0):
-            thorns = p.combat_flags.pop("guard_counter")
-            enemy.take_damage(thorns)
-            print_slow(f"  🛡 Guard counter — {enemy.name} takes {thorns} damage! (HP: {max(enemy.health,0)})")
+        if absorbed > 0 and actual > 0:
+            counter = get_counter(p)
+            if counter:
+                enemy.take_damage(counter)
+                print_slow(f"  🔄 Counter — block shattered! {enemy.name} takes {counter} damage! (HP: {max(enemy.health,0)})")
+                del p.statuses["counter"]
 
         if actual > 0:
             p.take_damage(actual)
             print_slow(f"  Your HP: {p.health}")
 
-        # Sentinel thorns
-        if p.combat_flags.get("sentinel_thorns", 0) and actual > 0:
-            thorns = p.combat_flags["sentinel_thorns"]
-            enemy.take_damage(thorns)
-            print_slow(f"  🛡 Sentinel — {enemy.name} takes {thorns} thorns! (HP: {max(enemy.health,0)})")
+        sentinel = p.combat_flags.get("sentinel_thorns", 0)
+        if sentinel and actual > 0:
+            enemy.take_damage(sentinel)
+            print_slow(f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! (HP: {max(enemy.health,0)})")
+
+    def _handle_shield_allies(self, enemy):
+        shield_amt = enemy.statuses.pop("_shield_allies", 0)
+        if shield_amt:
+            for ally in [e for e in self.enemies if e.health > 0]:
+                apply_block(ally, shield_amt)
+                print_slow(f"  🛡 {ally.name} gains {shield_amt} Block from the barrier!")
+
+    def _enemy_basic_attack(self, enemy):
+        p       = self.player
+        raw_dmg = random.randint(4, enemy.attack_power)
+
+        soul_tax = enemy.statuses.get("soul_tax", 0)
+        if soul_tax:
+            raw_dmg += soul_tax
+            print_slow(f"  ⚰ {enemy.name}'s cursed power surges — +{soul_tax} bonus damage!")
+
+        burden = get_burden(enemy)
+        if burden > 0:
+            raw_dmg = max(1, raw_dmg - burden * 2)
+            print_slow(f"  ⚖️ {enemy.name} is Burdened — reduced damage!")
+
+        raw_dmg = int(raw_dmg * consume_rage(enemy))
+        if is_volatile(enemy):
+            raw_dmg = int(raw_dmg * 1.5)
+            print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
+            if random.random() < 0.5:
+                enemy.take_damage(5)
+                print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP: {enemy.health})")
+        raw_dmg = int(raw_dmg * consume_weak(enemy))
+
+        actual, absorbed = consume_block(p, raw_dmg)
+        if p.combat_flags.get("unbreakable"):
+            from utils.constants import UNBREAKABLE_CAP
+            actual = min(actual, UNBREAKABLE_CAP)
+
+        if absorbed:
+            print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual}!")
+        else:
+            print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
+
+        if absorbed > 0 and actual > 0:
+            counter = get_counter(p)
+            if counter:
+                enemy.take_damage(counter)
+                print_slow(f"  🔄 Counter — block shattered! {enemy.name} takes {counter} damage! (HP: {max(enemy.health,0)})")
+                del p.statuses["counter"]
+
+        if actual > 0:
+            p.take_damage(actual)
+            print_slow(f"  Your HP: {p.health}")
+
+        sentinel = p.combat_flags.get("sentinel_thorns", 0)
+        if sentinel and actual > 0:
+            enemy.take_damage(sentinel)
+            print_slow(f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! (HP: {max(enemy.health,0)})")
+
+    def _handle_drops(self, enemy):
+        p = self.player
+        for item in enemy.roll_drops():
+            p.inventory.append(item)
+            p.journal.record_drop(enemy.name, item)   # bestiary
+            print_slow(f"  ↳ {enemy.name} dropped: {item}")
+
+        if enemy.guaranteed_relic:
+            from utils.relics import get_relic
+            from utils.ascii_art import RELIC_ART, print_art
+            from utils.helpers import RARITY_COLORS, RESET as _RST
+            r = get_relic(enemy.guaranteed_relic)
+            if r:
+                p.add_relic(r)
+                art = RELIC_ART.get(r.name)
+                if art:
+                    print_art(art, indent=10)
+                color  = RARITY_COLORS.get(getattr(r, "rarity", "Common"), "")
+                rarity = getattr(r, "rarity", "Common")
+                print_slow(f"  ✦ Elite drop: {color}{r.name}{_RST}  [{rarity}]")
+                print_slow(f"    {r.description}")
 
 
-# ── Convenience wrapper (keeps call sites clean) ──────────────────────────────
+# ── Convenience wrapper ───────────────────────────────────────────────────────
 
 def combat_loop(player, room):
     CombatSession(player, room).run()

@@ -36,9 +36,10 @@ class IronCastHelm(Relic):
 
 
 class SleightmakersGlove(Relic):
-    """Rogue starter relic — passive, checked in combat.py before AP is spent."""
+    """Passive — checked in combat._calc_ap_cost via _letter_discount.
+    With Silent Lamb Wool: free-letter set expands to include all vowels."""
     name        = "Sleightmaker's Glove"
-    description = "Actions with an AP cost of 4 or less cost 1 fewer AP."
+    description = "Each 'l' in a command is free (no AP cost). With Silent Lamb Wool: vowels are also free."
     rarity      = RARE
 
 
@@ -156,30 +157,22 @@ class BlessedEye(Relic):
 
 class SilentLambWool(Relic):
     name        = "Silent Lamb Wool"
-    description = "All vowels (a/e/i/o/u) also count as 'l' when typed."
+    description = (
+        "Vowels (a/e/i/o/u) count as 'l' when typed — "
+        "reducing AP cost via Sleightmaker's Glove, "
+        "and triggering other letter-counting relics."
+    )
     rarity      = RARE
 
     def trigger(self, event, player, enemy, ctx):
+        # Adds 'l's to ctx["raw"] so letter-counting relics (Whetstone,
+        # BerserkerHelm, etc.) see vowels as 'l' for their own effects.
+        # AP cost reduction is handled in combat._calc_ap_cost before AP
+        # is spent, so it is not duplicated here.
         if event == TRIGGER_ON_ACTION:
             raw = ctx.get("raw", "")
             extra_ls = sum(1 for c in raw if c in VOWELS)
             ctx["raw"] = raw + ("l" * extra_ls)
-
-
-class BearsHide(Relic):
-    name        = "Bear's Hide"
-    description = "Each 'r' typed grants 1 AP."
-    rarity      = UNCOMMON
-
-    def trigger(self, event, player, enemy, ctx):
-        if event == TRIGGER_ON_ACTION:
-            from utils.constants import MAX_AP
-            n = ctx.get("raw", "").count("r")
-            if n:
-                gained = min(n, MAX_AP - player.current_ap)
-                if gained > 0:
-                    player.current_ap += gained
-                    print_slow(f"  🐻 Bear's Hide — +{gained} AP! ({player.current_ap}/{MAX_AP})")
 
 
 class VampiricBlade(Relic):
@@ -195,7 +188,7 @@ class VampiricBlade(Relic):
 
 class Whetstone(Relic):
     name        = "Whetstone"
-    description = "Each 's' typed applies 1 Bleed to the target."
+    description = "Each 's' typed applies 1 Bleed to the target (max 5 stacks total)."
     rarity      = COMMON
 
     def trigger(self, event, player, enemy, ctx):
@@ -203,7 +196,10 @@ class Whetstone(Relic):
             from utils.status_effects import apply_bleed
             n = ctx.get("raw", "").count("s")
             if n:
-                apply_bleed(enemy, n)
+                current  = enemy.statuses.get("bleed", 0)
+                can_add  = max(0, 5 - current)
+                if can_add:
+                    apply_bleed(enemy, min(n, can_add))
 
 
 class EchoChamber(Relic):
@@ -212,6 +208,42 @@ class EchoChamber(Relic):
     rarity      = RARE
 
     # Passive — checked by name in combat.py's _resolve_turn_end
+
+
+class BearSkin(Relic):
+    """Passive — checked in combat._calc_ap_cost via _letter_discount."""
+    name        = "Bear Skin"
+    description = "Each 'a' in a command reduces its AP cost by 1 (max −2)."
+    rarity      = UNCOMMON
+
+
+class WardensBrand(Relic):
+    name        = "Warden's Brand"
+    description = "All enemies enter combat with 1 Vulnerable."
+    rarity      = COMMON
+
+    def on_combat_start(self, player, enemy_ref):
+        # enemy_ref is the first enemy; we need all enemies, stored in combat_flags
+        player.combat_flags["wardens_brand_pending"] = True
+
+    def trigger(self, event, player, enemy, ctx):
+        # Fires on TRIGGER_TURN_START turn 1 to catch all enemies
+        if event == TRIGGER_TURN_START and player.combat_flags.pop("wardens_brand_pending", False):
+            # ctx doesn't have the full list; handled in combat.py run() directly
+            pass
+
+
+class EtchedStone(Relic):
+    name        = "Etched Stone"
+    description = "Each 'e' typed applies 1 Vulnerable to the target."
+    rarity      = COMMON
+
+    def trigger(self, event, player, enemy, ctx):
+        if event == TRIGGER_ON_ACTION and enemy and enemy.health > 0:
+            from utils.status_effects import apply_vulnerable
+            n = ctx.get("raw", "").count("e")
+            if n:
+                apply_vulnerable(enemy, n)
 
 
 # ── Registry ──────────────────────────────────────────────────────────────────
@@ -231,10 +263,12 @@ ALL_RELICS = {
     "whisper charm":       WhisperCharm,
     "blessed eye":         BlessedEye,
     "silent lamb wool":    SilentLambWool,
-    "bears hide":          BearsHide,
+    "bear skin":           BearSkin,
     "vampiric blade":      VampiricBlade,
     "whetstone":           Whetstone,
     "echo chamber":        EchoChamber,
+    "wardens brand":       WardensBrand,
+    "etched stone":        EtchedStone,
 }
 
 

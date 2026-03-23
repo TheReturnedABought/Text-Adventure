@@ -1,15 +1,18 @@
 # game_engine/parser.py
 
 ALIASES = {
-    "n": "north",
-    "s": "south",
-    "e": "east",
-    "w": "west",
-    "i": "inventory",
-    "l": "look",
-    "h": "help",
-    "g": "go",
+    "n":  "north",
+    "s":  "south",
+    "e":  "east",
+    "w":  "west",
+    "i":  "inventory",
+    "l":  "look",
+    "h":  "help",
+    "g":  "go",
+    "j":  "journal",
+    "m":  "map",
 }
+
 
 def parse_command(user_input):
     """
@@ -19,11 +22,6 @@ def parse_command(user_input):
     parts = user_input.strip().lower().split()
     if not parts:
         return "", []
-
-    cmd = parts[0]
+    cmd  = ALIASES.get(parts[0], parts[0])
     args = parts[1:]
-
-    # Expand single-letter aliases
-    cmd = ALIASES.get(cmd, cmd)
-
     return cmd, args

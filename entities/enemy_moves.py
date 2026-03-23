@@ -1,7 +1,11 @@
 # entities/enemy_moves.py
 """
-Reusable move effect functions and move factory helpers.
+Reusable move effect functions and the move() factory.
+
 Each effect has signature: fn(enemy, player) -> None
+
+The move() factory now accepts ap_cost so every call site in enemy_data.py
+sets cost explicitly — no hidden defaults leak into the system.
 """
 import random
 from utils.helpers import print_slow
@@ -11,7 +15,7 @@ from utils.status_effects import (
 )
 
 
-# ── Generic effects ───────────────────────────────────────────────────────────
+# ── Effect functions ──────────────────────────────────────────────────────────
 
 def basic_attack(min_dmg=None, max_dmg=None):
     def effect(enemy, player):
@@ -86,7 +90,7 @@ def stun_attack():
         if actual:
             player.take_damage(actual)
         apply_stun(player, 1)
-        print_slow(f"  Your HP: {player.health} — you are STUNNED (lose next turn's AP)!")
+        print_slow(f"  Your HP: {player.health} — you are STUNNED!")
     return effect
 
 
@@ -132,8 +136,68 @@ def disorient_attack():
     return effect
 
 
-# ── Move factories (return EnemyMove instances) ───────────────────────────────
+def shield_allies(block_amount=8):
+    """Signals combat loop to grant block to all living enemies."""
+    def effect(enemy, player):
+        print_slow(f"  {enemy.name} raises a spectral barrier for all allies!")
+        enemy.statuses["_shield_allies"] = block_amount
+    return effect
 
-def move(name, weight, effect_fn, cooldown=0):
+
+def fortify_self(stacks=1):
+    def effect(enemy, player):
+        from utils.status_effects import apply_fortify
+        print_slow(f"  {enemy.name} settles into an iron stance!")
+        apply_fortify(enemy, stacks)
+    return effect
+
+
+def haste_self(stacks=2):
+    """
+    Grant the enemy bonus AP this turn.
+    With the AP system, Speed on an enemy adds to current_ap at turn start
+    (handled in CombatSession._enemy_act). Stacks are consumed there.
+    """
+    def effect(enemy, player):
+        from utils.status_effects import apply_speed
+        print_slow(f"  {enemy.name} surges with unnatural speed!")
+        apply_speed(enemy, stacks)
+    return effect
+
+
+def slow_player(stacks=2):
+    def effect(enemy, player):
+        from utils.status_effects import apply_slow
+        print_slow(f"  {enemy.name} drags at your movements!")
+        apply_slow(player, stacks)
+    return effect
+
+
+def curse_player(stacks=2):
+    def effect(enemy, player):
+        from utils.status_effects import apply_cursed
+        print_slow(f"  {enemy.name} lays a withering curse upon you!")
+        apply_cursed(player, stacks)
+    return effect
+
+
+def soul_tax_player(stacks=1):
+    def effect(enemy, player):
+        from utils.status_effects import apply_soul_tax
+        print_slow(f"  {enemy.name} binds your power against you!")
+        apply_soul_tax(player, stacks)
+    return effect
+
+
+# ── Move factory ──────────────────────────────────────────────────────────────
+
+def move(name: str, weight: int, effect_fn, cooldown: int = 0, ap_cost: int = 4):
+    """
+    Create an EnemyMove.
+
+    ap_cost is required at every call site in enemy_data.py so costs are
+    always explicit — no silent defaults.  The parameter has a fallback of 4
+    (standard attack cost) only so old call sites don't crash during migration.
+    """
     from entities.enemy import EnemyMove
-    return EnemyMove(name, weight, effect_fn, cooldown)
+    return EnemyMove(name, weight, effect_fn, cooldown=cooldown, ap_cost=ap_cost)

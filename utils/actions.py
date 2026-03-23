@@ -7,19 +7,9 @@ def get_alive_enemies(room):
     return [e for e in room.enemies if e.health > 0]
 
 
-def spend_ap(player, command):
-    cost = len(command)
-    if player.current_ap < cost:
-        print_slow(f"  Not enough AP! '{command}' costs {cost} AP, you have {player.current_ap}.")
-        return False
-    player.current_ap -= cost
-    return True
-
-
 def do_move(player, room, args):
     direction = args[0] if args else ""
     if direction in room.connections:
-        # Locked door check
         required = room.locked_connections.get(direction)
         if required:
             held = [i.lower() for i in player.inventory]
@@ -36,13 +26,10 @@ def do_move(player, room, args):
 
 
 def do_take_relic(player, room, args):
-    """Pick up a relic or item by partial name match (handles multi-word names)."""
     query = " ".join(args).lower() if args else ""
     if not query:
         print_slow("  Take what?")
         return
-
-    # Relic match first
     relic_match = next((r for r in room.relics if query in r.name.lower()), None)
     if relic_match:
         room.relics.remove(relic_match)
@@ -59,15 +46,12 @@ def do_take_relic(player, room, args):
         print_slow(f"    [{rarity}] {relic_match.description}")
         input("\n  Press Enter to continue...")
         return
-
-    # Item partial match
     item_match = next((i for i in room.items if query in i.lower()), None)
     if item_match:
         player.inventory.append(item_match)
         room.items.remove(item_match)
         print_slow(f"  You pick up: {item_match}")
         return
-
     print_slow(f"  Nothing here matches '{query}'.")
 
 
@@ -98,7 +82,6 @@ def do_rest(player, room):
 
 
 def do_listen(player, room):
-    """Print directional sensory hints about each connected room."""
     hints = room.listen_hints()
     if not hints:
         print_slow("  You hear nothing — there are no exits to listen at.")
@@ -109,7 +92,6 @@ def do_listen(player, room):
 
 
 def do_examine(player, room, args):
-    """Examine the room puzzle (or note there is nothing to examine)."""
     if room.puzzle:
         room.puzzle.examine()
     else:
@@ -117,7 +99,6 @@ def do_examine(player, room, args):
 
 
 def do_solve(player, room, args):
-    """Attempt to solve the room puzzle with the given answer."""
     if not room.puzzle:
         print_slow("  There is no puzzle here to solve.")
         return
@@ -125,3 +106,78 @@ def do_solve(player, room, args):
         print_slow("  Usage: solve <your answer>")
         return
     room.puzzle.attempt(player, room, " ".join(args))
+
+
+def do_interact(player, room):
+    if room.event:
+        room.event.show(player, room)
+    else:
+        print_slow("  There is nothing to interact with here.")
+
+
+def do_map(game):
+    """Show the ASCII map. Requires game.start_room to be set."""
+    from utils.display import show_map
+    start = getattr(game, "start_room", None)
+    if start is None:
+        print_slow("  No map available yet.")
+        return
+    show_map(start, game.room)
+
+
+def do_journal(player):
+    from utils.display import show_journal
+    show_journal(player)
+
+
+# ── Mushroom / food tables ─────────────────────────────────────────────────────
+
+MUSHROOM_EFFECTS = {
+    "red mushroom":  ("rage",   2),
+    "blue mushroom": ("regen",  4),
+    "gold mushroom": ("block",  10),
+    "dark mushroom": ("poison", 3),
+    "mushroom":      None,
+}
+
+_GENERIC_MUSHROOM_POOL = [
+    ("rage",   2),
+    ("regen",  4),
+    ("poison", 2),
+]
+
+FOOD_ITEMS = {"apple": 15, "bread": 20}
+
+
+def use_item(player, room, args):
+    import random
+    query = " ".join(args).lower() if args else ""
+    if not query:
+        print_slow("  Use what?")
+        return
+    match = next((i for i in player.inventory if query in i.lower()), None)
+    if not match:
+        print_slow(f"  You don't have '{query}'.")
+        return
+    name_lower = match.lower()
+
+    # Food
+    for food, hp in FOOD_ITEMS.items():
+        if food in name_lower:
+            player.inventory.remove(match)
+            player.heal(hp)
+            print_slow(f"  You eat the {match}. (+{hp} HP → {player.health}/{player.max_health})")
+            return
+
+    # Mushroom
+    if "mushroom" in name_lower:
+        player.inventory.remove(match)
+        effect = MUSHROOM_EFFECTS.get(name_lower)
+        if effect is None:
+            effect = random.choice(_GENERIC_MUSHROOM_POOL)
+        player.pending_combat_effects.append(effect)
+        print_slow(f"  You eat the {match}.")
+        print_slow("  Something stirs in your blood — the effect will manifest when next you fight.")
+        return
+
+    print_slow(f"  You can't use the {match} here.")

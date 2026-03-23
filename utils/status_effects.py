@@ -12,9 +12,16 @@ STATUS_ICONS = {
     "volatile":   "💥",
     "echo":       "🔊",
     "disorient":  "🌪",
-    "bleed":      "🩸",   # fixed damage/turn, does NOT decay — must be cleansed
-    "regen":      "🌿",   # restore stacks HP at start of turn, decays 1/turn
-    "burden":     "⚖️",   # +1 AP cost per stack to every command (player); -2 dmg/stack (enemy)
+    "bleed":      "🩸",   # fixed dmg/turn, no decay
+    "regen":      "🌿",   # heal stacks/turn, decays 1/turn
+    "burden":     "⚖️",   # +1 AP/stack per command (player); -2 dmg/stack (enemy)
+    # ── New powers / debuffs ──────────────────────────────────────────────────
+    "fortify":    "🏰",   # POWER: gain stacks Block at start of every turn (permanent)
+    "cursed":     "🛑",   # DEBUFF: healing reduced by stacks×10% (enemy-applied)
+    "speed":      "💨",   # BUFF: next stacks commands cost 1 fewer AP, consumed per action
+    "slow":       "🕸",   # DEBUFF: next stacks commands cost 1 more AP, consumed per action
+    "soul_tax":   "⚰",   # DEBUFF: at turn end take (stacks × AP_spent) damage
+    "counter":    "🔄",   # BUFF: when hit deal stacks damage back; persists, no decay
 }
 
 
@@ -36,6 +43,12 @@ def apply_weak(entity, stacks=1):       _apply(entity, "weak", stacks)
 def apply_bleed(entity, stacks=1):      _apply(entity, "bleed", stacks)
 def apply_regen(entity, stacks=1):      _apply(entity, "regen", stacks)
 def apply_burden(entity, stacks=1):     _apply(entity, "burden", stacks)
+def apply_fortify(entity, stacks=1):    _apply(entity, "fortify", stacks)
+def apply_cursed(entity, stacks=1):     _apply(entity, "cursed", stacks)
+def apply_speed(entity, stacks=1):      _apply(entity, "speed", stacks)
+def apply_slow(entity, stacks=1):       _apply(entity, "slow", stacks)
+def apply_soul_tax(entity, stacks=1):   _apply(entity, "soul_tax", stacks)
+def apply_counter(entity, stacks=1):    _apply(entity, "counter", stacks)
 
 def apply_volatile(entity):
     """Max 1 stack. Caps at 1 regardless of how many times applied."""
@@ -73,6 +86,12 @@ def get_echo(entity):      return entity.statuses.get("echo", None)
 def get_burden(entity):    return entity.statuses.get("burden", 0)
 def get_regen(entity):     return entity.statuses.get("regen", 0)
 def get_bleed(entity):     return entity.statuses.get("bleed", 0)
+def get_fortify(entity):   return entity.statuses.get("fortify", 0)
+def get_cursed(entity):    return entity.statuses.get("cursed", 0)
+def get_speed(entity):     return entity.statuses.get("speed", 0)
+def get_slow(entity):      return entity.statuses.get("slow", 0)
+def get_soul_tax(entity):  return entity.statuses.get("soul_tax", 0)
+def get_counter(entity):   return entity.statuses.get("counter", 0)
 
 
 # ── Consume (read + remove for one-shot effects) ──────────────────────────────
@@ -182,10 +201,38 @@ def tick_statuses(entity):
             del entity.statuses["burden"]
             print_slow(f"  ⚖️ {name} is no longer burdened.")
 
+    # Speed — countdown only (consumed per-action in combat.py AP block)
+    # Nothing to tick here; stacks are consumed by the AP cost logic.
+
+    # Slow — countdown only (consumed per-action in combat.py AP block)
+    # Nothing to tick here; stacks are consumed by the AP cost logic.
+
+    # Soul Tax — damage is applied by combat.py at turn end using ap_spent_this_turn.
+    # No tick here; the status itself is permanent until combat ends.
+
+    # Fortify — POWER (permanent); Block is applied at turn start in _regen_ap, not here.
+
+    # Cursed — DEBUFF (permanent); reduces healing, no tick needed.
+
 def clear_block(entity):
     """Clear block at the start of a new turn (StS: block doesn't carry over)."""
     if entity.statuses.pop("block", None):
         pass  # silently clear — no message needed
+
+
+def modified_heal(entity, base_amount):
+    """
+    Apply Cursed reduction to a heal amount.
+    Returns the final healed value (already clamped ≥ 0).
+    """
+    cursed = entity.statuses.get("cursed", 0)
+    if cursed:
+        reduction = min(cursed * 0.10, 1.0)   # cap at 100% reduction
+        final = int(base_amount * (1.0 - reduction))
+        if final < base_amount:
+            print_slow(f"  🛑 Cursed — heal reduced by {int(reduction*100)}%! ({base_amount} → {final})")
+        return max(0, final)
+    return base_amount
 
 
 # ── Display ───────────────────────────────────────────────────────────────────

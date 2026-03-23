@@ -1,17 +1,23 @@
 # utils/helpers.py
+"""
+Low-level print utilities and shared ANSI colour constants.
+
+ANSI colours are defined here — import BLUE / RESET from here, never inline them.
+"""
 import sys
 import time
 from utils.constants import MAX_AP, MAX_MANA
 
+# ── ANSI colours ──────────────────────────────────────────────────────────────
 BLUE  = "\033[94m"
 RESET = "\033[0m"
 
-# Rarity colours (used when displaying relic names)
+# Rarity colours — used when displaying relic names
 RARITY_COLORS = {
-    "Common":    "\033[37m",    # grey/white
-    "Uncommon":  "\033[32m",    # green
-    "Rare":      "\033[34m",    # blue
-    "Legendary": "\033[33m",    # gold/yellow
+    "Common":    "\033[37m",   # grey/white
+    "Uncommon":  "\033[32m",   # green
+    "Rare":      "\033[34m",   # blue
+    "Legendary": "\033[33m",   # gold/yellow
 }
 
 
