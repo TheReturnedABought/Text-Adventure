@@ -2,14 +2,14 @@
 """
 Low-level print utilities and shared ANSI colour constants.
 
-When the UI is active (utils/ui.py), print_slow() routes through
-ui.log() so output appears in the LOG panel instead of raw stdout.
+When the window is active (utils/window.py), print_slow() routes
+through window.log() so output appears in the LOG panel.
+print_status() becomes a no-op (the STATUS panel handles it).
 """
 import sys
 import time
 from utils.constants import MAX_AP, MAX_MANA
 
-# ── ANSI colours ──────────────────────────────────────────────────────────────
 BLUE  = "\033[94m"
 RESET = "\033[0m"
 
@@ -21,24 +21,27 @@ RARITY_COLORS = {
 }
 
 
-def print_slow(text, delay=0.02):
-    """
-    Print text slowly.  When the terminal UI is enabled the text is
-    routed to the UI log panel (no character-by-character delay needed
-    there; the panel updates in real-time).  Otherwise the classic
-    character-streaming output is used.
-    """
+def _win():
+    """Return the window singleton if active, else None."""
     try:
-        from utils.ui import ui
-        if ui._active:
-            ui.log(str(text))
-            # Brief pause proportional to text length to preserve the
-            # pacing feel even without per-character streaming.
-            time.sleep(min(0.06, delay * max(len(str(text)), 1) * 0.08))
-            return
+        from utils.window import window
+        return window if window._active else None
     except Exception:
-        pass
-    # ── Classic mode (UI not active) ──────────────────────────────────────────
+        return None
+
+
+def print_slow(text, delay: float = 0.02):
+    """
+    Print text with pacing.
+    Window active  → instant, routed to LOG panel.
+    Window inactive → classic character stream to stdout.
+    """
+    w = _win()
+    if w:
+        w.log(str(text))
+        # Light sleep so rapid messages don't blur into one wall of text
+        time.sleep(min(0.04, delay * max(len(str(text)), 1) * 0.05))
+        return
     for char in str(text):
         sys.stdout.write(char)
         sys.stdout.flush()
@@ -47,6 +50,13 @@ def print_slow(text, delay=0.02):
 
 
 def print_status(player):
+    """
+    Print HP/AP/MP inline.
+    Suppressed when the window is active — STATUS panel handles it.
+    """
+    if _win():
+        return   # STATUS panel renders this
+
     hp_bar   = make_bar(player.health,     player.max_health, length=20, fill="█", empty="░")
     ap_bar   = make_bar(player.current_ap, MAX_AP,            length=12, fill="◆", empty="◇")
     mana_bar = make_bar(player.mana,       MAX_MANA,          length=5,  fill="●", empty="○")
@@ -62,6 +72,5 @@ def make_bar(current, maximum, length=20, fill="█", empty="░"):
 
 
 def rarity_colored(relic):
-    """Return the relic's name wrapped in its rarity colour."""
     color = RARITY_COLORS.get(getattr(relic, "rarity", "Common"), "")
     return f"{color}{relic.name}{RESET}"

@@ -1,10 +1,21 @@
 # main.py
+"""
+Entry point and top-level game orchestration.
+
+Architecture
+────────────
+Game          — owns a GameState; wires sub-systems; no logic of its own.
+CommandRouter — dispatch table; constructed once with a Game reference.
+GameState     — pure data  (player, room, mode, running).
+GameWindow    — separate Tkinter window; started from run_game().
+"""
+
 import os
 import sys
 
 BASE_PATH = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 
-# ── Command history (readline where available) ────────────────────────────────
+# ── Command history ───────────────────────────────────────────────────────────
 def _enable_history():
     try:
         import readline
@@ -18,11 +29,13 @@ def _enable_history():
 _enable_history()
 
 # ── Project imports ───────────────────────────────────────────────────────────
-from entities.player     import Player
-from entities.class_data import CLASS_RELIC_NAMES
-from rooms.map_data      import setup_rooms
-from game_engine.engine  import GameEngine
-from game_engine.parser  import parse_command
+from entities.player        import Player
+from entities.class_data    import CLASS_RELIC_NAMES
+from rooms.map_data         import setup_rooms
+from rooms.room             import Room
+from game_engine.engine     import GameEngine
+from game_engine.parser     import parse_command
+from game_engine.game_state import GameState, GameMode
 from game_engine.save_manager import SaveManager
 from utils.helpers  import print_slow, print_status, RARITY_COLORS, RESET
 from utils.display  import (
@@ -36,27 +49,35 @@ from utils.actions  import (
 )
 from utils.combat   import combat_loop
 from utils.relics   import get_relic
-from utils.ui       import ui
+from utils.window   import window
 
 
-# ── CommandRouter ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  CommandRouter
+# ══════════════════════════════════════════════════════════════════════════════
 
 class CommandRouter:
-    def __init__(self, game):
-        self.game = game
+    """
+    Pure dispatch table.
+    Handler signature: fn(game, args) -> Room | None
+    Movement handlers return the new Room; others return None.
+    """
+
+    def __init__(self, game: "Game"):
+        self._game  = game
         self._table: dict = {}
         self._build()
 
     def _build(self):
-        g = self.game
+        g = self._game
         t = self._table
 
-        for alias in ["move", "go", "walk"]:
+        for alias in ("move", "go", "walk"):
             t[alias] = lambda g, a: g._travel(a)
-        for d in ["north", "south", "east", "west", "up", "down"]:
+        for d in ("north", "south", "east", "west", "up", "down"):
             t[d] = lambda g, a, _d=d: g._travel([_d])
 
-        for alias in ["take", "pick", "grab", "get"]:
+        for alias in ("take", "pick", "grab", "get"):
             t[alias] = lambda g, a: do_take_relic(g.player, g.room, a)
         t["drop"]                     = lambda g, a: do_drop(g.player, g.room, a)
         t["inventory"] = t["inv"]     = lambda g, a: do_inventory(g.player)
@@ -72,100 +93,141 @@ class CommandRouter:
         t["help"]     = t["?"]        = lambda g, a: (
             show_help(g.player), input("  Press Enter to continue...")
         )
-
         t["map"]                      = lambda g, a: show_map(g.start_room, g.room)
         t["journal"]                  = lambda g, a: show_journal(g.player)
 
-    def dispatch(self, command, args):
+    def dispatch(self, command: str, args: list):
         handler = self._table.get(command)
         if handler:
-            result = handler(self.game, args)
-            from rooms.room import Room
+            result = handler(self._game, args)
             if isinstance(result, Room):
-                self.game.room = result
+                self._game.state.room = result
         else:
             print_slow(
                 f"  Unknown command '{command}'. Type 'help' for a list of commands."
             )
 
 
-# ── Game ──────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+#  Game
+# ══════════════════════════════════════════════════════════════════════════════
 
 class Game:
+    """
+    Top-level orchestrator.  No game logic lives here — it delegates
+    to CombatSession, CommandRouter, and the room sub-system.
+    """
+
     def __init__(self):
-        self.player     = None
-        self.room       = None
-        self.start_room = None
-        self.router     = None
-        self.engine     = None
-        self.save_mgr   = SaveManager()
+        self.state:    "GameState | None" = None
+        self.router:   "CommandRouter | None" = None
+        self.save_mgr: SaveManager = SaveManager()
+
+    # ── Properties (delegate to state) ───────────────────────────────────────
+
+    @property
+    def player(self) -> Player:
+        return self.state.player
+
+    @property
+    def room(self) -> Room:
+        return self.state.room
+
+    @room.setter
+    def room(self, value: Room):
+        """Setter keeps save_manager.apply() working without changes."""
+        self.state.room = value
+
+    @property
+    def start_room(self) -> Room:
+        return self.state.start_room
+
+    # ── Entry — called from game thread via window.run_game ───────────────────
+
+    def main(self):
+        """Full game lifecycle: setup then run."""
+        self.setup()
+        if self.state and self.state.player:
+            self.run()
 
     # ── Setup ─────────────────────────────────────────────────────────────────
 
     def setup(self):
-        show_intro()   # shown BEFORE UI is active (classic text mode)
+        show_intro()
 
-        saved_state = self.save_mgr.load()
-        if saved_state:
+        saved = self.save_mgr.load()
+        if saved:
             print_slow("\n  A save was found:")
-            print_slow(f"    {self.save_mgr.summary(saved_state)}")
+            print_slow(f"    {self.save_mgr.summary(saved)}")
             print()
             while True:
                 choice = input("  [1] Continue  [2] New game: ").strip()
                 if choice == "1":
-                    self._load_game(saved_state)
+                    self._load_game(saved)
                     return
                 if choice == "2":
                     self.save_mgr.delete()
                     break
                 print("  Please enter 1 or 2.")
 
+        self._new_game()
+
+    def _new_game(self):
         name       = input("\nEnter your character's name: ").strip() or "Hero"
         char_class = show_class_selection()
+        player     = Player(name, char_class)
 
-        self.player = Player(name, char_class)
-        self._give_starter_relic(char_class)
+        self._give_starter_relic(player, char_class)
 
-        self.start_room = setup_rooms()
-        self.room       = self.start_room
-        self.engine     = GameEngine(self.player)
-        self.engine.start_room = self.start_room
-        self.router     = CommandRouter(self)
+        start_room = setup_rooms()
+        self.state  = GameState(
+            player     = player,
+            room       = start_room,
+            start_room = start_room,
+        )
+        self.router = CommandRouter(self)
+        self._wire_engine()
 
-        self.room.visit_count += 1
-        self.room.on_enter(self.player)
+        self.state.room.visit_count += 1
+        self.state.room.on_enter(player)
 
-        print(f"\nWelcome, {self.player.name} the {char_class.capitalize()}!"
-              f" Your adventure begins...\n")
+        print(f"\nWelcome, {player.name} the {char_class.capitalize()}!"
+              " Your adventure begins...\n")
 
-        # ── Activate the UI now that player + room exist ───────────────────
-        ui.set_explore(self.player, self.room)
-        ui.enable()
+        # Populate the window panels now that we have data
+        window.set_explore(player, self.state.room)
 
-    def _load_game(self, state):
-        name       = state["player"]["name"]
-        char_class = state["player"]["char_class"]
+    def _load_game(self, saved: dict):
+        name       = saved["player"]["name"]
+        char_class = saved["player"]["char_class"]
+        player     = Player(name, char_class)
+        start_room = setup_rooms()
 
-        self.player     = Player(name, char_class)
-        self.start_room = setup_rooms()
-        self.engine     = GameEngine(self.player)
-        self.engine.start_room = self.start_room
-        self.router     = CommandRouter(self)
+        self.state  = GameState(
+            player     = player,
+            room       = start_room,
+            start_room = start_room,
+        )
+        self.router = CommandRouter(self)
+        self._wire_engine()
+        self.save_mgr.apply(self, saved)
 
-        self.save_mgr.apply(self, state)
-
-        print_slow(f"\n  Welcome back, {self.player.name}!")
+        print_slow(f"\n  Welcome back, {player.name}!")
         print_slow(f"  You are in: {self.room.name}\n")
 
-        # ── Activate UI after state is restored ───────────────────────────
-        ui.set_explore(self.player, self.room)
-        ui.enable()
+        window.set_explore(player, self.room)
 
-    def _give_starter_relic(self, char_class):
+    def _wire_engine(self):
+        engine            = GameEngine(self.player)
+        engine.start_room = self.start_room
+        self._engine      = engine
+
+    @staticmethod
+    def _give_starter_relic(player: Player, char_class: str):
         starter = get_relic(CLASS_RELIC_NAMES[char_class])
         if not starter:
             return
-        self.player.add_relic(starter)
+        player.add_relic(starter)
         color  = RARITY_COLORS.get(getattr(starter, "rarity", "Common"), "")
         rarity = getattr(starter, "rarity", "Common")
         print()
@@ -176,51 +238,64 @@ class Game:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def run(self):
-        while True:
-            if self.player.health <= 0:
-                print_slow("\n  You have died. Game over.")
-                self.save_mgr.delete()
+        while self.state.running:
+            if not self.player.is_alive():
+                self._handle_death()
                 break
 
             if self.room.has_enemies:
-                # Switch to combat mode in the UI
-                ui.set_combat(self.player, self.room, self.room.alive_enemies)
-                input("\n  Press Enter to continue...")
-                show_combat_enter([e.name for e in self.room.alive_enemies])
-                combat_loop(self.player, self.room)
-                if self.player.health <= 0:
+                self._run_combat()
+                if not self.player.is_alive():
                     continue
-                # Back to explore mode after combat
-                ui.set_explore(self.player, self.room)
-                self._autosave()
+            else:
+                self._run_explore_turn()
 
-            # Refresh explore state before showing the room
-            ui.set_explore(self.player, self.room)
-            show_room(self.room)
-            print_status(self.player)
+    def _run_combat(self):
+        self.state.start_combat()
+        window.set_combat(self.player, self.room, self.room.alive_enemies)
 
-            raw = input("\n> ").lower().strip()
-            if not raw:
-                continue
-            if raw in ["quit", "exit"]:
-                print_slow("\n  Thanks for playing! Goodbye!")
-                self._autosave()
-                break
+        input("\n  Press Enter to continue...")
+        show_combat_enter([e.name for e in self.room.alive_enemies])
+        combat_loop(self.player, self.room)
 
-            command, args = parse_command(raw)
-            self.router.dispatch(command, args)
+        self.state.end_combat()
+        window.set_explore(self.player, self.room)
+        self._autosave()
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
+    def _run_explore_turn(self):
+        window.set_explore(self.player, self.room)
+        show_room(self.room)
 
-    def _travel(self, args):
+        raw = input("\n> ").lower().strip()
+        if not raw:
+            return
+        if raw in ("quit", "exit"):
+            print_slow("\n  Thanks for playing! Goodbye!")
+            self._autosave()
+            self.state.running = False
+            return
+
+        command, args = parse_command(raw)
+        self.router.dispatch(command, args)
+
+    def _handle_death(self):
+        print_slow("\n  You have died. Game over.")
+        self.save_mgr.delete()
+        self.state.game_over()
+
+    # ── Travel ────────────────────────────────────────────────────────────────
+
+    def _travel(self, args: list) -> Room:
         new_room = do_move(self.player, self.room, args)
         if new_room is not self.room:
             new_room.visit_count += 1
             new_room.on_enter(self.player)
-            # Update UI with the new room immediately
-            ui.set_explore(self.player, new_room)
+            self.state.enter_room(new_room)
+            window.set_explore(self.player, new_room)
             self._autosave()
         return new_room
+
+    # ── Autosave ──────────────────────────────────────────────────────────────
 
     def _autosave(self):
         try:
@@ -233,9 +308,9 @@ class Game:
 
 def main():
     game = Game()
-    game.setup()
-    if game.player:
-        game.run()
+    # window.run_game: builds the Tk window, patches print/input,
+    # starts game.main() in a daemon thread, then enters mainloop.
+    window.run_game(game.main)
 
 
 if __name__ == "__main__":

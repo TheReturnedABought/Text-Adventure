@@ -2,19 +2,19 @@
 """
 CombatSession — one full fight between the player and a room's enemies.
 
-Changes vs original
-───────────────────
-  • Enemy telegraphing: planned moves shown in HUD each player turn.
-    Each enemy's _planned_move is set before the player acts and consumed
-    when the enemy actually acts.
-  • All magic numbers (BASE_BLOCK, BASE_ATTACK_MIN/MAX, etc.) come from
-    utils.constants — nothing is hardcoded here.
-  • Base command AP costs read from constants.BASE_COMMANDS.
-  • class command AP costs read from class_data.cmd_ap_cost().
-  • Journal hooks: record defeated enemies, moves seen, and drops.
+Window integration
+──────────────────
+When the Tkinter window (utils/window.py) is active:
+  _show_status()   -> refreshes window panels, prints nothing inline.
+  _show_mid_turn() -> skips print_status() (STATUS panel handles it).
+  _player_turn()   -> calls window.set_combat() after planning moves so
+                      the ART panel reflects current telegraphed moves.
+
+All attack results, status messages, and drops still go to the LOG panel
+via print_slow() -> window.log().
 """
 import random
-from utils.helpers  import print_slow, print_status, BLUE, RESET
+from utils.helpers import print_slow, print_status, BLUE, RESET
 from utils.constants import (
     MAX_AP, BASE_BLOCK,
     BASE_ATTACK_MIN, BASE_ATTACK_MAX,
@@ -27,7 +27,7 @@ from utils.status_effects import (
     apply_block, consume_block,
     consume_weak, consume_vulnerable, consume_rage,
     format_statuses, get_block,
-    get_regen,
+    get_regen, get_burden,
     get_fortify, get_speed, get_slow, get_soul_tax, get_counter,
     apply_speed, apply_slow,
 )
@@ -40,10 +40,19 @@ from entities.class_data import cmd_ap_cost, get_command_def
 from game_engine.parser import parse_command
 
 
-# Signals returned by _take_one_action
+# Turn signals
 _END  = "end"
 _NEXT = "next"
 _DONE = "done"
+
+
+def _win():
+    """Return the window singleton if active, else None."""
+    try:
+        from utils.window import window
+        return window if window._active else None
+    except Exception:
+        return None
 
 
 class CombatSession:
@@ -77,9 +86,9 @@ class CombatSession:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _combat_start(self):
-        p = self.player
-        p.reset_combat_state()
+        p     = self.player
         alive = self._alive()
+        p.reset_combat_state()
 
         if p.pending_combat_effects:
             print_slow("\n  The effect from before surges through you!")
@@ -111,7 +120,9 @@ class CombatSession:
         return [e for e in self.enemies if e.health > 0]
 
     def _apply_pending_effect(self, effect, value):
-        from utils.status_effects import apply_rage, apply_regen, apply_block as _blk, apply_poison
+        from utils.status_effects import (
+            apply_rage, apply_regen, apply_block as _blk, apply_poison,
+        )
         p = self.player
         dispatch = {
             "rage":   lambda: apply_rage(p, value),
@@ -129,9 +140,15 @@ class CombatSession:
     def _player_turn(self):
         p = self.player
         self._regen_ap()
-        self._plan_enemy_moves()                      # telegraphing
+        self._plan_enemy_moves()
         alive = self._alive()
         p.trigger_relics(TRIGGER_TURN_START, alive[0] if alive else None, {})
+
+        # Refresh ART panel so telegraphed moves are visible before the prompt
+        w = _win()
+        if w:
+            w.set_combat(p, self.room, self.enemies)
+
         self._show_status()
 
         ctx = self._build_ctx()
@@ -147,15 +164,13 @@ class CombatSession:
                 return bool(self._alive())
 
     def _plan_enemy_moves(self):
-        """Simulate each alive enemy's full turn sequence for HUD display."""
         for enemy in self._alive():
             enemy.plan_turn()
 
     def _regen_ap(self):
         p = self.player
 
-        # Burden reduces the AP ceiling; evade gives a flat bonus on top.
-        burden       = p.statuses.get("burden", 0)
+        burden        = p.statuses.get("burden", 0)
         effective_max = max(1, MAX_AP - burden)
         p.current_ap  = effective_max
         if burden:
@@ -194,7 +209,7 @@ class CombatSession:
         }
 
     def _resolve_turn_end(self, ctx):
-        p = self.player
+        p     = self.player
         alive = self._alive()
 
         echo_cmd = get_echo(p)
@@ -226,7 +241,7 @@ class CombatSession:
         tick_statuses(p)
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  Per-action helpers
+    #  Per-action
     # ══════════════════════════════════════════════════════════════════════════
 
     def _take_one_action(self, ctx):
@@ -261,7 +276,10 @@ class CombatSession:
         if soul_tax and ap_cost > 0:
             dmg = soul_tax * ap_cost
             p.take_damage(dmg)
-            print_slow(f"  ⚰ Soul Tax — {soul_tax} × {ap_cost} AP = {dmg} damage! (HP: {p.health})")
+            print_slow(
+                f"  ⚰ Soul Tax — {soul_tax} × {ap_cost} AP = {dmg} damage! "
+                f"(HP: {p.health})"
+            )
 
         success, action_target = self._dispatch(command, raw, ctx)
         if not success:
@@ -275,7 +293,9 @@ class CombatSession:
 
         if p.current_ap == 0:
             print_slow("  No AP remaining.")
-            confirm = input("  Press Enter to end your turn, or type a command: ").lower().strip()
+            confirm = input(
+                "  Press Enter to end your turn, or type a command: "
+            ).lower().strip()
             if not confirm or confirm in ["yes", "y", "end", "done", "pass"]:
                 print_slow("  You end your turn.")
                 return _END
@@ -313,23 +333,7 @@ class CombatSession:
         return False
 
     @staticmethod
-    def _claim_letters(command: str, free_letters: set,
-                       discounted: list, cap: int | None = None) -> int:
-        """
-        Scan `command` position-by-position. For each character that is in
-        `free_letters` and has not yet been claimed (tracked by the shared
-        `discounted` boolean list), mark it claimed and add 1 to the total.
-        Stops early when `cap` is reached.
-
-        Using positions rather than character types means two relics that both
-        want the same letter (e.g. Bear Skin and Sleightmaker's Glove via Wool
-        both wanting 'a') never double-count: the second relic finds every 'a'
-        position already True and claims 0.
-
-        This is the single shared function for all letter-based AP discounts.
-        To add a new discount relic, call this with its own free_letters/cap
-        AFTER existing relics, passing the same discounted list.
-        """
+    def _claim_letters(command, free_letters, discounted, cap=None):
         claimed = 0
         for i, ch in enumerate(command):
             if cap is not None and claimed >= cap:
@@ -340,40 +344,16 @@ class CombatSession:
         return claimed
 
     def _calc_ap_cost(self, command, ctx):
-        """
-        Return the final AP cost for `command`, applying all modifiers.
-
-        Letter-discount relics
-        ──────────────────────
-        All share a single `discounted` position list so each character in
-        the command can reduce AP at most once, regardless of how many relics
-        want it.
-
-        Sleightmaker's Glove : claims every 'l' (no cap).
-        Silent Lamb Wool     : paired with the Glove, expands its free-letter
-                               set to include all vowels.
-        Bear Skin            : claims 'a' characters not already claimed,
-                               hard cap of 2.
-
-        To add a new letter-discount relic: call _claim_letters() with your
-        letter set and cap, passing the same `discounted` list.
-
-        Floor: cost can never drop below 1 — enforced once at the return.
-        """
         p = self.player
 
-        # ── Base cost ─────────────────────────────────────────────────────────
         if command in BASE_COMMANDS:
             cost = BASE_COMMANDS[command]["ap_cost"]
         else:
             cmd_def = get_command_def(p.char_class, command)
             cost    = cmd_ap_cost(cmd_def) if cmd_def else len(command)
 
-        # Shared position tracker — True = this character already discounted.
-        # Every _claim_letters call receives this same list.
         discounted = [False] * len(command)
 
-        # ── Sleightmaker's Glove ──────────────────────────────────────────────
         if p.has_relic("Sleightmaker's Glove"):
             free_letters = {"l"}
             if p.has_relic("Silent Lamb Wool"):
@@ -384,16 +364,12 @@ class CombatSession:
                 cost -= discount
                 print_slow(f"  🧤 Sleightmaker's Glove — {discount}× free letter(s)!")
 
-        # ── Bear Skin ─────────────────────────────────────────────────────────
-        # Passes the same discounted list — any 'a' the Glove already claimed
-        # (via Silent Lamb Wool) will be skipped, so no double-counting.
         if p.has_relic("Bear Skin"):
             discount = self._claim_letters(command, {"a"}, discounted, cap=2)
             if discount:
                 cost -= discount
                 print_slow(f"  🐻 Bear Skin — {discount}× 'a' discount!")
 
-        # ── Speed ─────────────────────────────────────────────────────────────
         if get_speed(p) > 0:
             cost -= 1
             p.statuses["speed"] -= 1
@@ -403,7 +379,6 @@ class CombatSession:
             else:
                 print_slow(f"  💨 Speed — −1 AP! ({p.statuses.get('speed', 0)} left)")
 
-        # ── Slow ──────────────────────────────────────────────────────────────
         if get_slow(p) > 0:
             cost += 1
             p.statuses["slow"] -= 1
@@ -413,12 +388,10 @@ class CombatSession:
             else:
                 print_slow(f"  🕸 Slow — +1 AP! ({p.statuses.get('slow', 0)} left)")
 
-        # Burden is applied as a max-AP ceiling in _regen_ap, not per-command.
-
-        # Single floor — no modifier can push cost to 0 or below.
         return max(1, cost)
+
     def _dispatch(self, command, raw, ctx):
-        p = self.player
+        p             = self.player
         action_target = None
 
         if command == "attack":
@@ -450,11 +423,17 @@ class CombatSession:
             p.statuses["echo"] = command
 
         alive = self._alive()
-        if action_target is not None:
-            relic_target = action_target if action_target.health > 0 else None
-        else:
-            relic_target = alive[0] if alive else None
-        p.trigger_relics(TRIGGER_ON_ACTION, relic_target, {"raw": raw, "command": command})
+        relic_target = (
+            (action_target if action_target and action_target.health > 0 else None)
+            or (alive[0] if alive else None)
+        )
+        p.trigger_relics(TRIGGER_ON_ACTION, relic_target,
+                         {"raw": raw, "command": command})
+
+        # Refresh ART panel after the action (HP/AP changes)
+        w = _win()
+        if w:
+            w.set_combat(p, self.room, self.enemies)
 
         alive = self._alive()
         if not alive:
@@ -464,7 +443,7 @@ class CombatSession:
         return _NEXT
 
     # ══════════════════════════════════════════════════════════════════════════
-    #  Base actions — costs and ranges come from constants
+    #  Base actions
     # ══════════════════════════════════════════════════════════════════════════
 
     def _do_attack(self, enemy, raw, ctx):
@@ -485,7 +464,6 @@ class CombatSession:
         if ctx.get("rally_bonus", 0):
             dmg += ctx.pop("rally_bonus")
             print_slow("  ⚔ Rally bonus applied!")
-
         if ctx.get("mark_bonus", 0):
             dmg += ctx.pop("mark_bonus")
             print_slow("  🗡 Mark bonus applied!")
@@ -507,14 +485,18 @@ class CombatSession:
         actual, absorbed = consume_block(enemy, dmg)
         enemy.take_damage(actual)
         if absorbed:
-            print_slow(f"  > You strike {enemy.name} for {dmg} — 🛡 blocked {absorbed}, dealing {actual}! (HP: {max(enemy.health,0)})")
+            print_slow(
+                f"  > You strike {enemy.name} for {dmg} — "
+                f"🛡 blocked {absorbed}, dealing {actual}! "
+                f"(HP: {max(enemy.health, 0)})"
+            )
         else:
-            print_slow(f"  > You strike {enemy.name} for {dmg}! (HP: {max(enemy.health,0)})")
+            print_slow(f"  > You strike {enemy.name} for {dmg}! (HP: {max(enemy.health, 0)})")
 
         if enemy.health <= 0:
             print_slow(f"  > You defeated {enemy.name}! +{enemy.xp_reward} XP")
             p.gain_xp(enemy.xp_reward)
-            p.journal.record_enemy(enemy)      # bestiary
+            p.journal.record_enemy(enemy)
             self._handle_drops(enemy)
             input("  Press Enter to continue...")
 
@@ -533,41 +515,52 @@ class CombatSession:
         base = random.randint(BASE_HEAL_MIN, BASE_HEAL_MAX)
         amt  = modified_heal(p, base)
         p.heal(amt)
-        print_slow(f"  > Healed {amt} HP! (HP: {p.health})  {BLUE}[-{HEAL_MP_COST} MP → {p.mana}/{p.max_mana}]{RESET}")
+        print_slow(
+            f"  > Healed {amt} HP! (HP: {p.health})  "
+            f"{BLUE}[-{HEAL_MP_COST} MP → {p.mana}/{p.max_mana}]{RESET}"
+        )
         alive = self._alive()
-        first = alive[0] if alive else None
-        p.trigger_relics(TRIGGER_ON_HEAL, first, {"raw": raw})
+        p.trigger_relics(TRIGGER_ON_HEAL, alive[0] if alive else None, {"raw": raw})
         return True
 
     def _do_block(self, raw, ctx):
         p = self.player
         apply_block(p, BASE_BLOCK)
         alive = self._alive()
-        first = alive[0] if alive else None
-        p.trigger_relics(TRIGGER_ON_BLOCK, first, {"raw": raw})
+        p.trigger_relics(TRIGGER_ON_BLOCK, alive[0] if alive else None, {"raw": raw})
 
     # ══════════════════════════════════════════════════════════════════════════
     #  Display helpers
     # ══════════════════════════════════════════════════════════════════════════
 
     def _show_status(self):
-        """Full combat HUD — shows enemy HP, statuses, and planned next move."""
+        """
+        Classic inline HUD.
+        When the window is active, the ART + STATUS panels already show
+        this information, so we skip the inline print entirely.
+        """
+        if _win():
+            return   # panels handle it
+
         p     = self.player
         alive = self._alive()
         print(f"\n  {'─' * 50}")
         for i, e in enumerate(alive, 1):
-            s   = format_statuses(e)
-            tag = f"  [{s}]" if s else ""
-            # Telegraphing — show planned move
+            s      = format_statuses(e)
+            tag    = f"  [{s}]" if s else ""
             if is_stunned(e):
                 intent = "  → ⚡ STUNNED"
             elif e._planned_moves:
-                seq    = " → ".join(f"{m.name}({m.ap_cost})" for m in e._planned_moves)
+                seq    = " → ".join(
+                    f"{m.name}({m.ap_cost})" for m in e._planned_moves
+                )
                 intent = f"  → {seq}"
             else:
                 intent = "  → ???"
-            ap_str = f"  AP:{e.current_ap}/{e.max_ap}"
-            print_slow(f"  [{i}] {e.name:<14} HP: {e.health}/{e.max_health}{ap_str}{tag}{intent}")
+            print_slow(
+                f"  [{i}] {e.name:<14} HP: {e.health}/{e.max_health}"
+                f"  AP:{e.current_ap}/{e.max_ap}{tag}{intent}"
+            )
         print(f"  {'─' * 50}")
         print_status(p)
         ps = format_statuses(p)
@@ -575,28 +568,31 @@ class CombatSession:
             print(f"  Status: [{ps}]")
         if p.relics:
             print(f"  Relics: {', '.join(r.name for r in p.relics)}")
-        # Command list — costs from constants / CommandDef
-        from entities.class_data import get_command_def, cmd_ap_cost as _ap
-        known = sorted(p.known_commands)
+        known    = sorted(p.known_commands)
         base_str = (
             f"attack({BASE_COMMANDS['attack']['ap_cost']}) | "
-            f"{BLUE}heal({BASE_COMMANDS['heal']['ap_cost']}AP+{HEAL_MP_COST}MP){RESET} | "
+            f"{BLUE}heal({BASE_COMMANDS['heal']['ap_cost']}AP"
+            f"+{HEAL_MP_COST}MP){RESET} | "
             f"block({BASE_COMMANDS['block']['ap_cost']})"
         )
         extra = ""
         if known:
             parts = []
             for c in known:
-                d = get_command_def(p.char_class, c)
-                ap = _ap(d) if d else len(c)
+                d  = get_command_def(p.char_class, c)
+                ap = cmd_ap_cost(d) if d else len(c)
                 parts.append(f"{c}({ap})")
             extra = " | " + " | ".join(parts)
         print(f"\n  {base_str}{extra} | end")
 
     def _show_mid_turn(self, alive):
+        """
+        Brief status update between actions.
+        print_status() is suppressed by helpers.py when window is active.
+        """
         p  = self.player
         ps = format_statuses(p)
-        print_status(p)
+        print_status(p)   # no-op when window active
         for e in alive:
             s = format_statuses(e)
             if s:
@@ -639,10 +635,14 @@ class CombatSession:
                 tick_statuses(enemy)
             if self.player.health <= 0:
                 return
+
+        # Refresh ART after all enemies acted
+        w = _win()
+        if w:
+            w.set_combat(self.player, self.room, self.enemies)
         print()
 
     def _enemy_turn_start_buffs(self, enemy):
-        """Apply Fortify and Regen at the start of each enemy's turn."""
         fortify = enemy.statuses.get("fortify", 0)
         if fortify:
             apply_block(enemy, fortify)
@@ -653,41 +653,29 @@ class CombatSession:
             print_slow(f"  🌿 {enemy.name} regenerates {regen} HP! (HP: {enemy.health})")
 
     def _enemy_act(self, enemy):
-        """
-        Execute the enemy's turn using their AP budget.
-
-        AP budget
-        ─────────
-        effective_ap = max(1, max_ap − burden_stacks)
-        Speed stacks add flat AP on top (consumed here, not per-action).
-
-        The enemy spends AP on moves greedily. No move may be used twice in
-        the same turn. When AP is exhausted (or only too-costly/too-cooled
-        moves remain) the loop ends. If no moves fired at all, fall back to
-        a basic attack.
-
-        Turn-level interrupts (evade, disorient, slow) can short-circuit
-        the entire turn before the AP loop runs.
-        """
         p = self.player
         enemy.tick_move_cooldowns()
 
-        # ── Compute effective AP ───────────────────────────────────────────
         burden       = enemy.statuses.get("burden", 0)
         effective_ap = max(1, enemy.max_ap - burden)
         if burden:
-            print_slow(f"  ⚖️ {enemy.name} is Burdened — {effective_ap}/{enemy.max_ap} AP!")
+            print_slow(
+                f"  ⚖️ {enemy.name} is Burdened — "
+                f"{effective_ap}/{enemy.max_ap} AP!"
+            )
 
-        # Speed: add flat bonus AP, consume all stacks now
         speed = enemy.statuses.get("speed", 0)
         if speed:
             effective_ap += speed
             del enemy.statuses["speed"]
-            print_slow(f"  💨 {enemy.name} is Hastened — +{speed} AP! ({effective_ap} total)")
+            print_slow(
+                f"  💨 {enemy.name} is Hastened — "
+                f"+{speed} AP! ({effective_ap} total)"
+            )
 
         enemy.current_ap = effective_ap
 
-        # ── Turn-level interrupts ──────────────────────────────────────────
+        # Turn-level interrupts
         if p.combat_flags.get("evade"):
             p.combat_flags.pop("evade")
             p.combat_flags["evade_bonus_ap"] = 2
@@ -697,12 +685,14 @@ class CombatSession:
             return
 
         if is_disoriented(enemy) and random.random() < 0.5:
-            print_slow(f"  🌪 {enemy.name} is disoriented — stumbles and wastes their turn!")
+            print_slow(
+                f"  🌪 {enemy.name} is disoriented — "
+                "stumbles and wastes their turn!"
+            )
             enemy._planned_moves = []
             enemy._planned_move  = None
             return
 
-        # Slow: 50% chance to skip entire turn (consume 1 stack)
         if get_slow(enemy) > 0:
             enemy.statuses["slow"] -= 1
             if enemy.statuses["slow"] <= 0:
@@ -714,15 +704,16 @@ class CombatSession:
                 return
             print_slow(f"  🕸 {enemy.name} is Slowed — pushes through!")
 
-        # ── AP-spending loop ───────────────────────────────────────────────
-        used_ids: set = set()   # prevent same move twice in one turn
+        used_ids: set = set()
         actions_taken = 0
 
         while enemy.current_ap > 0 and enemy.health > 0 and p.health > 0:
             chosen = enemy.choose_affordable_move(enemy.current_ap, used_ids)
             if not chosen:
                 break
-            print_slow(f"  [ {enemy.name} uses {chosen.name} ({chosen.ap_cost} AP) ]")
+            print_slow(
+                f"  [ {enemy.name} uses {chosen.name} ({chosen.ap_cost} AP) ]"
+            )
             enemy.current_ap -= chosen.ap_cost
             used_ids.add(id(chosen))
             p.journal.record_move(enemy.name, chosen.name)
@@ -730,75 +721,22 @@ class CombatSession:
             self._handle_shield_allies(enemy)
             actions_taken += 1
 
-        # Fallback if no moves fired (no moves defined, or all on cooldown)
         if actions_taken == 0 and enemy.health > 0 and p.health > 0:
             self._enemy_basic_attack(enemy)
 
         p.trigger_relics(TRIGGER_ON_HIT, enemy, {"damage": 0})
 
     def _enemy_basic_attack(self, enemy):
-        """
-        Fallback — fires when the enemy has no moves or all are unaffordable.
-        Does not consume AP (it's already been accounted for by the empty loop).
-        """
         p       = self.player
         raw_dmg = random.randint(4, enemy.attack_power)
 
         soul_tax = enemy.statuses.get("soul_tax", 0)
         if soul_tax:
             raw_dmg += soul_tax
-            print_slow(f"  ⚰ {enemy.name}'s cursed power surges — +{soul_tax} bonus damage!")
-
-        raw_dmg = int(raw_dmg * consume_rage(enemy))
-        if is_volatile(enemy):
-            raw_dmg = int(raw_dmg * 1.5)
-            print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
-            if random.random() < 0.5:
-                enemy.take_damage(5)
-                print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP: {enemy.health})")
-        raw_dmg = int(raw_dmg * consume_weak(enemy))
-
-        actual, absorbed = consume_block(p, raw_dmg)
-        if p.combat_flags.get("unbreakable"):
-            from utils.constants import UNBREAKABLE_CAP
-            actual = min(actual, UNBREAKABLE_CAP)
-
-        if absorbed:
-            print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual}!")
-        else:
-            print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
-
-        if absorbed > 0 and actual > 0:
-            counter = get_counter(p)
-            if counter:
-                enemy.take_damage(counter)
-                print_slow(f"  🔄 Counter — block shattered! {enemy.name} takes {counter} damage! (HP: {max(enemy.health,0)})")
-                del p.statuses["counter"]
-
-        if actual > 0:
-            p.take_damage(actual)
-            print_slow(f"  Your HP: {p.health}")
-
-        sentinel = p.combat_flags.get("sentinel_thorns", 0)
-        if sentinel and actual > 0:
-            enemy.take_damage(sentinel)
-            print_slow(f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! (HP: {max(enemy.health,0)})")
-
-    def _handle_shield_allies(self, enemy):
-        shield_amt = enemy.statuses.pop("_shield_allies", 0)
-        if shield_amt:
-            for ally in [e for e in self.enemies if e.health > 0]:
-                apply_block(ally, shield_amt)
-                print_slow(f"  🛡 {ally.name} gains {shield_amt} Block from the barrier!")
-
-    def _enemy_basic_attack(self, enemy):
-        p       = self.player
-        raw_dmg = random.randint(4, enemy.attack_power)
-
-        soul_tax = enemy.statuses.get("soul_tax", 0)
-        if soul_tax:
-            raw_dmg += soul_tax
-            print_slow(f"  ⚰ {enemy.name}'s cursed power surges — +{soul_tax} bonus damage!")
+            print_slow(
+                f"  ⚰ {enemy.name}'s cursed power surges — "
+                f"+{soul_tax} bonus damage!"
+            )
 
         burden = get_burden(enemy)
         if burden > 0:
@@ -811,7 +749,10 @@ class CombatSession:
             print_slow(f"  💥 {enemy.name} is Volatile — +50% damage!")
             if random.random() < 0.5:
                 enemy.take_damage(5)
-                print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP: {enemy.health})")
+                print_slow(
+                    f"  💥 Volatile backfires on {enemy.name}! "
+                    f"(HP: {enemy.health})"
+                )
         raw_dmg = int(raw_dmg * consume_weak(enemy))
 
         actual, absorbed = consume_block(p, raw_dmg)
@@ -820,7 +761,10 @@ class CombatSession:
             actual = min(actual, UNBREAKABLE_CAP)
 
         if absorbed:
-            print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 blocked {absorbed}, taking {actual}!")
+            print_slow(
+                f"  {enemy.name} hits for {raw_dmg} — "
+                f"🛡 blocked {absorbed}, taking {actual}!"
+            )
         else:
             print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
 
@@ -828,7 +772,11 @@ class CombatSession:
             counter = get_counter(p)
             if counter:
                 enemy.take_damage(counter)
-                print_slow(f"  🔄 Counter — block shattered! {enemy.name} takes {counter} damage! (HP: {max(enemy.health,0)})")
+                print_slow(
+                    f"  🔄 Counter — block shattered! "
+                    f"{enemy.name} takes {counter} damage! "
+                    f"(HP: {max(enemy.health, 0)})"
+                )
                 del p.statuses["counter"]
 
         if actual > 0:
@@ -838,13 +786,25 @@ class CombatSession:
         sentinel = p.combat_flags.get("sentinel_thorns", 0)
         if sentinel and actual > 0:
             enemy.take_damage(sentinel)
-            print_slow(f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! (HP: {max(enemy.health,0)})")
+            print_slow(
+                f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! "
+                f"(HP: {max(enemy.health, 0)})"
+            )
+
+    def _handle_shield_allies(self, enemy):
+        shield_amt = enemy.statuses.pop("_shield_allies", 0)
+        if shield_amt:
+            for ally in [e for e in self.enemies if e.health > 0]:
+                apply_block(ally, shield_amt)
+                print_slow(
+                    f"  🛡 {ally.name} gains {shield_amt} Block from the barrier!"
+                )
 
     def _handle_drops(self, enemy):
         p = self.player
         for item in enemy.roll_drops():
             p.inventory.append(item)
-            p.journal.record_drop(enemy.name, item)   # bestiary
+            p.journal.record_drop(enemy.name, item)
             print_slow(f"  ↳ {enemy.name} dropped: {item}")
 
         if enemy.guaranteed_relic:
