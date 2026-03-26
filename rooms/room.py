@@ -12,6 +12,7 @@ Attributes added vs original:
                     SaveManager to track which locks have been opened.
 """
 import random
+from utils.helpers import print_slow
 
 # ── Sensory hint tables ───────────────────────────────────────────────────────
 
@@ -53,38 +54,210 @@ def _enemy_hint(enemy_name):
 
 
 # ── EnvObject ─────────────────────────────────────────────────────────────────
+from utils.helpers import print_slow
+
 
 class EnvObject:
     """
-    An interactive environmental hazard or prop.
-
-    use_fn  : callable(player, room, enemies) -> str
-              Called when the player types 'use <name>' in combat (or exploration).
-              Should return a message string describing what happened.
-    uses    : int — number of times this object can be activated (1 = one-shot).
-    combat_only : bool — if True, only activatable mid-combat.
+    Anything the player can examine or interact with.
     """
-    def __init__(self, name: str, use_fn, uses: int = 1,
-                 combat_only: bool = False):
-        self.name        = name
-        self.use_fn      = use_fn
-        self.uses        = uses
+
+    def __init__(self, name: str, examine_fn=None, use_fn=None, uses: int = 1, combat_only: bool = False,
+                 visible: bool = True):
+        self.name = name
+        self.examine_fn = examine_fn
+        self.use_fn = use_fn
+        self.uses = uses
         self.combat_only = combat_only
-        self._uses_left  = uses
+        self.visible = visible
+        self._uses_left = uses
+        # New option system attributes
+        self._options = None
+        self._resolved_options = set()
+        self._examine_text = None
+
+    def add_options(self, description: str, options: list):
+        """
+        Add multiple interactive options after examine.
+        options: list of dicts like [
+            {'label': 'Light it', 'requires': None, 'consumes': False, 'action': some_callable},
+            {'label': 'Move on', 'requires': None, 'action': some_callable}
+        ]
+        """
+        self._examine_text = description
+        self._options = options
 
     def can_use(self, in_combat: bool = False) -> bool:
+        if not self.visible:
+            return False
         if self._uses_left <= 0:
             return False
         if self.combat_only and not in_combat:
             return False
         return True
 
-    def activate(self, player, room, enemies=None) -> str:
-        if self._uses_left <= 0:
+    def examine(self, player, room):
+        if not self.visible:
+            print_slow("  You see nothing unusual.")
+            return
+
+        print_slow(f"  You examine the {self.name}.")
+
+        # Print examine text if defined by add_options, else use examine_fn or default
+        if self._examine_text:
+            for line in self._examine_text.splitlines():
+                print_slow(f"  {line}")
+        elif self.examine_fn:
+            self.examine_fn(player, room)
+        else:
+            print_slow(f"  Nothing stands out.")
+
+        # Show options if defined
+        if self._options:
+            print_slow(f"\n  What do you do?")
+            available = []
+            locked = []
+            option_map = {}
+            idx = 1
+
+            for opt in self._options:
+                if idx in self._resolved_options:
+                    continue
+                if opt.get('requires'):
+                    has_req = any(opt['requires'].lower() in i.lower() for i in player.inventory)
+                    if has_req:
+                        available.append((idx, opt))
+                    else:
+                        locked.append((idx, opt))
+                else:
+                    available.append((idx, opt))
+                option_map[str(idx)] = opt
+                idx += 1
+
+            # Show available options
+            for i, opt in available:
+                print_slow(f"  [{i}] {opt['label']}")
+            # Show locked options
+            for i, opt in locked:
+                req = f"(requires: {opt['requires']})"
+                print_slow(f"  [–] {opt['label']} {req}")
+
+            if available:
+                print_slow("  [0] Leave")
+                print()
+
+                while True:
+                    raw = input("  Choose: ").strip()
+                    if raw == "0" or raw.lower() in ("", "leave", "back"):
+                        print_slow("  You step back.")
+                        return
+                    if raw in option_map:
+                        chosen = option_map[raw]
+                        self._resolved_options.add(int(raw))
+
+                        # Handle item consumption
+                        if chosen.get('requires') and chosen.get('consumes', False):
+                            match = next((i for i in player.inventory if chosen['requires'].lower() in i.lower()), None)
+                            if match:
+                                player.inventory.remove(match)
+                                print_slow(f"  (You use your {match}.)")
+
+                        # Execute action
+                        chosen['action'](player, room)
+                        return
+                    print("  Invalid choice.")
+            else:
+                print_slow("  You lack what is needed to act here.")
+
+    def activate(self, player, room, enemies=None):
+        if not self.can_use():
             return f"  The {self.name} has already been used."
         self._uses_left -= 1
-        return self.use_fn(player, room, enemies or [])
+        if self.use_fn:
+            return self.use_fn(player, room, enemies or [])
+        return f"  Nothing happens when you use the {self.name}."
 
+class RevealObject(EnvObject):
+    """
+    Special EnvObject that reveals a hidden connection when activated.
+    """
+
+    def __init__(self, name: str, direction: str, target_room: 'Room', reveal_fn=None, use_fn=None, **kwargs):
+        super().__init__(name=name, use_fn=use_fn or self._default_reveal, **kwargs)
+        self.direction = direction
+        self.target_room = target_room
+        self.reveal_fn = reveal_fn
+        self._revealed = False
+
+    def _default_reveal(self, player, room):
+        if self._revealed:
+            return f"  The passage to the {self.direction} is already revealed."
+
+        room.reveal_connection(self.direction, self.target_room)
+        self._revealed = True
+
+        if self.reveal_fn:
+            self.reveal_fn(player, room)
+        else:
+            print_slow(f"  A hidden passage opens to the {self.direction}, revealing a new room!")
+
+        # Hide this object after revealing
+        self.visible = False
+
+class Puzzle(EnvObject):
+    """
+    An examinable object that can be solved.
+    """
+    def __init__(self, name: str, description: str, clues=None, solution: str = "", reward_fn=None, mini: bool = False, visible: bool = True):
+        super().__init__(name=name, visible=visible)
+        self.description = description
+        self.clues = list(clues or [])
+        self.solution = solution.lower().strip()
+        self.reward_fn = reward_fn
+        self.mini = mini
+        self.solved = False
+
+    def examine(self, player, room):
+        print()
+        if self.mini:
+            print_slow(f"  ── {self.name} ──")
+        else:
+            print_slow(f"  ╔══  {self.name}  ══╗")
+
+        for line in self.description.splitlines():
+            print_slow(f"  {line}")
+
+        if self.solved:
+            print_slow("\n  [SOLVED ✦]")
+            return
+
+        for clue in self.clues:
+            print_slow(f"  {clue}")
+
+        print_slow("\n  Type 'solve <your answer>' to attempt a solution.")
+
+    def attempt(self, player, room, raw_answer: str):
+        if self.solved:
+            print_slow("  You have already solved this puzzle.")
+            return True
+
+        if raw_answer.lower().strip() == self.solution:
+            self.solved = True
+
+            if self.mini:
+                print_slow("\n  ✓ Click — solved!")
+            else:
+                print_slow("\n  ✦ The mechanism clicks — correct!")
+
+            if self.reward_fn:
+                self.reward_fn(player, room)
+            else:
+                print_slow("  (The puzzle is solved, but the reward awaits.)")
+
+            return True
+
+        print_slow("  ✗ Nothing happens. Try again.")
+        return False
 
 # ── Room ──────────────────────────────────────────────────────────────────────
 
@@ -99,13 +272,38 @@ class Room:
         self.locked_connections = {}     # {direction: required_item_name}
         self.puzzle             = None
         self.ambient            = list(ambient or [])
-        self.event              = None   # Event | Merchant | None
-        self.env_objects        = []     # list[EnvObject]
+        self.env_objects        = []
 
         # Tracking
         self.visit_count          = 0    # incremented by Game on entry
         self._originally_locked   = set()  # filled by lock(); used by SaveManager
-    # ── Connection helpers ────────────────────────────────────────────────────
+
+    def add_env_object(self, obj: EnvObject):
+        self.env_objects.append(obj)
+
+    def get_env_object(self, name: str):
+        name = name.lower()
+        return next(
+            (o for o in self.env_objects if o.visible and name in o.name.lower()),
+            None
+        )
+
+    def add_relic(self, relic):
+        self.relics.append(relic)
+
+    def add_item(self, item):
+        self.items.append(item)
+
+    def describe(self):
+        print(f"\n{self.name}")
+        print("-" * len(self.name))
+        print(self.description)
+
+        visible_objects = [o.name for o in self.env_objects if o.visible]
+        if visible_objects:
+            print("\nYou notice:")
+            for obj in visible_objects:
+                print(f"  - {obj}")
 
     def add_connection(self, direction, room):
         """One-way connection."""
@@ -130,16 +328,13 @@ class Room:
         self.locked_connections[direction] = required_item
         self._originally_locked.add(direction)
 
-    def reveal_connection(self, direction: str, other_room: "Room"):
-        """
-        Reveal a hidden connection to another room.
-        If the connection already exists, does nothing.
-        Otherwise, links this room to the new room.
-        """
+    def remove_connection(self, direction: str):
         if direction in self.connections:
-            return False  # Already revealed
-        self.link(direction, other_room)
-        return True
+            del self.connections[direction]
+
+    def reveal_connection(self, direction: str, room):
+        if direction not in self.connections:
+            self.connections[direction] = room
 
     # ── Env objects ───────────────────────────────────────────────────────────
 

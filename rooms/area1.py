@@ -9,23 +9,19 @@ Area 1 — Castle Complex Entrance
           └──────────── [Ratssss!]
                              |
   [Puzzle Alcove] ─── [The Crossroads 🔥] ─── [Servants' Quarters]
-                             |                  (holds crypt key)
-                       [Locked Hall]
+         |                   |                  (holds crypt key)
+  [Hidden Armory]      [Locked Hall]
                        (🔒►Area 3)(🔒►Area 4)
                        (stranger on 2nd visit)
                              |
                          [Servants' Kitchen] ─── [The Pantry]
 """
-from rooms.room     import Room
-from rooms.puzzle   import Puzzle
-from rooms.events import Event, opt, narrate, queue_effect, chain, mp_restore
+from rooms.room     import Room, EnvObject, Puzzle, RevealObject
 from rooms.enemy_data import (
     make_castle_guard,
-    make_goblin_guard, make_goblin_archer,
     make_giant_rat, make_rat_swarm,
     make_skeleton_servant,
-    make_crypt_warden, make_wraith, make_bone_archer,
-    make_goblin,
+    make_crypt_warden, make_wraith, make_bone_archer
 )
 from utils.relics   import get_relic
 from utils.helpers  import print_slow
@@ -237,79 +233,121 @@ def setup_area1():
     locked_hall.lock("east", "silver key")
     locked_hall.lock("west", "brass key")
     pantry.link("east", servants_kitchen)
-    # ── Events ────────────────────────────────────────────────────────────────
 
-    crossroads.event = Event(
-        name="The Cold Brazier",
-        description=(
-            "A rusted brazier stands cold at the centre of the room.\n"
-            "Old ash fills the bowl. Scratched into its base:\n"
-            "  'Fire remembers courage.'"
-        ),
-        options=[
-            opt(
-                "Light the brazier  (costs torch — grants Rage x1 at combat start)",
-                chain(
-                    narrate("You touch your torch to the old kindling.\n"
-                            "  The brazier roars to life. Warmth floods the chamber."),
-                    queue_effect("rage", 1),
-                ),
-                requires="torch", consumes=False,
-            ),
-            opt(
-                "Move on you can see clearly as is.",
-                chain(
-                    narrate("You move on leaving the brazier to sit in silence"),
-                    mp_restore(1),
-                )
-            )
-        ],
-    )
+    # ── Env Objects ───────────────────────────────────────────────────────────────
 
-    puzzle_alcove.event = Event(
-        name="Inspect the Alcove",
-        description=(
-            "Aside from the chest, the alcove walls are lined with faint carvings.\n"
-            "One corner seems slightly out of place, almost hidden."
-        ),
+    # Cold Brazier — crossroads (NEW MULTI-OPTION SYSTEM)
+    def light_brazier(player, room, enemies=None):
+        print_slow(
+            "You touch your torch to the old kindling.\\n"
+            "  The brazier roars to life. Warmth floods the chamber."
+        )
+        # Add your queue_effect('rage', 1)(player, room) here if needed
+
+    def move_on_brazier(player, room, enemies=None):
+        print_slow("You move on, leaving the brazier to sit in silence.")
+        # Add your mprestore(1)(player, room) here if needed
+
+    brazier = EnvObject(name="cold brazier")
+    brazier.add_options(
+        description="A rusted brazier stands cold at the centre of the room.\\n"
+                    "Old ash fills the bowl. Scratched into its base:\\n"
+                    "  'Fire remembers courage.'",
         options=[
-            opt(
-                "Investigate the suspicious corner",
-                chain(
-                    narrate(
-                        "You push aside a loose stone in the corner. "
-                        "The wall grinds aside to reveal a narrow passage to the south!"
-                    ),
-                    lambda player, room: reveal_hidden_armory(player, room)
-                )
-            ),
-            opt(
-                "Ignore the corner and focus on the chest",
-                narrate("You leave the corner alone and approach the chest.")
-            )
+            {
+                'label': 'Light brazier',
+                'requires': 'torch',
+                'consumes': True,
+                'action': light_brazier
+            },
+            {
+                'label': 'Move on',
+                'requires': None,
+                'action': move_on_brazier
+            }
         ]
     )
+    crossroads.add_env_object(brazier)
+
+    def standard_chest():
+        entrance.add_item("gold coin")
+        print_slow("A gold coin is in the chest")
+
+    standard_chest = EnvObject(
+        name="alcove walls",
+        use_fn=standard_chest,
+        examine_fn=lambda p, r, e=None: print_slow("A normal Chest."),
+        uses=1
+    )
+    entrance.add_env_object(standard_chest)
+
+    # Puzzle Alcove — alcove walls (examine to reveal hidden corner)
+    def examine_alcove_for_hidden_corner(player, room):
+        print_slow(
+            "Aside from the chest, the alcove walls are lined with faint carvings.\\n"
+            "One corner seems slightly out of place, almost hidden."
+        )
+        # Reveal the hidden corner RevealObject
+        if "suspicious corner" not in [o.name for o in room.env_objects]:
+            hidden_corner = RevealObject(
+                name="suspicious corner",
+                direction="south",
+                target_room=hidden_armory,
+                use_fn=reveal_hidden_armory,
+                reveal_fn=lambda p, r: print_slow(
+                    "You push aside a loose stone in the corner. "
+                    "The wall grinds aside to reveal a narrow passage to the south!"
+                )
+            )
+            room.add_env_object(hidden_corner)
+
+    alcove_exam = EnvObject(
+        name="alcove walls",
+        examine_fn=examine_alcove_for_hidden_corner,
+        use_fn=lambda p, r, e=None: print_slow("There's nothing to interact with here yet."),
+        uses=1
+    )
+    puzzle_alcove.add_env_object(alcove_exam)
 
     def reveal_hidden_armory(player, room):
-        """Unlocks the hidden armory south of Puzzle Alcove using the generic Room method."""
         puzzle_alcove.reveal_connection("south", hidden_armory)
-        print_slow(f"\n  A hidden passage opens south, revealing a new room!")
-    # ── Puzzles ───────────────────────────────────────────────────────────────
+        print_slow("  A hidden passage opens south, revealing a new room!")
 
-    from rooms.events import give_relic as _give_relic
+    # Chest puzzle (unchanged - Puzzle class works fine)
+    def _alcove_puzzle_reward(player, room):
+        puzzle_alcove.add_item("healing draught")
+        print_slow("  The chest clicks open. Inside: a healing draught and a glint of something else.")
 
-    # Main puzzle (Puzzle Room)
+    chest = Puzzle(
+        name="Sealed Chest",
+        description=(
+            "The chest's lock bears three rotating rings of symbols.\\n"
+            "Beneath them, a worn inscription reads:\\n"
+            "\\n"
+            "  'I have cities, but no houses live there.\\n"
+            "   I have mountains, but no trees grow there.\\n"
+            "   I have water, but no fish swim there.\\n"
+            "   What am I?'"
+        ),
+        clues=["  Hint: You might carry one in your pocket."],
+        solution="map",
+        reward_fn=_alcove_puzzle_reward,
+        mini=True
+    )
+    puzzle_alcove.add_env_object(chest)
+
+    # Puzzle Room — main puzzle (unchanged)
     def _main_puzzle_reward(player, room):
-        msg = _give_relic("etched stone")(player, room)
-        print_slow(f"\n  ✦ The dais yields a relic: {msg}")
+        puzzle_room.add_relic("etched stone")
+        print_slow("\\n  ✦ The dais yields a relic!")
 
-    puzzle_room.puzzle = Puzzle(
+    main_dais = Puzzle(
         name="The Dais Inscription",
         description=(
-            "The dais bears an inscription carved in archaic script:\n"
-            "\n"
-            "  'Speak me and I vanish.\n"
-            "   Hold me and I am forever kept.\n"
+            "The dais bears an inscription carved in archaic script:\\n"
+            "\\n"
+            "  'Speak me and I vanish.\\n"
+            "   Hold me and I am forever kept.\\n"
             "   What am I?'"
         ),
         clues=[
@@ -317,32 +355,9 @@ def setup_area1():
             "        but loses the moment they share it.",
         ],
         solution="silence",
-        reward_fn=_main_puzzle_reward,
+        reward_fn=_main_puzzle_reward
     )
-
-    # Mini puzzle (Puzzle Alcove — sealed chest)
-    def _alcove_puzzle_reward(player, room):
-        player.inventory.append("healing draught")
-        print_slow("  The chest clicks open. Inside: a healing draught and a glint of something else.")
-        # msg = _give_relic("frog statue")(player, room)
-        # print_slow(f"  ✦ {msg}")
-
-    puzzle_alcove.puzzle = Puzzle(
-        name="The Sealed Chest",
-        description=(
-            "The chest's lock bears three rotating rings of symbols.\n"
-            "Beneath them, a worn inscription reads:\n"
-            "\n"
-            "  'I have cities, but no houses live there.\n"
-            "   I have mountains, but no trees grow there.\n"
-            "   I have water, but no fish swim there.\n"
-            "   What am I?'"
-        ),
-        clues=["  Hint: You might carry one in your pocket."],
-        solution="map",
-        reward_fn=_alcove_puzzle_reward,
-        mini=True,
-    )
+    puzzle_room.add_env_object(main_dais)
 
     # ── on_enter hooks ────────────────────────────────────────────────────────
 
@@ -388,20 +403,14 @@ def setup_area1():
         print_art(CROSSROADS, indent=8)
         print_slow("\n  Four passages meet at a cold brazier.")
         print_slow("  Something is scratched into the base of the bowl.")
-        print_slow("  You lean in — 'Fire remembers courage.'")
-        print_slow("  Type 'interact' to examine the brazier.")
         input("\n  Press Enter to continue...")
     crossroads.on_enter = _crossroads_enter
-    crossroads.env_objects.append(crossroads.event)
 
     def _alcove_enter(player):
         print_slow("\n  The alcove is quiet. A sealed iron chest dominates the far wall.")
         print_slow("  Type 'examine chest' to inspect the lock, 'solve <answer>' to try it.")
         input("\n  Press Enter to continue...")
     puzzle_alcove.on_enter = _alcove_enter
-
-    puzzle_alcove.env_objects.append(puzzle_alcove.puzzle)  # chest puzzle
-    puzzle_alcove.env_objects.append(puzzle_alcove.event)  # room event / hidden corner
 
     def _servants_enter(player):
         from utils.ascii_art import SERVANTS_QUARTERS, print_art
@@ -445,9 +454,10 @@ def setup_area1():
 
     def pantry_enter(player):
         from utils.ascii_art import PANTRY, print_art
-        print_art(pantry, indent=6)
+        print_art(PANTRY, indent=6)
         print_slow('  "You enter a walk in pantry."')
         print_slow('  "There is food here."')
+    pantry.on_enter = pantry_enter
 
     def _crypt_enter(player):
         from utils.ascii_art import CRYPT_GATE, print_art

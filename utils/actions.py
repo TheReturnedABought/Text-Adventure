@@ -84,48 +84,44 @@ def do_listen(player, room):
 
 
 def do_examine(player, room, args):
-    target = "room" if not args else args[0]
-
-    # Use existing get_env_object for partial matching
+    target = "room" if not args else " ".join(args).lower()
     obj = room.get_env_object(target)
 
-    # If nothing found, check room-level events (like "room")
     if obj is None:
-        if target == "room" and hasattr(room, "event") and room.event and room.event.trigger == "examine":
-            room.event.show(player, room)
-            return
-        # fallback
         print_slow("  There is nothing of particular note to examine here.")
         return
 
-    # Puzzle object
-    if isinstance(obj, Puzzle):
-        obj.examine()
-        return
-
-    # EnvObject (hazard or interactable)
-    if isinstance(obj, EnvObject):
-        print_slow(f"  You inspect the {obj.name}. Nothing unusual happens.")
-        return
-
-    # Fallback
-    print_slow(f"  You examine the {target}. Nothing remarkable happens.")
+    obj.examine(player, room)
 
 def do_solve(player, room, args):
-    if not room.puzzle:
+    if not args:
+        print_slow("  Usage: solve <puzzle answer>")
+        return
+
+    answer = " ".join(args).lower()
+    puzzle = next((o for o in room.env_objects if isinstance(o, Puzzle) and o.visible), None)
+    if not puzzle:
         print_slow("  There is no puzzle here to solve.")
         return
-    if not args:
-        print_slow("  Usage: solve <your answer>")
-        return
-    room.puzzle.attempt(player, room, " ".join(args))
+
+    puzzle.attempt(player, room, answer)
 
 
-def do_interact(player, room):
-    if room.event:
-        room.event.show(player, room)
-    else:
+def do_interact(player, room, args):
+    target = "room" if not args else " ".join(args).lower()
+    obj = room.get_env_object(target)
+
+    if obj is None:
         print_slow("  There is nothing to interact with here.")
+        return
+
+    if hasattr(obj, "activate"):
+        result = obj.activate(player, room, room.alive_enemies)
+        if isinstance(result, str) and result:
+            print_slow(result)
+        return
+
+    print_slow("  That cannot be interacted with.")
 
 
 def do_map(game):
