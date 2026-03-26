@@ -73,14 +73,6 @@ def do_inventory(player):
         print_slow("  Your inventory is empty.")
 
 
-def do_rest(player, room):
-    if get_alive_enemies(room):
-        print_slow("  You can't rest while enemies are nearby!")
-    else:
-        player.current_ap = MAX_AP
-        print_slow(f"  You rest and restore your AP to {MAX_AP}.")
-
-
 def do_listen(player, room):
     hints = room.listen_hints()
     if not hints:
@@ -92,11 +84,32 @@ def do_listen(player, room):
 
 
 def do_examine(player, room, args):
-    if room.puzzle:
-        room.puzzle.examine()
-    else:
-        print_slow("  There is nothing of particular note to examine here.")
+    target = "room" if not args else args[0]
 
+    # Use existing get_env_object for partial matching
+    obj = room.get_env_object(target)
+
+    # If nothing found, check room-level events (like "room")
+    if obj is None:
+        if target == "room" and hasattr(room, "event") and room.event and room.event.trigger == "examine":
+            room.event.show(player, room)
+            return
+        # fallback
+        print_slow("  There is nothing of particular note to examine here.")
+        return
+
+    # Puzzle object
+    if isinstance(obj, Puzzle):
+        obj.examine()
+        return
+
+    # EnvObject (hazard or interactable)
+    if isinstance(obj, EnvObject):
+        print_slow(f"  You inspect the {obj.name}. Nothing unusual happens.")
+        return
+
+    # Fallback
+    print_slow(f"  You examine the {target}. Nothing remarkable happens.")
 
 def do_solve(player, room, args):
     if not room.puzzle:

@@ -231,98 +231,108 @@ def show_relics(player):
 # ── Map renderer ──────────────────────────────────────────────────────────────
 
 def show_map(start_room, current_room):
-    """
-    Render an ASCII map of all explored rooms (visit_count > 0).
-    Unexplored neighbours of visited rooms show as [???].
-    The current room is marked with *.
-    """
-    from collections import deque
+    def show_map(start_room, current_room):
+        """
+        Render a non-Euclidean ASCII map of all explored rooms (visit_count > 0).
+        Unexplored neighbours of visited rooms show as [???].
+        The current room is marked with *.
+        """
+        from collections import deque, defaultdict
 
-    DIRS = {"north": (0, -1), "south": (0, 1), "east": (1, 0), "west": (-1, 0)}
+        # BFS to discover all rooms
+        q = deque([start_room])
+        seen = {id(start_room)}
+        room_graph = defaultdict(list)  # room -> list of (direction, neighbor)
+        room_names = {}  # room -> display name
 
-    # BFS to assign grid coordinates
-    grid = {}   # (col, row) -> Room
-    inv  = {}   # id(room)   -> (col, row)
-    q    = deque([(start_room, 0, 0)])
-    seen = {id(start_room)}
+        while q:
+            room = q.popleft()
+            room_names[room] = room.name if room.visit_count > 0 else "???"
+            for direction, neighbor in room.connections.items():
+                room_graph[room].append((direction, neighbor))
+                if id(neighbor) not in seen:
+                    seen.add(id(neighbor))
+                    q.append(neighbor)
 
-    while q:
-        room, col, row = q.popleft()
-        if (col, row) not in grid:
-            grid[(col, row)] = room
-            inv[id(room)]    = (col, row)
-        for d, nb in room.connections.items():
-            if id(nb) not in seen and d in DIRS:
-                dc, dr   = DIRS[d]
-                nc, nr   = col + dc, row + dr
-                if (nc, nr) not in grid:
-                    seen.add(id(nb))
-                    q.append((nb, nc, nr))
+        # Dynamic position assignment for ASCII layout
+        positions = {}  # room -> (x, y)
+        spacing_x, spacing_y = 12, 4
+        visited = set()
 
-    if not grid:
-        print_slow("  No map data available.")
-        return
+        def assign_pos(room, x, y):
+            if room in visited:
+                return
+            visited.add(room)
+            positions[room] = (x, y)
+            children = room_graph.get(room, [])
+            for i, (_, nbr) in enumerate(children):
+                dx = (i - len(children) // 2) * spacing_x
+                dy = spacing_y
+                assign_pos(nbr, x + dx, y + dy)
 
-    cols_all  = [c for c, r in grid]
-    rows_all  = [r for c, r in grid]
-    min_c, max_c = min(cols_all), max(cols_all)
-    min_r, max_r = min(rows_all), max(rows_all)
+        assign_pos(start_room, 0, 0)
 
-    CELL = 18   # character width per grid column
+        if not positions:
+            print("  No map data available.")
+            return
 
-    def cell_str(room):
-        if room is current_room:
-            label = f"*{room.name[:CELL - 4]}*"
-        elif room.visit_count == 0:
-            label = "???"
-        else:
-            label = room.name[:CELL - 2]
-        return f"[{label}]".center(CELL)
+        # Prepare canvas
+        xs = [x for x, y in positions.values()]
+        ys = [y for x, y in positions.values()]
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        width = max_x - min_x + spacing_x
+        height = max_y - min_y + spacing_y
+        canvas = [[" "] * width for _ in range(height)]
 
-    def has_conn(a, b):
-        """True if a direct connection exists between two rooms."""
-        return b in a.connections.values() or a in b.connections.values()
+        def put_text(cx, cy, text):
+            x0, y0 = cx - min_x, cy - min_y
+            for i, ch in enumerate(text):
+                if 0 <= x0 + i < width and 0 <= y0 < height:
+                    canvas[y0][x0 + i] = ch
 
-    def is_locked_between(a, b):
-        for d, nb in a.connections.items():
-            if nb is b and d in a.locked_connections:
-                return True
-        return False
+        # Draw rooms
+        for room, (x, y) in positions.items():
+            name = room_names[room]
+            marker = "*" if room == current_room else ""
+            text = f"[{name}{marker}]"
+            put_text(x, y, text)
 
-    print(f"\n  MAP {'─' * 48}")
-
-    for r in range(min_r, max_r + 1):
-        # ── Room row ──────────────────────────────────────────────────────────
-        line = "  "
-        for c in range(min_c, max_c + 1):
-            room = grid.get((c, r))
-            line += cell_str(room) if room else " " * CELL
-            # Horizontal connector to east neighbour
-            if c < max_c:
-                er = grid.get((c + 1, r))
-                if room and er and has_conn(room, er):
-                    line += "🔒" if is_locked_between(room, er) else "──"
+        # Draw connections
+        for room, links in room_graph.items():
+            x0, y0 = positions[room]
+            for _, nbr in links:
+                if nbr not in positions:
+                    continue
+                x1, y1 = positions[nbr]
+                # vertical line
+                if x0 == x1:
+                    for y_line in range(min(y0, y1) + 1, max(y0, y1)):
+                        put_text(x0, y_line, "|")
+                # horizontal line
+                elif y0 == y1:
+                    for x_line in range(min(x0, x1) + 1, max(x0, x1)):
+                        put_text(x_line, y0, "-")
+                # diagonal approximation
                 else:
-                    line += "  "
-        print(line)
+                    dx = 1 if x1 > x0 else -1
+                    dy = 1 if y1 > y0 else -1
+                    xi, yi = x0, y0
+                    while xi != x1 or yi != y1:
+                        if xi != x1:
+                            xi += dx
+                        if yi != y1:
+                            yi += dy
+                        put_text(xi, yi, "/")
 
-        # ── Vertical connector row ────────────────────────────────────────────
-        if r < max_r:
-            vline = "  "
-            for c in range(min_c, max_c + 1):
-                room = grid.get((c, r))
-                sr   = grid.get((c, r + 1))
-                if room and sr and has_conn(room, sr):
-                    vline += (" " * (CELL // 2 - 1)) + " | " + (" " * (CELL - CELL // 2 - 2))
-                else:
-                    vline += " " * CELL
-                if c < max_c:
-                    vline += "  "
-            print(vline)
+        # Print canvas
+        for row in canvas:
+            print("".join(row))
 
-    print(f"  {'─' * 52}")
-    print("  [*Name] = you are here  |  [???] = unexplored")
-    print()
+        # Legend / separator
+        print(f"  {'─' * 52}")
+        print("  [*Name] = you are here  |  [???] = unexplored")
+        print()
 
 
 # ── Journal display delegated to Journal.show() ──────────────────────────────

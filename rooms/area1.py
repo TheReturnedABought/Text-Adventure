@@ -14,12 +14,11 @@ Area 1 — Castle Complex Entrance
                        (🔒►Area 3)(🔒►Area 4)
                        (stranger on 2nd visit)
                              |
-                         [Kitchen]
-                       (Goblin ×2)
+                         [Servants' Kitchen] ─── [The Pantry]
 """
 from rooms.room     import Room
 from rooms.puzzle   import Puzzle
-from rooms.events   import Event, opt, narrate, queue_effect, chain
+from rooms.events import Event, opt, narrate, queue_effect, chain, mp_restore
 from rooms.enemy_data import (
     make_castle_guard,
     make_goblin_guard, make_goblin_archer,
@@ -169,19 +168,22 @@ def setup_area1():
         ambient=["Cold air seeps under the door."],
     )
 
-    # ── Kitchen ───────────────────────────────────────────────────────────────
-    kitchen = Room(
-        "Kitchen",
-        "A cavernous kitchen, long cold. Iron pots hang from chains above a\n"
-        "dead hearth. Two figures turn at your entrance — goblins, picking\n"
-        "through the mouldering larder.\n"
+    # ── Servants' Kitchen ───────────────────────────────────────────────────────────────
+    servants_kitchen = Room(
+        "Servants' Kitchen",
+        "A Small Kitchen. Iron pots hang from chains above a dead hearth.\n"
         "The north exit leads back to the Locked Hall.",
-        items=["bread", "apple"],
+        items=["apple"],
         ambient=[
             "The smell of old grease and something worse lingers.",
-            "One goblin drops a bone. The clatter echoes.",
             "The hearth is cold. Whatever was cooked here was a long time ago.",
         ],
+    )
+
+    pantry = Room(
+        "Pantry",
+        "A tight pantry packed with a foodstuffs.",
+        items = ["bread", "bread", "bread", "apple"],
     )
 
     # ── Crypt Gate ────────────────────────────────────────────────────────────
@@ -196,6 +198,20 @@ def setup_area1():
             "The air tastes of iron and old stone.",
             "The Warden does not blink. It simply waits.",
             "The sigil on the door pulses faintly — a slow, cold heartbeat.",
+        ],
+    )
+
+    hidden_armory = Room(
+        "Hidden Armory",
+        "A small dust-filled chamber. Racks of old weapons line the walls.\n"
+        "Shields and rusty armor lie scattered across the floor.\n"
+        "The only exit is north, back to the Puzzle Alcove.",
+        items=["rusty sword", "iron shield", "torch"],
+        relics=[r for r in [get_relic("steel gauntlets")] if r],
+        ambient=[
+            "The metal smells of old iron and oil.",
+            "You hear a faint creak as if something shifts in the shadows.",
+            "Dust motes dance in the sparse light, revealing glimmers from weapon hilts.",
         ],
     )
 
@@ -215,12 +231,12 @@ def setup_area1():
     crossroads.link("east", servants_quarters)
     crossroads.link("south", locked_hall)
     # Locked Hall
-    locked_hall.link("south", kitchen)
+    locked_hall.link("south", servants_kitchen)
     locked_hall.link("east", area3_stub)
     locked_hall.link("west", area4_stub)
     locked_hall.lock("east", "silver key")
     locked_hall.lock("west", "brass key")
-
+    pantry.link("east", servants_kitchen)
     # ── Events ────────────────────────────────────────────────────────────────
 
     crossroads.event = Event(
@@ -238,11 +254,46 @@ def setup_area1():
                             "  The brazier roars to life. Warmth floods the chamber."),
                     queue_effect("rage", 1),
                 ),
-                requires="torch", consumes=True,
+                requires="torch", consumes=False,
             ),
+            opt(
+                "Move on you can see clearly as is.",
+                chain(
+                    narrate("You move on leaving the brazier to sit in silence"),
+                    mp_restore(1),
+                )
+            )
         ],
     )
 
+    puzzle_alcove.event = Event(
+        name="Inspect the Alcove",
+        description=(
+            "Aside from the chest, the alcove walls are lined with faint carvings.\n"
+            "One corner seems slightly out of place, almost hidden."
+        ),
+        options=[
+            opt(
+                "Investigate the suspicious corner",
+                chain(
+                    narrate(
+                        "You push aside a loose stone in the corner. "
+                        "The wall grinds aside to reveal a narrow passage to the south!"
+                    ),
+                    lambda player, room: reveal_hidden_armory(player, room)
+                )
+            ),
+            opt(
+                "Ignore the corner and focus on the chest",
+                narrate("You leave the corner alone and approach the chest.")
+            )
+        ]
+    )
+
+    def reveal_hidden_armory(player, room):
+        """Unlocks the hidden armory south of Puzzle Alcove using the generic Room method."""
+        puzzle_alcove.reveal_connection("south", hidden_armory)
+        print_slow(f"\n  A hidden passage opens south, revealing a new room!")
     # ── Puzzles ───────────────────────────────────────────────────────────────
 
     from rooms.events import give_relic as _give_relic
@@ -273,8 +324,8 @@ def setup_area1():
     def _alcove_puzzle_reward(player, room):
         player.inventory.append("healing draught")
         print_slow("  The chest clicks open. Inside: a healing draught and a glint of something else.")
-        msg = _give_relic("frog statue")(player, room)
-        print_slow(f"  ✦ {msg}")
+        # msg = _give_relic("frog statue")(player, room)
+        # print_slow(f"  ✦ {msg}")
 
     puzzle_alcove.puzzle = Puzzle(
         name="The Sealed Chest",
@@ -322,6 +373,8 @@ def setup_area1():
         input("\n  Press Enter to continue...")
     puzzle_room.on_enter = _puzzle_room_enter
 
+    puzzle_room.env_objects.append(puzzle_room.puzzle)  # chest puzzle
+
     def _ratssss_enter(player):
         from utils.ascii_art import RATSSSS, print_art
         print_art(RATSSSS, indent=6)
@@ -339,12 +392,16 @@ def setup_area1():
         print_slow("  Type 'interact' to examine the brazier.")
         input("\n  Press Enter to continue...")
     crossroads.on_enter = _crossroads_enter
+    crossroads.env_objects.append(crossroads.event)
 
     def _alcove_enter(player):
         print_slow("\n  The alcove is quiet. A sealed iron chest dominates the far wall.")
-        print_slow("  Type 'examine' to inspect the lock, 'solve <answer>' to try it.")
+        print_slow("  Type 'examine chest' to inspect the lock, 'solve <answer>' to try it.")
         input("\n  Press Enter to continue...")
     puzzle_alcove.on_enter = _alcove_enter
+
+    puzzle_alcove.env_objects.append(puzzle_alcove.puzzle)  # chest puzzle
+    puzzle_alcove.env_objects.append(puzzle_alcove.event)  # room event / hidden corner
 
     def _servants_enter(player):
         from utils.ascii_art import SERVANTS_QUARTERS, print_art
@@ -366,11 +423,10 @@ def setup_area1():
             print_slow('  "The Catacomb Key lies deep in the crypt below.')
             print_slow('   Find it, and the other keys will follow."')
             print_slow("  Before you can speak, they are gone.")
-            # Add lore entry
             player.journal.add_lore(
                 "The Stranger at the Locked Hall",
                 "A hooded figure told you:\n"
-                "  'The Catacomb Key lies deep in the crypt below.\n"
+                "  'The Courtyard Key lies deep in the crypt below.\n"
                 "   Find it, and the other keys will follow.'\n"
                 "Two locked doors in the hall lead to Areas 3 and 4.\n"
                 "Keys: silver key (east) and brass key (west).",
@@ -381,11 +437,17 @@ def setup_area1():
         input("\n  Press Enter to continue...")
     locked_hall.on_enter = _locked_hall_enter
 
-    def _kitchen_enter(player):
-        print_slow("\n  Two goblins spin from the larder shelves, knives raised.")
-        print_slow('  "Oi! This is our kitchen!" one snarls.')
+    def servants_kitchen_enter(player):
+        print_slow("\n  Two skeletons work tirelessly kneading dust like flower.")
+        print_slow(" As you enter their heads tun towards you and they ready their weapons.")
         input("\n  Press Enter to continue...")
-    kitchen.on_enter = _kitchen_enter
+    servants_kitchen.on_enter = servants_kitchen_enter
+
+    def pantry_enter(player):
+        from utils.ascii_art import PANTRY, print_art
+        print_art(pantry, indent=6)
+        print_slow('  "You enter a walk in pantry."')
+        print_slow('  "There is food here."')
 
     def _crypt_enter(player):
         from utils.ascii_art import CRYPT_GATE, print_art
@@ -401,9 +463,6 @@ def setup_area1():
 
     entrance.enemies.append(make_castle_guard())
 
-    riddle_hall.enemies.append(make_goblin_guard())
-    riddle_hall.enemies.append(make_goblin_archer())
-
     ratssss.enemies.append(make_giant_rat())
     ratssss.enemies.append(make_giant_rat())
     ratssss.enemies.append(make_rat_swarm())
@@ -411,8 +470,9 @@ def setup_area1():
     servants_quarters.enemies.append(make_skeleton_servant())
     servants_quarters.enemies.append(make_skeleton_servant())
 
-    kitchen.enemies.append(make_goblin())
-    kitchen.enemies.append(make_goblin())
+    servants_kitchen.enemies.append(make_skeleton_servant())
+    servants_kitchen.enemies.append(make_skeleton_servant())
+    servants_kitchen.enemies.append(make_skeleton_servant())
 
     crypt_gate.enemies.append(make_crypt_warden())
     crypt_gate.enemies.append(make_wraith())

@@ -42,6 +42,9 @@ class Player:
     def heal(self, amount):
         self.health = min(self.health + amount, self.max_health)
 
+    def mp_restore(self,amount):
+        self.mana = min(self.mana + amount, MAX_MANA)
+
     def take_damage(self, amount):
         if self.combat_flags.get("unbreakable"):
             amount = min(amount, UNBREAKABLE_CAP)

@@ -1,14 +1,10 @@
 # game_engine/game_state.py
 """
-GameState — single source of truth for all mutable game data.
-
-Pure data container: no business logic, no I/O.
-Every part of the game that needs to read or write game state does so
-through a GameState instance, making state portable and serialisable.
+GameState — pure data container, single source of truth for mutable game data.
+No business logic, no I/O, no imports from game sub-systems.
 """
-
 from __future__ import annotations
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -26,22 +22,11 @@ class GameMode(str, Enum):
 
 @dataclass
 class GameState:
-    """
-    All mutable game state in one place.
-
-    player      : The player character.
-    room        : The room the player is currently in.
-    start_room  : Root room for the map renderer and SaveManager BFS.
-    mode        : Current game phase.
-    running     : Set False to exit the main loop.
-    """
     player:     "Player"
     room:       "Room"
     start_room: "Room"
     mode:       GameMode = GameMode.EXPLORE
     running:    bool     = True
-
-    # ── Convenience properties ────────────────────────────────────────────────
 
     @property
     def is_explore(self) -> bool:
@@ -54,8 +39,6 @@ class GameState:
     @property
     def is_over(self) -> bool:
         return self.mode == GameMode.OVER or not self.player.is_alive()
-
-    # ── Transition helpers ────────────────────────────────────────────────────
 
     def enter_room(self, room: "Room"):
         self.room = room

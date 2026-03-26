@@ -50,6 +50,10 @@ def queue_effect(effect_name: str, value):
         print_slow(f"  Something stirs — the effect will manifest when next you fight.")
     return _action
 
+def mp_restore(amount,):
+    def _action(player, room):
+        player.mp_restore(player, amount)
+    return _action
 
 def chain(*actions):
     """Run multiple action callables in sequence."""
@@ -131,11 +135,12 @@ class Event:
     resolved    : bool — True after the event fires once; prevents replay
     """
 
-    def __init__(self, name: str, description: str, options=None):
+    def __init__(self, name: str, description: str, options=None, trigger="Interact"):
         self.name        = name
         self.description = description
         self.options     = list(options or [])
         self.resolved    = False
+        self.trigger     = trigger
 
     def show(self, player, room):
         print()

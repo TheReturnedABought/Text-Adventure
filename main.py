@@ -1,21 +1,10 @@
 # main.py
-"""
-Entry point and top-level game orchestration.
-
-Architecture
-────────────
-Game          — owns a GameState; wires sub-systems; no logic of its own.
-CommandRouter — dispatch table; constructed once with a Game reference.
-GameState     — pure data  (player, room, mode, running).
-GameWindow    — separate Tkinter window; started from run_game().
-"""
-
 import os
 import sys
 
 BASE_PATH = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 
-# ── Command history ───────────────────────────────────────────────────────────
+
 def _enable_history():
     try:
         import readline
@@ -28,7 +17,6 @@ def _enable_history():
 
 _enable_history()
 
-# ── Project imports ───────────────────────────────────────────────────────────
 from entities.player        import Player
 from entities.class_data    import CLASS_RELIC_NAMES
 from rooms.map_data         import setup_rooms
@@ -44,7 +32,7 @@ from utils.display  import (
 )
 from utils.actions  import (
     do_move, do_take_relic, do_drop, do_inventory,
-    do_rest, do_listen, do_examine, do_solve,
+    do_listen, do_examine, do_solve,
     do_interact, use_item,
 )
 from utils.combat   import combat_loop
@@ -57,12 +45,6 @@ from utils.window   import window
 # ══════════════════════════════════════════════════════════════════════════════
 
 class CommandRouter:
-    """
-    Pure dispatch table.
-    Handler signature: fn(game, args) -> Room | None
-    Movement handlers return the new Room; others return None.
-    """
-
     def __init__(self, game: "Game"):
         self._game  = game
         self._table: dict = {}
@@ -83,12 +65,10 @@ class CommandRouter:
         t["inventory"] = t["inv"]     = lambda g, a: do_inventory(g.player)
         t["relics"]    = t["relic"]   = lambda g, a: show_relics(g.player)
         t["use"]                      = lambda g, a: use_item(g.player, g.room, a)
-
         t["listen"]   = t["hear"]     = lambda g, a: do_listen(g.player, g.room)
         t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room)
         t["examine"]  = t["inspect"]  = lambda g, a: do_examine(g.player, g.room, a)
         t["solve"]                    = lambda g, a: do_solve(g.player, g.room, a)
-        t["rest"]                     = lambda g, a: do_rest(g.player, g.room)
         t["look"]     = t["l"]        = lambda g, a: show_room(g.room)
         t["help"]     = t["?"]        = lambda g, a: (
             show_help(g.player), input("  Press Enter to continue...")
@@ -113,17 +93,10 @@ class CommandRouter:
 # ══════════════════════════════════════════════════════════════════════════════
 
 class Game:
-    """
-    Top-level orchestrator.  No game logic lives here — it delegates
-    to CombatSession, CommandRouter, and the room sub-system.
-    """
-
     def __init__(self):
         self.state:    "GameState | None" = None
         self.router:   "CommandRouter | None" = None
         self.save_mgr: SaveManager = SaveManager()
-
-    # ── Properties (delegate to state) ───────────────────────────────────────
 
     @property
     def player(self) -> Player:
@@ -142,10 +115,7 @@ class Game:
     def start_room(self) -> Room:
         return self.state.start_room
 
-    # ── Entry — called from game thread via window.run_game ───────────────────
-
     def main(self):
-        """Full game lifecycle: setup then run."""
         self.setup()
         if self.state and self.state.player:
             self.run()
@@ -181,9 +151,7 @@ class Game:
 
         start_room = setup_rooms()
         self.state  = GameState(
-            player     = player,
-            room       = start_room,
-            start_room = start_room,
+            player=player, room=start_room, start_room=start_room,
         )
         self.router = CommandRouter(self)
         self._wire_engine()
@@ -194,7 +162,6 @@ class Game:
         print(f"\nWelcome, {player.name} the {char_class.capitalize()}!"
               " Your adventure begins...\n")
 
-        # Populate the window panels now that we have data
         window.set_explore(player, self.state.room)
 
     def _load_game(self, saved: dict):
@@ -204,9 +171,7 @@ class Game:
         start_room = setup_rooms()
 
         self.state  = GameState(
-            player     = player,
-            room       = start_room,
-            start_room = start_room,
+            player=player, room=start_room, start_room=start_room,
         )
         self.router = CommandRouter(self)
         self._wire_engine()
@@ -283,8 +248,6 @@ class Game:
         self.save_mgr.delete()
         self.state.game_over()
 
-    # ── Travel ────────────────────────────────────────────────────────────────
-
     def _travel(self, args: list) -> Room:
         new_room = do_move(self.player, self.room, args)
         if new_room is not self.room:
@@ -294,8 +257,6 @@ class Game:
             window.set_explore(self.player, new_room)
             self._autosave()
         return new_room
-
-    # ── Autosave ──────────────────────────────────────────────────────────────
 
     def _autosave(self):
         try:
@@ -308,8 +269,6 @@ class Game:
 
 def main():
     game = Game()
-    # window.run_game: builds the Tk window, patches print/input,
-    # starts game.main() in a daemon thread, then enters mainloop.
     window.run_game(game.main)
 
 

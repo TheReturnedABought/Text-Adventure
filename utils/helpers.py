@@ -2,8 +2,8 @@
 """
 Low-level print utilities and shared ANSI colour constants.
 
-When the window is active (utils/window.py), print_slow() routes
-through window.log() so output appears in the LOG panel.
+When the Tkinter window is active, print_slow() routes through
+window.log() so output appears in the LOG panel.
 print_status() becomes a no-op (the STATUS panel handles it).
 """
 import sys
@@ -22,7 +22,7 @@ RARITY_COLORS = {
 
 
 def _win():
-    """Return the window singleton if active, else None."""
+    """Return window singleton if active, else None."""
     try:
         from utils.window import window
         return window if window._active else None
@@ -31,15 +31,9 @@ def _win():
 
 
 def print_slow(text, delay: float = 0.02):
-    """
-    Print text with pacing.
-    Window active  → instant, routed to LOG panel.
-    Window inactive → classic character stream to stdout.
-    """
     w = _win()
     if w:
         w.log(str(text))
-        # Light sleep so rapid messages don't blur into one wall of text
         time.sleep(min(0.04, delay * max(len(str(text)), 1) * 0.05))
         return
     for char in str(text):
@@ -50,13 +44,9 @@ def print_slow(text, delay: float = 0.02):
 
 
 def print_status(player):
-    """
-    Print HP/AP/MP inline.
-    Suppressed when the window is active — STATUS panel handles it.
-    """
+    """Suppressed when window is active — STATUS panel handles it."""
     if _win():
-        return   # STATUS panel renders this
-
+        return
     hp_bar   = make_bar(player.health,     player.max_health, length=20, fill="█", empty="░")
     ap_bar   = make_bar(player.current_ap, MAX_AP,            length=12, fill="◆", empty="◇")
     mana_bar = make_bar(player.mana,       MAX_MANA,          length=5,  fill="●", empty="○")

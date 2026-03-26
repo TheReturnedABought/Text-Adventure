@@ -105,7 +105,6 @@ class Room:
         # Tracking
         self.visit_count          = 0    # incremented by Game on entry
         self._originally_locked   = set()  # filled by lock(); used by SaveManager
-
     # ── Connection helpers ────────────────────────────────────────────────────
 
     def add_connection(self, direction, room):
@@ -130,6 +129,17 @@ class Room:
         """Mark an outgoing exit as locked; track it for SaveManager."""
         self.locked_connections[direction] = required_item
         self._originally_locked.add(direction)
+
+    def reveal_connection(self, direction: str, other_room: "Room"):
+        """
+        Reveal a hidden connection to another room.
+        If the connection already exists, does nothing.
+        Otherwise, links this room to the new room.
+        """
+        if direction in self.connections:
+            return False  # Already revealed
+        self.link(direction, other_room)
+        return True
 
     # ── Env objects ───────────────────────────────────────────────────────────
 

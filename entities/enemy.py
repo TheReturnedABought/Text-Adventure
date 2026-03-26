@@ -8,7 +8,7 @@ class EnemyMove:
         self.weight        = weight
         self.effect        = effect
         self.cooldown      = cooldown
-        self.ap_cost       = ap_cost   # AP this enemy must spend to use this move
+        self.ap_cost       = ap_cost
         self._cd_remaining = 0
 
     def is_ready(self):
@@ -25,24 +25,16 @@ class EnemyMove:
 
 class Enemy:
     """
-    AP system
-    ─────────
-    max_ap      : AP ceiling for this enemy (set per factory).
-    current_ap  : computed at turn start = max(1, max_ap - burden_stacks).
-                  Burden (hard cap debuff) is the only thing that reduces it;
-                  Speed adds to it.
-
-    Telegraphing
-    ────────────
-    _planned_moves : full intended sequence for the coming turn, set by
-                     plan_turn() before the player acts. The HUD shows all
-                     of them. Actual execution re-rolls independently.
-
-    drops           : list of (item_name, chance) tuples, each rolled on death.
-    guaranteed_relic: relic name string or None — dropped on death (elite/boss).
+    damage_dice      : dice expression ("1d8+2") for basic attacks.
+                       Falls back to random.randint(4, attack_power) if None.
+    fled             : True if the enemy escaped (no drops, no XP).
+    on_death_effect  : str tag read by CombatSession (e.g. "shatter").
+    _current_player_ref : set by _enemy_act so conditional choose fns can read HP.
     """
+
     def __init__(self, name, health, attack_power, xp_reward=10,
-                 moves=None, drops=None, guaranteed_relic=None, max_ap=8):
+                 moves=None, drops=None, guaranteed_relic=None,
+                 max_ap=8, damage_dice=None, on_death_effect=None):
         self.name             = name
         self.health           = health
         self.max_health       = health
@@ -52,26 +44,21 @@ class Enemy:
         self.moves            = moves or []
         self.drops            = drops or []
         self.guaranteed_relic = guaranteed_relic
+        self.damage_dice      = damage_dice
+        self.on_death_effect  = on_death_effect
 
-        # AP
         self.max_ap     = max_ap
         self.current_ap = max_ap
 
-        # Telegraphing
-        self._planned_moves: list = []   # full simulated turn sequence
-        self._planned_move          = None  # first move (back-compat)
+        self.fled                = False
+        self._current_player_ref = None
+
+        self._planned_moves: list = []
+        self._planned_move        = None
 
     # ── Telegraphing ──────────────────────────────────────────────────────────
 
     def plan_turn(self):
-        """
-        Simulate this turn's move sequence for the HUD display.
-        Uses the same AP-spending logic as _enemy_act but does NOT fire effects,
-        tick cooldowns, or mark moves as used for real — it's preview-only.
-
-        Moves are not repeated in the same simulated sequence (matching the
-        execution rule in CombatSession._enemy_act).
-        """
         burden = self.statuses.get("burden", 0)
         speed  = self.statuses.get("speed", 0)
         budget = max(1, self.max_ap - burden) + speed
@@ -97,12 +84,6 @@ class Enemy:
     # ── Move selection ────────────────────────────────────────────────────────
 
     def choose_affordable_move(self, available_ap: int, used_ids: set):
-        """
-        Return a weighted-random ready move that:
-          • costs ≤ available_ap
-          • has not already been used this turn (tracked by used_ids / id())
-        Returns None if nothing qualifies.
-        """
         candidates = [
             m for m in self.moves
             if m.is_ready() and m.ap_cost <= available_ap and id(m) not in used_ids
@@ -112,21 +93,30 @@ class Enemy:
         weights = [m.weight for m in candidates]
         return random.choices(candidates, weights=weights, k=1)[0]
 
-    # ── Legacy choose_move (used by plan_turn fallback / tests) ───────────────
-
     def choose_move(self):
         ready = [m for m in self.moves if m.is_ready()]
         if not ready:
             return None
         return random.choices(ready, weights=[m.weight for m in ready], k=1)[0]
 
-    # ── Other helpers ─────────────────────────────────────────────────────────
+    # ── Damage roll ───────────────────────────────────────────────────────────
+
+    def roll_damage(self) -> int:
+        """Roll using damage_dice expression, or fall back to (4, attack_power)."""
+        if self.damage_dice and self.damage_dice != "0":
+            from utils.dice import roll
+            return roll(self.damage_dice)
+        return random.randint(4, max(4, self.attack_power))
+
+    # ── Misc ──────────────────────────────────────────────────────────────────
 
     def tick_move_cooldowns(self):
         for m in self.moves:
             m.tick_cooldown()
 
     def roll_drops(self):
+        if self.fled:
+            return []
         return [name for name, chance in self.drops if random.random() < chance]
 
     def take_damage(self, amount):
@@ -134,3 +124,6 @@ class Enemy:
 
     def is_alive(self):
         return self.health > 0
+
+    def __repr__(self):
+        return f"<Enemy '{self.name}' HP:{self.health}/{self.max_health}>"

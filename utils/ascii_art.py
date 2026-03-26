@@ -2,30 +2,25 @@
 """
 ASCII art strings and display helpers.
 
-New in this version
-───────────────────
-ENEMY_ART  : dict[enemy_name -> list[str]]
-             Small per-enemy ASCII portraits shown in the UI combat art panel.
-             If an enemy has no entry, only its stat card is shown.
-
-ROOM_ART   : dict[room_name -> str]
-             Maps room names to the multiline art strings already defined
-             below, plus new entries for rooms that previously lacked art.
-             Consumed by UIManager._room_art() for the explore art panel.
+Exports
+───────
+RELIC_ART  : dict[relic_name  -> str]   (multiline, used by show_relics)
+ENEMY_ART  : dict[enemy_name  -> list[str]]  (portrait lines, window.py)
+ROOM_ART   : dict[room_name   -> str]   (window.py ART panel explore mode)
+print_art  : helper to print a multiline art string with fixed indent
 """
 from utils.helpers import print_slow
 
 
 def print_art(art, indent=2):
-    """Print each line of an art string with a fixed left indent."""
     for line in art.strip("\n").splitlines():
         print(" " * indent + line)
     print()
 
 
-# ════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
 #  Room banner art  (multiline strings)
-# ════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
 
 ENTRANCE_HALL = r"""
     ___________
@@ -99,10 +94,10 @@ KITCHEN = r"""
 """
 
 LOCKED_HALL = r"""
-  🔒─────────────🔒
+  ┌───────────────┐
   │               │
   │   SEALED      │
-  │   PASSAGES    │
+  🔒   PASSAGES  🔒
   │               │
   └───────────────┘
 """
@@ -116,9 +111,110 @@ PUZZLE_ALCOVE = r"""
    └───────────┘
 """
 
-# ════════════════════════════════════════════════════════════════════════════════
-#  Relic art  (multiline strings — legacy, used by show_relics / take messages)
-# ════════════════════════════════════════════════════════════════════════════════
+PANTRY = r"""
+  ___________________
+ |  ___    ___    ___|
+ | |   |  |   |  |   |
+ | |___|  |___|  |___|
+ |___________________|
+   [_]    [_]    [_]
+"""
+# ── Area 2 ───────────────────────────────────────────────────────────────────
+
+CRYPT_ENTRANCE = r"""
+      . . . . .
+    .           .
+   .  ___________  .
+  .  |           |  .
+  .  |   C R Y P T  |  .
+  .  |___________|  .
+   .                .
+    .  ___________  .
+      |    ↓↓↓    |
+"""
+
+SKELETON_GUARDS_ART = r"""
+   _____   _____
+  (o) (o) (o) (o)
+  | ___ | | ___ |
+  /|   |\  /|   |\
+   |   |    |   |
+"""
+
+OSSUARY_PIT_ART = r"""
+  ~~~~~~~~~~~~~~~~~
+  ~ ☠ ☠ ☠ ☠ ☠ ☠ ~
+  ~ ☠  OSSUARY  ☠ ~
+  ~ ☠ ☠ ☠ ☠ ☠ ☠ ~
+  ~~~~~~~~~~~~~~~~~
+"""
+
+SKULLS_ROOM_ART = r"""
+  👁 👁 👁 👁 👁
+  👁           👁
+  👁  WATCHING 👁
+  👁           👁
+  👁 👁 👁 👁 👁
+"""
+
+WRAITHS_ART = r"""
+   ~~~   ~~~   ~~~
+  /o o\ /o o\ /o o\
+ (     (     (     )
+  \~~~/ \~~~/ \~~~/
+"""
+
+TOMB_ART = r"""
+     ___________
+    |  ARCHITECT |
+    |    TOMB    |
+    |  ________  |
+    | |        | |
+    | |   RIP  | |
+    |_|________|_|
+"""
+
+BOSS_ART = r"""
+    ___________
+   /           \
+  | ☠  CRYPT  ☠ |
+  |  SOVEREIGN  |
+   \___________/
+       | | |
+"""
+
+HIDDEN_VAULT_ART = r"""
+   _______________
+  |               |
+  |  [  ]  [  ]   |
+  |  [  ]  [  ]   |
+  |_______________|
+       SECRET
+"""
+
+TREASURE_ART = r"""
+   ____  ____
+  |    ||    |
+  | 💰 || 💰 |
+  |____||____|
+  |    ||    |
+  | 💰 ||    |
+  |____||____|
+"""
+
+FOUNTAIN_ART = r"""
+      . . .
+    .  ~~~  .
+   .  (   )  .
+   .  (   )  .
+    .  ~~~  .
+      . . .
+"""
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Relic art
+# ════════════════════════════════════════════════════════════════════════════
 
 IRON_CAST_HELM = r"""
     /\/\
@@ -127,7 +223,6 @@ IRON_CAST_HELM = r"""
    \    /
    [====]
 """
-
 SLEIGHTMAKERS_GLOVE = r"""
     _____
    /     \
@@ -135,7 +230,6 @@ SLEIGHTMAKERS_GLOVE = r"""
   |  ___  |
    \_____/
 """
-
 AETHER_TAPESTRY = r"""
   * . * . *
   . * . * .
@@ -143,14 +237,12 @@ AETHER_TAPESTRY = r"""
   . * . * .
   * . * . *
 """
-
 FROG_STATUE = r"""
    @..@
   (----)
  ( >__< )
  ^^ ~~ ^^
 """
-
 VENOM_GLAND = r"""
    _   _
   ( o o )
@@ -158,7 +250,6 @@ VENOM_GLAND = r"""
   | ~~~ |
    \___/
 """
-
 IRON_WILL = r"""
     ___
    /   \
@@ -166,7 +257,6 @@ IRON_WILL = r"""
   |_____|
    |   |
 """
-
 THORN_BRACELET = r"""
   /\/\/\/\
  / thorns  \
@@ -174,7 +264,6 @@ THORN_BRACELET = r"""
  \ thorns  /
   \/\/\/\/
 """
-
 BERSERKER_HELM = r"""
    /\  /\
   /  \/  \
@@ -182,7 +271,6 @@ BERSERKER_HELM = r"""
  |   /\   |
   \_/  \_/
 """
-
 CURSED_EYE = r"""
    _______
   /       \
@@ -190,7 +278,6 @@ CURSED_EYE = r"""
   \_______/
      | |
 """
-
 WHISPER_CHARM = r"""
   ~~~~
  ~ .. ~
@@ -198,7 +285,6 @@ WHISPER_CHARM = r"""
  ~ .. ~
   ~~~~
 """
-
 BLESSED_EYE = r"""
    _______
   /       \
@@ -206,7 +292,6 @@ BLESSED_EYE = r"""
   \_______/
     *   *
 """
-
 SILENT_LAMB_WOOL = r"""
   (  .  .  )
   (  .  .  )
@@ -214,7 +299,6 @@ SILENT_LAMB_WOOL = r"""
     \ -- /
      \  /
 """
-
 BEARS_HIDE = r"""
   / \  / \
  (   \/   )
@@ -222,7 +306,6 @@ BEARS_HIDE = r"""
    \(  )/
     \  /
 """
-
 VAMPIRIC_BLADE = r"""
      |
     /|\
@@ -231,7 +314,6 @@ VAMPIRIC_BLADE = r"""
      |
     ===
 """
-
 WHETSTONE = r"""
   _______
  /       \
@@ -239,7 +321,6 @@ WHETSTONE = r"""
 |  / / /  |
  \_______/
 """
-
 ECHO_CHAMBER = r"""
   )  )  )
  )) )) ))
@@ -247,8 +328,6 @@ ECHO_CHAMBER = r"""
  )) )) ))
   )  )  )
 """
-
-# ── Relic name → art ─────────────────────────────────────────────────────────
 
 RELIC_ART = {
     "Iron-Cast Helm":       IRON_CAST_HELM,
@@ -269,57 +348,49 @@ RELIC_ART = {
     "Echo Chamber":         ECHO_CHAMBER,
 }
 
-# ════════════════════════════════════════════════════════════════════════════════
-#  Enemy art  (list of strings — each string is one row of the portrait)
-#  Keep each portrait ≤ 7 rows and ≤ 18 chars wide for clean side-by-side display.
-# ════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
+#  Enemy art  (list[str], ≤7 rows, ≤20 chars wide)
+# ════════════════════════════════════════════════════════════════════════════
 
 ENEMY_ART: dict[str, list[str]] = {
-
     "Castle Guard": [
         "   ╔══╗   ",
         "   ║()║   ",
         "  ╔╩══╩╗  ",
         "  ║████║  ",
         "  ╚═╤══╝  ",
-        "   ╱ ╲   ",
+        "   ╱ ╲    ",
     ],
-
     "Goblin": [
         "  ∩___∩  ",
         " ( ´.` ) ",
         "  (> <)  ",
         "   | |   ",
     ],
-
     "Goblin Guard": [
         "  ∩___∩  ",
         " (>._.<) ",
-        " /|_█_|\ ",
+        " /|_█_|\\ ",
         "   | |   ",
     ],
-
     "Goblin Archer": [
         "  ∩___∩  ",
         " ( °.°) )",
         "  /)(    ",
         "  |||    ",
     ],
-
     "Giant Rat": [
         "  /\\/|   ",
         " (o.o)   ",
         "  \\___/  ",
         "  (~V~)  ",
     ],
-
     "Rat Swarm": [
         " oo  oo  oo ",
         "(oo)(oo)(oo)",
         " vv  vv  vv ",
         "~~~~~~~~~~~~",
     ],
-
     "Skeleton Servant": [
         "  _____  ",
         " (o) (o) ",
@@ -327,7 +398,6 @@ ENEMY_ART: dict[str, list[str]] = {
         " /|   |\\ ",
         "  |   |  ",
     ],
-
     "Skeleton": [
         "  _____  ",
         " (o) (o) ",
@@ -335,7 +405,6 @@ ENEMY_ART: dict[str, list[str]] = {
         " /|   |\\ ",
         "  |   |  ",
     ],
-
     "Rotting Zombie": [
         "  ~~~~~  ",
         " (x) (x) ",
@@ -343,15 +412,12 @@ ENEMY_ART: dict[str, list[str]] = {
         " /|   |\\ ",
         "  |   |  ",
     ],
-
     "Wraith": [
         "   ~~~   ",
         "  /o  o\\ ",
         " (  ~~  )",
         " /~~~~~~\\",
-        "/        \\",
     ],
-
     "Bone Archer": [
         "  _____  ",
         " (o) (o) ",
@@ -359,30 +425,79 @@ ENEMY_ART: dict[str, list[str]] = {
         " /|) |)\\ ",
         "  |   |  ",
     ],
-
     "Crypt Warden": [
         " /╔═══╗\\ ",
         " |║ ☠ ║| ",
         " \\╠═══╣/ ",
         "  ║███║  ",
-        "  ╔═╤═╗  ",
-        "  ╚═╧═╝  ",
+        "  ╚═╤═╝  ",
+    ],
+    # Area 2
+    "Grave Robber": [
+        "  _____  ",
+        " (^_^)   ",
+        "  |BAG|  ",
+        "  |   |  ",
+    ],
+    "Cursed Statue": [
+        "  _____  ",
+        " |CURSE| ",
+        " |     | ",
+        " |_____| ",
+        "  _|_|_  ",
+    ],
+    "Grave Whisperer": [
+        "  ~~~~~  ",
+        " (o   o) ",
+        "  )   (  ",
+        " / ~~~ \\ ",
+    ],
+    "Spectral Legionnaire": [
+        "  ~~o~~  ",
+        "   |☆|   ",
+        "   |||   ",
+    ],
+    "Soul Reaper": [
+        "  ╔═══╗  ",
+        "  ║☠☠☠║  ",
+        "  ╚═╤═╝  ",
+        "   /|\\.  ",
+        "  SCYTHE ",
+    ],
+    "Restless Remains": [
+        "  _____  ",
+        " (o) (o) ",
+        " | AWK | ",
+        " /|   |\\ ",
+        "  |   |  ",
     ],
 }
 
-# ════════════════════════════════════════════════════════════════════════════════
-#  Room name → art string  (consumed by UIManager._room_art)
-# ════════════════════════════════════════════════════════════════════════════════
+# ════════════════════════════════════════════════════════════════════════════
+#  Room art lookup
+# ════════════════════════════════════════════════════════════════════════════
 
 ROOM_ART: dict[str, str] = {
-    "Entrance Hall":      ENTRANCE_HALL,
-    "Riddle Hall":        RIDDLE_HALL,
-    "Puzzle Room":        PUZZLE_ROOM,
-    "Ratssss!":           RATSSSS,
-    "Servants' Quarters": SERVANTS_QUARTERS,
-    "The Crypt Gate":     CRYPT_GATE,
-    "The Crossroads":     CROSSROADS,
-    "Kitchen":            KITCHEN,
-    "Locked Hall":        LOCKED_HALL,
-    "Puzzle Alcove":      PUZZLE_ALCOVE,
+    # Area 1
+    "Entrance Hall":       ENTRANCE_HALL,
+    "Riddle Hall":         RIDDLE_HALL,
+    "Puzzle Room":         PUZZLE_ROOM,
+    "Ratssss!":            RATSSSS,
+    "Servants' Quarters":  SERVANTS_QUARTERS,
+    "The Crypt Gate":      CRYPT_GATE,
+    "The Crossroads":      CROSSROADS,
+    "Kitchen":             KITCHEN,
+    "Locked Hall":         LOCKED_HALL,
+    "Puzzle Alcove":       PUZZLE_ALCOVE,
+    # Area 2
+    "Crypt Entrance":         CRYPT_ENTRANCE,
+    "Skeleton Guards":        SKELETON_GUARDS_ART,
+    "Skulls Stare At You":    SKULLS_ROOM_ART,
+    "Wraiths!!!":             WRAITHS_ART,
+    "Tomb of the Architect":  TOMB_ART,
+    "The Crypt Heart":        BOSS_ART,
+    "Hidden Vault":           HIDDEN_VAULT_ART,
+    "Treasure Room":          TREASURE_ART,
+    "Refreshing Fountain":    FOUNTAIN_ART,
+    "Ossuary Pit":            OSSUARY_PIT_ART,
 }
