@@ -118,14 +118,14 @@ def consume_rage(entity):
         return 2.0
     return 1.0
 
-def consume_block(entity, incoming_dmg):
+def consume_block(entity, incoming_dmg, ignore_first_block=False):
     """
     Absorb as much incoming damage as possible with block stacks.
     Returns (damage_after_block, block_absorbed).
     Block is fully cleared after use (StS style).
     """
     block = entity.statuses.get("block", 0)
-    if block <= 0:
+    if block <= 0 or ignore_first_block:
         return incoming_dmg, 0
     absorbed    = min(block, incoming_dmg)
     remaining   = incoming_dmg - absorbed

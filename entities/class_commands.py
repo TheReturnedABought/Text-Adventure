@@ -163,7 +163,7 @@ def cmd_overwhelm(player, enemies, target, ctx):
 # ────────────────────────────────
 def cmd_cut(player, enemies, target, ctx):
     if not _require_target(target, "cut"): return False
-    dmg = roll("1d6+2")
+    dmg = roll("1d4+2")
     _deal(player, target, dmg, ctx, "Cut:")
     return True
 
@@ -175,7 +175,7 @@ def cmd_flow(player, enemies, target, ctx):
 
 def cmd_feint(player, enemies, target, ctx):
     if not _require_target(target, "feint"): return False
-    apply_disorient(target,1)
+    apply_disorient(target,2)
     ctx["feint_no_miss"] = True
     print_slow(f"  🗡 Feint — {target.name} disoriented! Your next attack cannot miss.")
     return True
@@ -199,7 +199,7 @@ def cmd_flurry(player, enemies, target, ctx):
     print_slow(f"  🗡 Flurry — three rapid strikes on {target.name}!")
     for i in range(3):
         if target.health<=0: break
-        dmg = roll("1d8+2")
+        dmg = roll("1d4+2")
         actual, absorbed = consume_block(target, dmg)
         target.take_damage(actual)
         tag = f" (blocked {absorbed})" if absorbed else ""
@@ -229,7 +229,7 @@ def cmd_toxin(player, enemies, target, ctx):
 def cmd_assault(player, enemies, target, ctx):
     if not _require_target(target,"assault"): return False
     prior = ctx.get("actions_this_turn",0)
-    hits = min(3+prior,6)
+    hits = min(1+prior,6)
     print_slow(f"  🗡 Assault — {hits} strikes!")
     for i in range(hits):
         if target.health<=0: break
@@ -299,7 +299,7 @@ def cmd_bolt(player, enemies, target, ctx):
 
 def cmd_ward(player, enemies, target, ctx):
     if not _spend_mp(player,1,ctx.get("ward_active")): return False
-    blk = roll("1d8")
+    blk = roll("1d8+2")
     apply_block(player, blk)
     ctx["ward_active"]=True
     print_slow(f"  {BLUE}🛡 Ward — +{blk} Block! Spells cost −1 MP this turn.{RESET}")

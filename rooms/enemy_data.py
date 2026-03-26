@@ -22,6 +22,17 @@ def make_castle_guard():
         drops=[("scrap", 0.4)],
     )
 
+def make_crossbowman():
+    return Enemy(
+        "Crossbowman", health=20, attack_power=8, xp_reward=12,
+        max_ap=8,
+        moves=[
+            move("Piercing Shot", weight=5, effect_fn=ranged_attack_ignore_block("2d4"), ap_cost=4),
+            move("Volley",        weight=2, effect_fn=double_hit("1d3+2"),           ap_cost=5, cooldown=2),
+        ],
+        drops=[("scrap", 0.4), ("bolt", 0.3)],
+    )
+
 
 def make_goblin():
     return Enemy(

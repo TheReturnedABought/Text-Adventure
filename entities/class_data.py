@@ -130,7 +130,7 @@ SOLDIER_COMMANDS = {
         },
         {
             "name": "unbreakable",
-            "desc": "Damage capped at 6; Block does not clear between turns.",
+            "desc": "Damage capped at 20; Block does not clear between turns.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {

@@ -32,6 +32,43 @@ def damage_attack(damage_expr: str, label=None):
             print_slow(f"  Your HP: {player.health}")
     return effect
 
+# ── Special Effects ───────────────────────────────────────────────────────────
+
+def ranged_attack_ignore_block(damage_expr="2d4", label=None):
+    """
+    Damage that ignores the first block of the player.
+    Only ignores block once per attack.
+    """
+    def effect(enemy, player):
+        dmg = roll(damage_expr)
+        # Bypass first block once
+        from utils.status_effects import consume_block
+        actual, absorbed = consume_block(player, dmg, ignore_first_block=True)
+        if label:
+            msg = f"{enemy.name} — {label} for {dmg} (ignores first block)!"
+        else:
+            msg = f"{enemy.name} fires a bolt for {dmg} (ignores first block)!"
+        print_slow(f"  {msg}")
+        if actual:
+            player.take_damage(actual)
+            print_slow(f"  Your HP: {player.health}")
+    return effect
+
+def double_hit(damage_expr="1d4+3", label=None):
+    """Hits twice for the same or different targets."""
+    def effect(enemy, player):
+        for i in range(2):
+            dmg = roll(damage_expr)
+            from utils.status_effects import consume_block
+            actual, absorbed = consume_block(player, dmg)
+            msg = f"{enemy.name} hits for {dmg} (hit {i+1})!"
+            if absorbed:
+                msg += f" 🛡 blocked {absorbed}, taking {actual}!"
+            print_slow(f"  {msg}")
+            if actual:
+                player.take_damage(actual)
+                print_slow(f"  Your HP: {player.health}")
+    return effect
 
 def poison_attack(stacks=2, damage_expr="1d6+3"):
     def effect(enemy, player):
