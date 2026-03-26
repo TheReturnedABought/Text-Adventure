@@ -159,7 +159,6 @@ screen, and the **STATUS panel** all read from the same function `cmd_ap_cost()`
 | `examine` | Read the puzzle or object in this room |
 | `solve <answer>` | Attempt a puzzle solution |
 | `look` | Redescribe the current room |
-| `rest` | Restore AP (safe rooms only) | <--- needs to be removed
 | `map` | ASCII map of all explored rooms |
 | `journal` | Codex: lore entries and enemy bestiary |
 | `help` | All commands including unlocked class commands |
@@ -304,7 +303,7 @@ text_adventure/
 | 5 | discipline | 10 | Clear all debuffs; +23 Block; no attacks this turn. |
 | 10 | rally | 5 | +6 Block; next attack +6 dmg. |
 | 10 | cleave | 6 | Hit all enemies twice for 75% dmg. |
-| 10 | fortify | 7 | Fortify 5 — +5 Block each turn start. |
+| 10 | fortify | 7 | Fortify 5 — gain 5 Block at the start of every turn this combat. |
 | 15 | warcry | 6 | Weak 2 + Vulnerable 2 on all enemies. |
 | 15 | sentinel | 8 | +16 Block; attackers take 4 thorns. |
 | 15 | execute | 7 | 2× dmg; 3× if <30% HP; +1× per 10 Block consumed. |
@@ -345,7 +344,7 @@ text_adventure/
 | 10 | wave | 4 | 1 | 8–14 Lightning to all. |
 | 10 | storm | 5 | 2 | 18–24 to all. |
 | 10 | drain | 5 | 1 | Consume Poison; heal that HP. |
-| 15 | rift | 4 | 1 | +3 MP; Vulnerable 1 on self and all enemies. |
+| 15 | rift | 4 | 1 | Restore 3 MP; apply Vulnerable 1 to yourself and all enemies. |
 | 15 | silence | 7 | 1 | Stun + Weak 2. |
 | 15 | torment | 7 | 2 | Extend all enemy debuffs +1 turn. |
 | 20 | obliterate | 10 | 3 | 60–80 damage. |

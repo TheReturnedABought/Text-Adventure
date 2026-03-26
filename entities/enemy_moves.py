@@ -1,55 +1,41 @@
 # entities/enemy_moves.py
 """
-Reusable move effect functions and the move() factory.
-
-Each effect has signature: fn(enemy, player) -> None
-
-The move() factory now accepts ap_cost so every call site in enemy_data.py
-sets cost explicitly — no hidden defaults leak into the system.
+Enemy move effects and move() factory using dice for damage.
 """
-import random
 from utils.helpers import print_slow
 from utils.status_effects import (
     apply_poison, apply_stun, apply_vulnerable,
     apply_weak, apply_rage, apply_volatile, apply_disorient,
 )
+from utils.dice import roll
 
 
 # ── Effect functions ──────────────────────────────────────────────────────────
 
-def basic_attack(min_dmg=None, max_dmg=None):
+def damage_attack(damage_expr: str, label=None):
+    """
+    Generic damage move using dice notation.
+    """
     def effect(enemy, player):
-        lo = min_dmg or 4
-        hi = max_dmg or enemy.attack_power
-        dmg = random.randint(lo, hi)
+        dmg = roll(damage_expr)
         from utils.status_effects import consume_block
         actual, absorbed = consume_block(player, dmg)
-        if absorbed:
-            print_slow(f"  {enemy.name} strikes for {dmg} — 🛡 blocked {absorbed}, taking {actual}!")
+        if label:
+            msg = f"{enemy.name} — {label} for {dmg}!"
         else:
-            print_slow(f"  {enemy.name} strikes for {dmg}!")
+            msg = f"{enemy.name} attacks for {dmg}!"
+        if absorbed:
+            msg += f" 🛡 blocked {absorbed}, taking {actual}!"
+        print_slow(f"  {msg}")
         if actual:
             player.take_damage(actual)
             print_slow(f"  Your HP: {player.health}")
     return effect
 
 
-def heavy_attack(multiplier=1.8, label="HEAVY STRIKE"):
+def poison_attack(stacks=2, damage_expr="1d6+3"):
     def effect(enemy, player):
-        dmg = int(random.randint(4, enemy.attack_power) * multiplier)
-        from utils.status_effects import consume_block
-        actual, absorbed = consume_block(player, dmg)
-        print_slow(f"  {enemy.name} — {label} for {dmg}!"
-                   + (f" 🛡 blocked {absorbed}, taking {actual}!" if absorbed else ""))
-        if actual:
-            player.take_damage(actual)
-            print_slow(f"  Your HP: {player.health}")
-    return effect
-
-
-def poison_attack(stacks=2):
-    def effect(enemy, player):
-        dmg = random.randint(4, enemy.attack_power)
+        dmg = roll(damage_expr)
         from utils.status_effects import consume_block
         actual, absorbed = consume_block(player, dmg)
         print_slow(f"  {enemy.name} makes a venomous strike for {dmg}!")
@@ -81,9 +67,9 @@ def apply_enemy_weak(stacks=2):
     return effect
 
 
-def stun_attack():
+def stun_attack(damage_expr="1d6+3"):
     def effect(enemy, player):
-        dmg = random.randint(4, enemy.attack_power)
+        dmg = roll(damage_expr)
         from utils.status_effects import consume_block
         actual, absorbed = consume_block(player, dmg)
         print_slow(f"  {enemy.name} delivers a stunning blow for {dmg}!")
@@ -94,27 +80,13 @@ def stun_attack():
     return effect
 
 
-def self_heal(amount=10):
+def self_heal(amount_expr="1d8+2"):
     def effect(enemy, player):
+        amount = roll(amount_expr)
         healed = min(amount, enemy.max_health - enemy.health)
         enemy.health = min(enemy.health + amount, enemy.max_health)
         print_slow(f"  {enemy.name} regenerates {healed} HP! (HP: {enemy.health}/{enemy.max_health})")
     return effect
-
-
-def double_hit():
-    def effect(enemy, player):
-        from utils.status_effects import consume_block
-        print_slow(f"  {enemy.name} attacks twice!")
-        for i in range(2):
-            dmg = random.randint(3, max(3, enemy.attack_power // 2))
-            actual, absorbed = consume_block(player, dmg)
-            print_slow(f"    Hit {i+1}: {dmg}" + (f" — blocked {absorbed}, taking {actual}" if absorbed else ""))
-            if actual:
-                player.take_damage(actual)
-        print_slow(f"  Your HP: {player.health}")
-    return effect
-
 
 def volatile_self():
     def effect(enemy, player):
@@ -123,9 +95,9 @@ def volatile_self():
     return effect
 
 
-def disorient_attack():
+def disorient_attack(damage_expr="1d6+3"):
     def effect(enemy, player):
-        dmg = random.randint(4, enemy.attack_power)
+        dmg = roll(damage_expr)
         from utils.status_effects import consume_block
         actual, absorbed = consume_block(player, dmg)
         print_slow(f"  {enemy.name} spins and slashes for {dmg}!")
@@ -135,12 +107,21 @@ def disorient_attack():
         print_slow(f"  Your HP: {player.health} — you are DISORIENTED!")
     return effect
 
+#not implemented
+def shield_self(block_dice="1d8+4"):
+    """Signals combat loop to grant block to self."""
+    def effect(enemy, player):
+        amount = roll(block_dice)
+        print_slow(f"  {enemy.name} raises a spectral barrier for all allies!")
+        enemy.statuses["_shield_allies"] = amount
+    return effect
 
-def shield_allies(block_amount=8):
+def shield_allies(block_dice="1d8+4"):
     """Signals combat loop to grant block to all living enemies."""
     def effect(enemy, player):
+        amount = roll(block_dice)
         print_slow(f"  {enemy.name} raises a spectral barrier for all allies!")
-        enemy.statuses["_shield_allies"] = block_amount
+        enemy.statuses["_shield_allies"] = amount
     return effect
 
 
@@ -153,11 +134,6 @@ def fortify_self(stacks=1):
 
 
 def haste_self(stacks=2):
-    """
-    Grant the enemy bonus AP this turn.
-    With the AP system, Speed on an enemy adds to current_ap at turn start
-    (handled in CombatSession._enemy_act). Stacks are consumed there.
-    """
     def effect(enemy, player):
         from utils.status_effects import apply_speed
         print_slow(f"  {enemy.name} surges with unnatural speed!")
@@ -195,9 +171,7 @@ def move(name: str, weight: int, effect_fn, cooldown: int = 0, ap_cost: int = 4)
     """
     Create an EnemyMove.
 
-    ap_cost is required at every call site in enemy_data.py so costs are
-    always explicit — no silent defaults.  The parameter has a fallback of 4
-    (standard attack cost) only so old call sites don't crash during migration.
+    ap_cost is required at every call site so costs are explicit.
     """
     from entities.enemy import EnemyMove
     return EnemyMove(name, weight, effect_fn, cooldown=cooldown, ap_cost=ap_cost)

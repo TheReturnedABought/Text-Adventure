@@ -239,108 +239,99 @@ def show_relics(player):
 # ── Map renderer ──────────────────────────────────────────────────────────────
 
 def show_map(start_room, current_room):
-    def show_map(start_room, current_room):
-        """
-        Render a non-Euclidean ASCII map of all explored rooms (visit_count > 0).
-        Unexplored neighbours of visited rooms show as [???].
-        The current room is marked with *.
-        """
-        from collections import deque, defaultdict
+    """
+    Render a non-Euclidean ASCII map of all explored rooms (visit_count > 0).
+    Unexplored neighbours of visited rooms show as [???].
+    The current room is marked with *.
+    """
+    from collections import deque, defaultdict
 
-        # BFS to discover all rooms
-        q = deque([start_room])
-        seen = {id(start_room)}
-        room_graph = defaultdict(list)  # room -> list of (direction, neighbor)
-        room_names = {}  # room -> display name
+    # BFS to discover all rooms
+    q = deque([start_room])
+    seen = {id(start_room)}
+    room_graph = defaultdict(list)  # room -> list of (direction, neighbor)
+    room_names = {}  # room -> display name
 
-        while q:
-            room = q.popleft()
-            room_names[room] = room.name if room.visit_count > 0 else "???"
-            for direction, neighbor in room.connections.items():
-                room_graph[room].append((direction, neighbor))
-                if id(neighbor) not in seen:
-                    seen.add(id(neighbor))
-                    q.append(neighbor)
+    while q:
+        room = q.popleft()
+        room_names[room] = room.name if room.visit_count > 0 else "???"
+        for direction, neighbor in room.connections.items():
+            room_graph[room].append((direction, neighbor))
+            if id(neighbor) not in seen:
+                seen.add(id(neighbor))
+                q.append(neighbor)
 
-        # Dynamic position assignment for ASCII layout
-        positions = {}  # room -> (x, y)
-        spacing_x, spacing_y = 12, 4
-        visited = set()
+    # Dynamic position assignment for ASCII layout
+    positions = {}  # room -> (x, y)
+    spacing_x, spacing_y = 12, 4
+    visited = set()
 
-        def assign_pos(room, x, y):
-            if room in visited:
-                return
-            visited.add(room)
-            positions[room] = (x, y)
-            children = room_graph.get(room, [])
-            for i, (_, nbr) in enumerate(children):
-                dx = (i - len(children) // 2) * spacing_x
-                dy = spacing_y
-                assign_pos(nbr, x + dx, y + dy)
-
-        assign_pos(start_room, 0, 0)
-
-        if not positions:
-            print("  No map data available.")
+    def assign_pos(room, x, y):
+        if room in visited:
             return
+        visited.add(room)
+        positions[room] = (x, y)
+        children = room_graph.get(room, [])
+        for i, (_, nbr) in enumerate(children):
+            dx = (i - len(children) // 2) * spacing_x
+            dy = spacing_y
+            assign_pos(nbr, x + dx, y + dy)
 
-        # Prepare canvas
-        xs = [x for x, y in positions.values()]
-        ys = [y for x, y in positions.values()]
-        min_x, max_x = min(xs), max(xs)
-        min_y, max_y = min(ys), max(ys)
-        width = max_x - min_x + spacing_x
-        height = max_y - min_y + spacing_y
-        canvas = [[" "] * width for _ in range(height)]
+    assign_pos(start_room, 0, 0)
 
-        def put_text(cx, cy, text):
-            x0, y0 = cx - min_x, cy - min_y
-            for i, ch in enumerate(text):
-                if 0 <= x0 + i < width and 0 <= y0 < height:
-                    canvas[y0][x0 + i] = ch
+    if not positions:
+        print("  No map data available.")
+        return
 
-        # Draw rooms
-        for room, (x, y) in positions.items():
-            name = room_names[room]
-            marker = "*" if room == current_room else ""
-            text = f"[{name}{marker}]"
-            put_text(x, y, text)
+    # Prepare canvas
+    xs = [x for x, y in positions.values()]
+    ys = [y for x, y in positions.values()]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width  = max_x - min_x + spacing_x
+    height = max_y - min_y + spacing_y
+    canvas = [[" "] * width for _ in range(height)]
 
-        # Draw connections
-        for room, links in room_graph.items():
-            x0, y0 = positions[room]
-            for _, nbr in links:
-                if nbr not in positions:
-                    continue
-                x1, y1 = positions[nbr]
-                # vertical line
-                if x0 == x1:
-                    for y_line in range(min(y0, y1) + 1, max(y0, y1)):
-                        put_text(x0, y_line, "|")
-                # horizontal line
-                elif y0 == y1:
-                    for x_line in range(min(x0, x1) + 1, max(x0, x1)):
-                        put_text(x_line, y0, "-")
-                # diagonal approximation
-                else:
-                    dx = 1 if x1 > x0 else -1
-                    dy = 1 if y1 > y0 else -1
-                    xi, yi = x0, y0
-                    while xi != x1 or yi != y1:
-                        if xi != x1:
-                            xi += dx
-                        if yi != y1:
-                            yi += dy
-                        put_text(xi, yi, "/")
+    def put_text(cx, cy, text):
+        x0, y0 = cx - min_x, cy - min_y
+        for i, ch in enumerate(text):
+            if 0 <= x0 + i < width and 0 <= y0 < height:
+                canvas[y0][x0 + i] = ch
 
-        # Print canvas
-        for row in canvas:
-            print("".join(row))
+    # Draw rooms
+    for room, (x, y) in positions.items():
+        name   = room_names[room]
+        marker = "*" if room == current_room else ""
+        put_text(x, y, f"[{name}{marker}]")
 
-        # Legend / separator
-        print(f"  {'─' * 52}")
-        print("  [*Name] = you are here  |  [???] = unexplored")
-        print()
+    # Draw connections
+    for room, links in room_graph.items():
+        x0, y0 = positions[room]
+        for _, nbr in links:
+            if nbr not in positions:
+                continue
+            x1, y1 = positions[nbr]
+            if x0 == x1:
+                for y_line in range(min(y0, y1) + 1, max(y0, y1)):
+                    put_text(x0, y_line, "|")
+            elif y0 == y1:
+                for x_line in range(min(x0, x1) + 1, max(x0, x1)):
+                    put_text(x_line, y0, "-")
+            else:
+                dx = 1 if x1 > x0 else -1
+                dy = 1 if y1 > y0 else -1
+                xi, yi = x0, y0
+                while xi != x1 or yi != y1:
+                    if xi != x1: xi += dx
+                    if yi != y1: yi += dy
+                    put_text(xi, yi, "/")
+
+    # Print canvas
+    for row in canvas:
+        print("".join(row))
+    print(f"  {'─' * 52}")
+    print("  [*Name] = you are here  |  [???] = unexplored")
+    print()
 
 
 # ── Journal display delegated to Journal.show() ──────────────────────────────

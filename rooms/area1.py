@@ -21,7 +21,7 @@ from rooms.enemy_data import (
     make_castle_guard,
     make_giant_rat, make_rat_swarm,
     make_skeleton_servant,
-    make_crypt_warden, make_wraith, make_bone_archer
+    make_crypt_warden, make_wraith, make_bone_archer, make_skeleton_guard
 )
 from utils.relics   import get_relic
 from utils.helpers  import print_slow
@@ -483,6 +483,9 @@ def setup_area1():
     servants_kitchen.enemies.append(make_skeleton_servant())
     servants_kitchen.enemies.append(make_skeleton_servant())
     servants_kitchen.enemies.append(make_skeleton_servant())
+
+    hidden_armory.enemies.append(make_skeleton_guard())
+    hidden_armory.enemies.append(make_skeleton_servant())
 
     crypt_gate.enemies.append(make_crypt_warden())
     crypt_gate.enemies.append(make_wraith())

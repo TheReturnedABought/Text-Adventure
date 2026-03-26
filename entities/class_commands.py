@@ -48,13 +48,13 @@ def _alive(enemies):
 #  SOLDIER COMMANDS
 # ────────────────────────────────
 def cmd_brace(player, enemies, target, ctx):
-    amount = roll("1d8") if get_block(player) == 0 else roll("1d3")
+    amount = roll("1d6+2") if get_block(player) == 0 else roll("1d6")
     apply_block(player, amount)
     print_slow(f"  🛡 Brace — +{amount} Block!")
     return True
 
 def cmd_guard(player, enemies, target, ctx):
-    blk = roll("1d8")
+    blk = roll("1d6+1")
     apply_block(player, blk)
     player.combat_flags["guard_counter"] = 10
     print_slow(f"  🛡 Guard — +{blk} Block! (Counter 10 if block breaks)")
@@ -71,7 +71,7 @@ def cmd_discipline(player, enemies, target, ctx):
     removed = [d for d in debuffs if d in player.statuses]
     for d in removed:
         player.statuses.pop(d, None)
-    blk = roll("2d10+3")
+    blk = roll("3d10+3")
     apply_block(player, blk)
     ctx["discipline_no_atk"] = True
     summary = ", ".join(removed) if removed else "nothing"
@@ -79,7 +79,7 @@ def cmd_discipline(player, enemies, target, ctx):
     return True
 
 def cmd_rally(player, enemies, target, ctx):
-    blk = roll("1d6")
+    blk = roll("1d10")
     apply_block(player, blk)
     ctx["rally_bonus"] = ctx.get("rally_bonus",0) + blk
     print_slow(f"  ⚔ Rally — +{blk} Block! Next attack +{blk} damage.")
@@ -101,10 +101,9 @@ def cmd_cleave(player, enemies, target, ctx):
     return True
 
 def cmd_fortify(player, enemies, target, ctx):
-    blk = roll("1d5")
-    apply_block(player, blk)
-    player.combat_flags["fortify"] = True
-    print_slow(f"  🛡 Fortify — +{blk} Block now; continues every turn!")
+    from utils.status_effects import apply_fortify
+    apply_fortify(player, 5)
+    print_slow(f"  🏰 Fortify — Fortify 5 applied! Gain 5 Block at the start of every turn.")
     return True
 
 def cmd_warcry(player, enemies, target, ctx):
@@ -382,20 +381,19 @@ def cmd_obliterate(player, enemies, target, ctx):
 
 def cmd_rift(player, enemies, target, ctx):
     """
-    Mage AoE attack — strikes all enemies with arcane energy.
-    MP cost: 3
-    Damage: 3d6 per enemy
+    Mage utility — restore 3 MP; apply Vulnerable 1 to yourself and all living enemies.
+    MP cost: 1
     """
-    if not _spend_mp(player, 3, ctx.get("ward_active")):
+    if not _spend_mp(player, 1, ctx.get("ward_active")):
         return False
-    alive_enemies = _alive(enemies)
-    if not alive_enemies:
-        print_slow("  No enemies to hit with Rift.")
-        return False
-    print_slow(f"  {BLUE}🌌 Rift — unleashing arcane energy on all enemies!{RESET}")
-    for e in alive_enemies:
-        dmg = roll("3d6")
-        _deal(player, e, dmg, ctx, "Rift:")
+    from utils.status_effects import apply_vulnerable
+    gained = min(3, player.max_mana - player.mana)
+    player.mana += gained
+    print_slow(f"  {BLUE}🌌 Rift — +{gained} MP! ({player.mana}/{player.max_mana}){RESET}")
+    apply_vulnerable(player, 1)
+    for e in _alive(enemies):
+        apply_vulnerable(e, 1)
+    print_slow(f"  {BLUE}🌌 Rift — Vulnerable 1 on you and all enemies!{RESET}")
     return True
 
 def cmd_apocalypse(player, enemies, target, ctx):
