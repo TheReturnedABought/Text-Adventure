@@ -8,9 +8,9 @@ from utils.helpers import print_slow, BLUE, RESET
 from utils.status_effects import (
     apply_poison, apply_stun, apply_vulnerable, apply_weak,
     apply_rage, apply_volatile, apply_disorient, apply_block,
-    consume_block, get_block
+    consume_block, get_block, apply_speed
 )
-from utils.dice import roll
+from utils.dice import roll, add_dice
 
 # ────────────────────────────────
 #  Shared helpers
@@ -44,18 +44,54 @@ def _require_target(target, cmd):
 def _alive(enemies):
     return [e for e in enemies if e.health > 0]
 
+def _roll_offensive(player, expr):
+    bonus = player.statuses.get("strength", 0)
+    return roll(add_dice(expr, bonus))
+
+def _roll_defensive(player, expr):
+    bonus = player.statuses.get("dexterity", 0)
+    return roll(add_dice(expr, bonus))
+
+def _prompt_multi_targets(enemies, hits, label="targets"):
+    alive = _alive(enemies)
+    if not alive:
+        return []
+    if len(alive) == 1:
+        return [alive[0]] * hits
+
+    print_slow(f"\n  Choose {hits} {label} (repeats allowed):")
+    for i, e in enumerate(alive, 1):
+        print(f"    [{i}] {e.name:<14} HP:{e.health}/{e.max_health}")
+
+    chosen = []
+    for idx in range(hits):
+        while True:
+            raw = input(f"  Target {idx+1}/{hits} (1-{len(alive)}): ").strip()
+            if raw.isdigit() and 1 <= int(raw) <= len(alive):
+                chosen.append(alive[int(raw)-1])
+                break
+            print("  Invalid choice.")
+    return chosen
+
+def _grant_block(player, amount):
+    if player.combat_flags.get("no_block_this_turn"):
+        print_slow("  ⚔ You cannot gain Block for the rest of this turn.")
+        return False
+    apply_block(player, amount)
+    return True
+
 # ────────────────────────────────
 #  SOLDIER COMMANDS
 # ────────────────────────────────
 def cmd_brace(player, enemies, target, ctx):
-    amount = roll("1d6+2") if get_block(player) == 0 else roll("1d6")
-    apply_block(player, amount)
+    amount = _roll_defensive(player, "1d6+2") if get_block(player) == 0 else _roll_defensive(player, "1d6")
+    _grant_block(player, amount)
     print_slow(f"  🛡 Brace — +{amount} Block!")
     return True
 
 def cmd_guard(player, enemies, target, ctx):
-    blk = roll("1d6+1")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "1d6+1")
+    _grant_block(player, blk)
     player.combat_flags["guard_counter"] = 10
     print_slow(f"  🛡 Guard — +{blk} Block! (Counter 10 if block breaks)")
     return True
@@ -71,22 +107,22 @@ def cmd_discipline(player, enemies, target, ctx):
     removed = [d for d in debuffs if d in player.statuses]
     for d in removed:
         player.statuses.pop(d, None)
-    blk = roll("3d10+3")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "3d10+3")
+    _grant_block(player, blk)
     ctx["discipline_no_atk"] = True
     summary = ", ".join(removed) if removed else "nothing"
     print_slow(f"  ⚔ Discipline — cleared [{summary}]; +{blk} Block; attacks disabled this turn.")
     return True
 
 def cmd_rally(player, enemies, target, ctx):
-    blk = roll("1d10")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "1d10")
+    _grant_block(player, blk)
     ctx["rally_bonus"] = ctx.get("rally_bonus",0) + blk
     print_slow(f"  ⚔ Rally — +{blk} Block! Next attack +{blk} damage.")
     return True
 
 def cmd_cleave(player, enemies, target, ctx):
-    dmg = int(roll("2d6+6")*0.75)
+    dmg = int(_roll_offensive(player, "2d6+6")*0.75)
     print_slow(f"  ⚔ Cleave — striking all enemies twice for {dmg} each!")
     for e in _alive(enemies):
         for i in range(2):
@@ -102,8 +138,8 @@ def cmd_cleave(player, enemies, target, ctx):
 
 def cmd_fortify(player, enemies, target, ctx):
     from utils.status_effects import apply_fortify
-    apply_fortify(player, 5)
-    print_slow(f"  🏰 Fortify — Fortify 5 applied! Gain 5 Block at the start of every turn.")
+    apply_fortify(player, 4)
+    print_slow(f"  🏰 Fortify — Fortify 4 applied! Gain 4 Block at the start of every turn.")
     return True
 
 def cmd_warcry(player, enemies, target, ctx):
@@ -114,8 +150,8 @@ def cmd_warcry(player, enemies, target, ctx):
     return True
 
 def cmd_sentinel(player, enemies, target, ctx):
-    blk = roll("2d8")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "2d8")
+    _grant_block(player, blk)
     player.combat_flags["sentinel_thorns"] = 4
     print_slow(f"  🛡 Sentinel — +{blk} Block! Attackers take 4 thorns.")
     return True
@@ -126,7 +162,7 @@ def cmd_execute(player, enemies, target, ctx):
     blk = get_block(player)
     block_mult = blk // 10
     player.statuses.pop("block", None)
-    dmg = int(roll("2d6+6") * (3.0 if target.health/target.max_health < 0.3 else 2.0)) + block_mult
+    dmg = int(_roll_offensive(player, "2d6+6") * (3.0 if target.health/target.max_health < 0.3 else 2.0)) + block_mult
     _deal(player, target, dmg, ctx, "Execute:")
     print_slow(f"  ⚔ Execute ×{2 if target.health/target.max_health >= 0.3 else 3:.1f} (+{block_mult} from Block)")
     return True
@@ -134,16 +170,15 @@ def cmd_execute(player, enemies, target, ctx):
 def cmd_juggernaut(player, enemies, target, ctx):
     if not _require_target(target, "juggernaut"):
         return False
-    dmg = roll("2d6+6")
+    dmg = _roll_offensive(player, "2d6+6")
     _deal(player, target, dmg, ctx, "Juggernaut:")
-    apply_block(player, dmg)
+    _grant_block(player, dmg)
     print_slow(f"  🛡 Juggernaut — gained {dmg} Block!")
     return True
 
 def cmd_unbreakable(player, enemies, target, ctx):
-    player.combat_flags["unbreakable"] = True
     player.combat_flags["persistent_block"] = True
-    print_slow(f"  🛡 Unbreakable — damage capped at 6; Block persists between turns!")
+    print_slow(f"  🛡 Unbreakable — Block no longer resets at end of turn this combat.")
     return True
 
 def cmd_overwhelm(player, enemies, target, ctx):
@@ -158,19 +193,32 @@ def cmd_overwhelm(player, enemies, target, ctx):
         print_slow(f"  ⚔ Overwhelm — Weak 2 + Vulnerable 2 on {target.name}!")
     return True
 
+def cmd_downcut(player, enemies, target, ctx):
+    if not _require_target(target, "downcut"):
+        return False
+    dmg = _roll_offensive(player, "2d10+4")
+    _deal(player, target, dmg, ctx, "Downcut:")
+    player.combat_flags["no_block_this_turn"] = True
+    print_slow("  ⚔ Downcut — you cannot gain Block for the rest of this turn.")
+    return True
+
+def cmd_defiant(player, enemies, target, ctx):
+    player.combat_flags["defiant_ready"] = True
+    print_slow("  ⚔ Defiant — if you end this round with Block, gain +2 AP next turn and +2 Strength.")
+    return True
+
 # ────────────────────────────────
 #  ROGUE COMMANDS
 # ────────────────────────────────
 def cmd_cut(player, enemies, target, ctx):
     if not _require_target(target, "cut"): return False
-    dmg = roll("1d4+2")
+    dmg = _roll_offensive(player, "1d4+4")
     _deal(player, target, dmg, ctx, "Cut:")
     return True
 
 def cmd_flow(player, enemies, target, ctx):
-    ctx["flow_active"] = True
-    ctx.setdefault("flow_used", set())
-    print_slow(f"  🗡 Flow — actions cost −1 AP this turn; no repeating commands!")
+    apply_speed(player, 5)
+    print_slow("  🗡 Flow — Speed 5 applied (next 5 actions cost -1 AP).")
     return True
 
 def cmd_feint(player, enemies, target, ctx):
@@ -195,23 +243,28 @@ def cmd_venom(player, enemies, target, ctx):
     return True
 
 def cmd_flurry(player, enemies, target, ctx):
-    if not _require_target(target, "flurry"): return False
-    print_slow(f"  🗡 Flurry — three rapid strikes on {target.name}!")
+    targets = _prompt_multi_targets(enemies, 3, "flurry hits")
+    if not targets:
+        return False
+    print_slow("  🗡 Flurry — hit three times for 1d4+3 each (same or different targets).")
     for i in range(3):
-        if target.health<=0: break
-        dmg = roll("1d4+2")
-        actual, absorbed = consume_block(target, dmg)
-        target.take_damage(actual)
+        t = targets[i]
+        if t.health <= 0:
+            continue
+        dmg = _roll_offensive(player, "1d4+3")
+        actual, absorbed = consume_block(t, dmg)
+        t.take_damage(actual)
         tag = f" (blocked {absorbed})" if absorbed else ""
-        print_slow(f"    Hit {i+1}: {actual}{tag}")
+        print_slow(f"    Hit {i+1} on {t.name}: {actual}{tag}")
     return True
 
 def cmd_dash(player, enemies, target, ctx):
-    blk = roll("1d8")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "1d6+2")
+    _grant_block(player, blk)
     if target and target.health>0:
-        _deal(player, target, blk, ctx, "Dash:")
-    print_slow(f"  🗡 Dash — +{blk} Block!")
+        _deal(player, target, 8, ctx, "Dash:")
+    apply_speed(player, 1)
+    print_slow(f"  🗡 Dash — +{blk} Block, dealt 8, gained Speed 1.")
     return True
 
 def cmd_toxin(player, enemies, target, ctx):
@@ -233,7 +286,7 @@ def cmd_assault(player, enemies, target, ctx):
     print_slow(f"  🗡 Assault — {hits} strikes!")
     for i in range(hits):
         if target.health<=0: break
-        dmg = roll(f"1d6+{i}")
+        dmg = _roll_offensive(player, f"1d6+{i}")
         actual, absorbed = consume_block(target,dmg)
         target.take_damage(actual)
         tag = f" (blocked {absorbed})" if absorbed else ""
@@ -241,8 +294,23 @@ def cmd_assault(player, enemies, target, ctx):
     return True
 
 def cmd_evade(player, enemies, target, ctx):
-    player.combat_flags["evade"] = True
-    print_slow(f"  🗡 Evade — you prepare to dodge the next attack! (+2 AP if triggered)")
+    player.statuses["evade"] = max(1, player.statuses.get("evade", 0))
+    print_slow(f"  🗡 Evade — active for this enemy turn: 50% chance enemy attacks miss you; gain +2 AP when triggered.")
+    return True
+
+def cmd_aim(player, enemies, target, ctx):
+    if player.combat_flags.get("aim_used_turn"):
+        print_slow("  🗡 Aim can only be used once per turn.")
+        return False
+    player.combat_flags["aim_used_turn"] = True
+    player.statuses["aim"] = player.statuses.get("aim", 0) + 1
+    player.statuses["strength"] = player.statuses.get("strength", 0) + 1
+    print_slow("  🗡 Aim — next attack cannot miss; gain Strength 1 this combat.")
+    return True
+
+def cmd_weave(player, enemies, target, ctx):
+    player.statuses["dexterity"] = player.statuses.get("dexterity", 0) + 1
+    print_slow("  🗡 Weave — gain Dexterity 1 this combat.")
     return True
 
 def cmd_pandemic(player, enemies, target, ctx):
@@ -255,7 +323,7 @@ def cmd_pandemic(player, enemies, target, ctx):
 
 def cmd_assassinate(player, enemies, target, ctx):
     if not _require_target(target,"assassinate"): return False
-    dmg = roll("3d6+10")
+    dmg = _roll_offensive(player, "3d6+10")
     if ctx.get("actions_this_turn",0)==0:
         dmg = int(dmg*1.5)
         print_slow("  🗡 Assassinate — FIRST STRIKE BONUS!")
@@ -274,33 +342,84 @@ def cmd_shadowstrike(player, enemies, target, ctx):
 #  MAGE COMMANDS
 # ────────────────────────────────
 def _spend_mp(player, cost, ward=False):
-    real_cost = max(0, cost - (1 if ward else 0))
+    discount = player.combat_flags.pop("plan_mp_discount_active", 0)
+    coalesce_discount = 1 if player.combat_flags.get("coalesce_mp_discount_turns", 0) > 0 else 0
+    real_cost = max(0, cost - (1 if ward else 0) - discount - coalesce_discount)
     if player.mana < real_cost:
         print_slow(f"  {BLUE}Not enough MP! Need {real_cost}, have {player.mana}.{RESET}")
         return False
     player.mana -= real_cost
     if real_cost>0:
         print_slow(f"  {BLUE}[-{real_cost} MP → {player.mana}/{player.max_mana}]{RESET}")
+    if player.combat_flags.get("coalesce_mp_discount_turns", 0) > 0:
+        player.combat_flags["coalesce_mp_discount_turns"] -= 1
+        if player.combat_flags["coalesce_mp_discount_turns"] <= 0:
+            player.combat_flags.pop("coalesce_mp_discount_turns", None)
+            print_slow(f"  {BLUE}✦ Coalesce's MP discount fades.{RESET}")
     return True
 
 def cmd_spark(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
-    if not _require_target(target,"spark"): return False
-    dmg = roll("1d8+4")
-    _deal(player,target,dmg,ctx,"⚡ Spark:")
+    if not _spend_mp(player,0,ctx.get("ward_active")): return False
+    targets = _prompt_multi_targets(enemies, 2, "spark hits")
+    if not targets:
+        return False
+    print_slow("  ⚡ Spark — hit twice for 1d4+2 Lightning damage each.")
+    for i in range(2):
+        t = targets[i]
+        if t.health <= 0:
+            continue
+        dmg = _roll_offensive(player, "1d4+2")
+        _deal(player, t, dmg, ctx, "⚡ Spark:")
     return True
 
 def cmd_bolt(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
+    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"bolt"): return False
-    dmg = roll("2d8+8")
+    dmg = _roll_offensive(player, "2d8+4")
     _deal(player,target,dmg,ctx,"⚡ Bolt:")
+    apply_vulnerable(target, 1)
+    if player.statuses.get("targeting", 0) > 0:
+        player.statuses["targeting"] -= 1
+        extra = _prompt_multi_targets(_alive(enemies), 1, "conduit bonus hit")
+        if extra:
+            _deal(player, extra[0], _roll_offensive(player, "2d8+4"), ctx, "⚡ Conduit bolt:")
+            apply_vulnerable(extra[0], 1)
+    return True
+
+def cmd_coalesce(player, enemies, target, ctx):
+    if not _spend_mp(player,0,ctx.get("ward_active")): return False
+    blk = _roll_defensive(player, "2d8+8")
+    _grant_block(player, blk)
+    player.combat_flags["coalesce_mp_discount_turns"] = 2
+    print_slow(f"  {BLUE}🔮 Coalesce — +{blk} Block; spells cost −1 MP for 2 turns.{RESET}")
+    return True
+
+def cmd_delay(player, enemies, target, ctx):
+    if not _spend_mp(player,1,ctx.get("ward_active")): return False
+    if not _require_target(target, "delay"): return False
+    from utils.status_effects import apply_slow
+    apply_slow(target, 1)
+    print_slow(f"  {BLUE}🔮 Delay — {target.name} is Slowed 1.{RESET}")
+    return True
+
+def cmd_wave(player, enemies, target, ctx):
+    if not _spend_mp(player,1,ctx.get("ward_active")): return False
+    print_slow(f"  {BLUE}🌊 Wave — lightning hits all enemies!{RESET}")
+    for e in _alive(enemies):
+        _deal(player, e, _roll_offensive(player, "1d6+4"), ctx, "Wave:")
+    return True
+
+def cmd_storm(player, enemies, target, ctx):
+    if not _spend_mp(player,2,ctx.get("ward_active")): return False
+    print_slow(f"  {BLUE}⛈ Storm — heavy lightning hits all enemies!{RESET}")
+    for e in _alive(enemies):
+        _deal(player, e, _roll_offensive(player, "2d6+6"), ctx, "Storm:")
     return True
 
 def cmd_ward(player, enemies, target, ctx):
     if not _spend_mp(player,1,ctx.get("ward_active")): return False
-    blk = roll("1d8+2")
-    apply_block(player, blk)
+    blk = _roll_defensive(player, "1d8+2")
+    _grant_block(player, blk)
     ctx["ward_active"]=True
     print_slow(f"  {BLUE}🛡 Ward — +{blk} Block! Spells cost −1 MP this turn.{RESET}")
     return True
@@ -333,26 +452,19 @@ def cmd_charm(player, enemies, target, ctx):
 
 def cmd_drain(player, enemies, target, ctx):
     if not _spend_mp(player,1,ctx.get("ward_active")): return False
-    tgt = target if target and target.health>0 else None
-    if not tgt:
-        alive = _alive(enemies)
-        if alive:
-            tgt = max(alive,key=lambda e:e.statuses.get("poison",0))
-    if tgt:
-        stacks = tgt.statuses.pop("poison",0)
-        if stacks:
-            player.heal(stacks)
-            print_slow(f"  {BLUE}🔮 Drain — absorbed {stacks} poison from {tgt.name}, healed {stacks} HP!{RESET}")
-        else:
-            player.heal(5)
-            print_slow(f"  {BLUE}🔮 Drain — no poison on target; healed 5 HP.{RESET}")
+    if not _require_target(target, "drain"):
+        return False
+    amount = _roll_offensive(player, "1d6+2")
+    _deal(player, target, amount, ctx, "Drain:")
+    player.heal(amount)
+    print_slow(f"  {BLUE}🔮 Drain — healed for {amount}.{RESET}")
     return True
 
 def cmd_shatter(player, enemies, target, ctx):
     if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"shatter"): return False
-    vuln = max(target.statuses.get("vulnerable",0),1)
-    dmg = roll("2d6+4")*vuln
+    mana_bonus = max(player.mana, 0)
+    dmg = (roll("1d6") * mana_bonus) + 3
     _deal(player,target,dmg,ctx,"Shatter:")
     return True
 
@@ -404,6 +516,54 @@ def cmd_apocalypse(player, enemies, target, ctx):
     _deal(player,target,dmg,ctx,"Apocalypse:")
     return True
 
+def cmd_conduit(player, enemies, target, ctx):
+    if not _spend_mp(player,2,ctx.get("ward_active")):
+        return False
+    player.statuses["targeting"] = player.statuses.get("targeting", 0) + 1
+    print_slow(f"  {BLUE}🔮 Conduit — next non-AOE spell hits an additional target.{RESET}")
+    return True
+
+def cmd_icewall(player, enemies, target, ctx):
+    if not _spend_mp(player,1,ctx.get("ward_active")):
+        return False
+    blk = _roll_defensive(player, "2d8+3")
+    _grant_block(player, blk)
+    for e in _alive(enemies):
+        apply_weak(e, 1)
+    print_slow(f"  {BLUE}🧊 Icewall — +{blk} Block and Weak 1 to all enemies.{RESET}")
+    return True
+
+def cmd_quickshot(player, enemies, target, ctx):
+    targets = _prompt_multi_targets(enemies, 4, "quickshot hits")
+    if not targets:
+        return False
+    for t in targets:
+        dmg = _roll_offensive(player, "1d4+2")
+        _deal(player, t, dmg, ctx, "Quickshot:")
+    return True
+
+def cmd_plan(player, enemies, target, ctx):
+    ap_discount = roll("1d4")
+    player.combat_flags["plan_ap_discount_pending"] = ap_discount
+    player.combat_flags["plan_mp_discount_pending"] = 1
+    print_slow(f"  📜 Plan — queued. At the start of your next turn, your first command gets -{ap_discount} AP and -1 MP.")
+    return True
+
+def cmd_shielded(player, enemies, target, ctx):
+    if not _spend_mp(player,1,ctx.get("ward_active")): return False
+    from utils.status_effects import apply_fortify
+    apply_fortify(player, 2)
+    player.combat_flags["shielded_pending"] = 1
+    print_slow("  🛡 Shielded — Fortify 2. Next turn, your damaging actions grant 2d4 Block.")
+    return True
+
+def cmd_tempest(player, enemies, target, ctx):
+    if not _spend_mp(player,3,ctx.get("ward_active")): return False
+    print_slow(f"  {BLUE}🌩 Tempest — devastating lightning on all enemies!{RESET}")
+    for e in _alive(enemies):
+        _deal(player, e, _roll_offensive(player, "3d8+3"), ctx, "Tempest:")
+    return True
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Registry  {command_name: (fn, needs_single_target)}
 # ─────────────────────────────────────────────────────────────────────────────
@@ -423,6 +583,8 @@ COMMAND_EFFECTS = {
     "juggernaut":  (cmd_juggernaut,  True),
     "unbreakable": (cmd_unbreakable, False),
     "overwhelm":   (cmd_overwhelm,   True),
+    "downcut":     (cmd_downcut,     True),
+    "defiant":     (cmd_defiant,     False),
     # Rogue
     "cut":          (cmd_cut,         True),
     "flow":         (cmd_flow,        False),
@@ -434,21 +596,29 @@ COMMAND_EFFECTS = {
     "toxin":        (cmd_toxin,       True),
     "assault":      (cmd_assault,     True),
     "evade":        (cmd_evade,       False),
+    "aim":          (cmd_aim,         False),
+    "weave":        (cmd_weave,       False),
     "pandemic":     (cmd_pandemic,    True),
     "assassinate":  (cmd_assassinate, True),
     "shadowstrike": (cmd_shadowstrike,True),
     # Mage
-    "spark":       (cmd_spark,       True),
+    "spark":       (cmd_spark,       False),
     "bolt":        (cmd_bolt,        True),
-    "ward":        (cmd_ward,        False),
-    "curse":       (cmd_curse,       True),
-    "blaze":       (cmd_blaze,       True),
-    "charm":       (cmd_charm,       True),
+    "coalesce":    (cmd_coalesce,    False),
+    "delay":       (cmd_delay,       True),
+    "wave":        (cmd_wave,        False),
+    "storm":       (cmd_storm,       False),
     "drain":       (cmd_drain,       True),
-    "shatter":     (cmd_shatter,     True),
     "silence":     (cmd_silence,     True),
     "torment":     (cmd_torment,     False),
     "obliterate":  (cmd_obliterate,  True),
     "rift":        (cmd_rift,        False),
+    "tempest":     (cmd_tempest,     False),
     "apocalypse":  (cmd_apocalypse,  True),
+    "conduit":     (cmd_conduit,     False),
+    "icewall":     (cmd_icewall,     False),
+    # Shared
+    "quickshot":   (cmd_quickshot,   False),
+    "plan":        (cmd_plan,        False),
+    "shielded":    (cmd_shielded,    False),
 }

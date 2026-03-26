@@ -118,6 +118,7 @@ class SaveManager:
             "max_health":             p.max_health,
             "mana":                   p.mana,
             "max_mana":               p.max_mana,
+            "max_ap":                 getattr(p, "max_ap", 12),
             "xp":                     p.xp,
             "level":                  p.level,
             "inventory":              list(p.inventory),
@@ -139,6 +140,8 @@ class SaveManager:
         player.max_health = data["max_health"]
         player.mana       = data["mana"]
         player.max_mana   = data["max_mana"]
+        player.max_ap     = data.get("max_ap", getattr(player, "max_ap", 12))
+        player.current_ap = min(player.current_ap, player.max_ap)
         player.xp         = data["xp"]
         player.level      = data["level"]
         player.inventory  = list(data["inventory"])

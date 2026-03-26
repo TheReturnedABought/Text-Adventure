@@ -29,7 +29,7 @@ import random
 from utils.dice      import roll as dice_roll
 from utils.helpers   import print_slow, print_status, BLUE, RESET
 from utils.constants import (
-    MAX_AP, BASE_BLOCK,
+    BASE_BLOCK,
     BASE_ATTACK_DICE, BASE_HEAL_DICE, HEAL_MP_COST,
     BASE_ATTACK_MIN, BASE_ATTACK_MAX, BASE_HEAL_MIN, BASE_HEAL_MAX,
     BASE_COMMANDS,
@@ -41,7 +41,7 @@ from utils.status_effects import (
     consume_weak, consume_vulnerable, consume_rage,
     format_statuses, get_block,
     get_regen, get_burden,
-    get_fortify, get_speed, get_slow, get_soul_tax, get_counter,
+    get_fortify, get_speed, get_slow, get_soul_tax,
     apply_weak, apply_speed, apply_slow,
 )
 from entities.relic import (
@@ -50,10 +50,16 @@ from entities.relic import (
 )
 from entities.class_commands import COMMAND_EFFECTS
 from entities.class_data import cmd_ap_cost, get_command_def
+from entities.class_data import cmd_mp_cost
 from game_engine.parser import parse_command
 
 _END = "end"; _NEXT = "next"; _DONE = "done"
 _STARLIT = set("starlit")
+_SHIELDED_DAMAGE_COMMANDS = {
+    "cut", "flurry", "dash", "assault", "assassinate", "shadowstrike", "pandemic",
+    "spark", "bolt", "wave", "storm", "drain", "torment", "obliterate", "tempest", "quickshot",
+    "apocalypse", "execute", "juggernaut", "downcut", "cleave",
+}
 
 
 def _win():
@@ -80,14 +86,17 @@ class CombatSession:
         while True:
             if not self._alive():
                 self._victory()
+                self._combat_end_cleanup()
                 break
             enemy_alive = self._player_turn()
             if self.player.health <= 0:
+                self._combat_end_cleanup()
                 break
             if not enemy_alive:
                 continue
             self._enemies_turn()
             if self.player.health <= 0:
+                self._combat_end_cleanup()
                 break
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -182,15 +191,24 @@ class CombatSession:
     def _regen_ap(self):
         p = self.player
         burden        = p.statuses.get("burden", 0)
-        effective_max = max(1, MAX_AP - burden)
+        effective_max = max(1, p.max_ap - burden)
         p.current_ap  = effective_max
         if burden:
-            print_slow(f"  ⚖️ Burden — max AP reduced to {effective_max}/{MAX_AP}!")
+            print_slow(f"  ⚖️ Burden — max AP reduced to {effective_max}/{p.max_ap}!")
 
         if p.combat_flags.get("evade_bonus_ap", 0):
             bonus = p.combat_flags.pop("evade_bonus_ap")
-            p.current_ap = min(MAX_AP, p.current_ap + bonus)
-            print_slow(f"  🗡 Evade bonus — +{bonus} AP! ({p.current_ap}/{MAX_AP})")
+            p.current_ap = min(p.max_ap, p.current_ap + bonus)
+            print_slow(f"  🗡 Evade bonus — +{bonus} AP! ({p.current_ap}/{p.max_ap})")
+
+        if p.combat_flags.get("plan_ap_discount_pending", 0):
+            p.combat_flags["plan_ap_discount_active"] = p.combat_flags.pop("plan_ap_discount_pending")
+            p.combat_flags["plan_mp_discount_active"] = p.combat_flags.pop("plan_mp_discount_pending", 0)
+            print_slow("  📜 Plan resolves — your first command this turn is discounted.")
+
+        if p.combat_flags.pop("shielded_pending", 0) > 0:
+            p.combat_flags["shielded_active"] = True
+            print_slow("  🛡 Shielded activates — damaging actions grant 2d4 Block this turn.")
 
         # Borrow penalty
         if p.combat_flags.get("borrow_penalty", 0):
@@ -257,10 +275,13 @@ class CombatSession:
         for e in self._alive():
             tick_statuses(e)
         tick_statuses(p)
+        p.combat_flags.pop("aim_used_turn", None)
+        p.combat_flags.pop("shielded_active", None)
 
         # Clear per-combat-turn relic flags
         p.combat_flags.pop("bloodstone_used", None)
         p.combat_flags.pop("block_was_zero", None)
+        p.combat_flags.pop("no_block_this_turn", None)
 
     # ══════════════════════════════════════════════════════════════════════════
     #  Per-action
@@ -291,6 +312,18 @@ class CombatSession:
             print_slow("  Type 'end' to end your turn.")
             return _NEXT
 
+        mp_spent = 0
+        if is_class and p.char_class != "mage":
+            cmd_def = get_command_def(p.char_class, command)
+            mp_cost = cmd_mp_cost(cmd_def) if cmd_def else 0
+            if p.mana < mp_cost:
+                print_slow(f"  Not enough MP! '{command}' needs {mp_cost}, you have {p.mana}.")
+                return _NEXT
+            if mp_cost > 0:
+                p.mana -= mp_cost
+                mp_spent = mp_cost
+                print_slow(f"  🔷 {command} costs {mp_cost} MP. (MP: {p.mana}/{p.max_mana})")
+
         # Record pre-block AP for BulwarkFragment
         if command == "block":
             p.combat_flags["block_was_zero"] = get_block(p) == 0
@@ -308,6 +341,8 @@ class CombatSession:
         if not success:
             p.current_ap += ap_cost
             ctx["ap_spent_this_turn"] -= ap_cost
+            if mp_spent:
+                p.mana = min(p.max_mana, p.mana + mp_spent)
             return _NEXT
 
         result = self._post_action(command, raw, action_target, ctx)
@@ -426,6 +461,10 @@ class CombatSession:
             else:
                 print_slow(f"  🕸 Slow — +1 AP! ({p.statuses.get('slow',0)} left)")
 
+        if p.combat_flags.get("plan_ap_discount_active", 0):
+            discount = p.combat_flags.pop("plan_ap_discount_active")
+            cost -= discount
+            print_slow(f"  📜 Plan — −{discount} AP on this command!")
         return max(1, cost)
 
     def _dispatch(self, command, raw, ctx):
@@ -468,6 +507,9 @@ class CombatSession:
         p.trigger_relics(TRIGGER_ON_ACTION, relic_target,
                          {**ctx, "raw": raw, "command": command})
 
+        if p.combat_flags.get("shielded_active") and command in _SHIELDED_DAMAGE_COMMANDS:
+            self._grant_shielded_block()
+
         w = _win()
         if w:
             w.set_combat(p, self.room, self.enemies)
@@ -490,10 +532,16 @@ class CombatSession:
             print_slow("  ⚔ Discipline active — cannot attack this turn.")
             return
 
-        if is_disoriented(p) and not ctx.get("feint_no_miss"):
+        guaranteed_hit = ctx.get("feint_no_miss") or p.statuses.get("aim", 0) > 0
+        if is_disoriented(p) and not guaranteed_hit:
             if random.random() < 0.5:
                 print_slow("  🌪 Disoriented — your attack misses!")
                 return
+        if p.statuses.get("aim", 0) > 0:
+            p.statuses["aim"] -= 1
+            if p.statuses["aim"] <= 0:
+                del p.statuses["aim"]
+            print_slow("  🎯 Aim — this attack cannot miss.")
         ctx["feint_no_miss"] = False
 
         # Dice roll
@@ -556,6 +604,9 @@ class CombatSession:
         if enemy.health <= 0:
             self._on_enemy_death(enemy, p)
 
+        if p.combat_flags.get("shielded_active"):
+            self._grant_shielded_block()
+
         if is_volatile(p) and random.random() < 0.5:
             p.take_damage(5)
             print_slow(f"  💥 Volatile backfires — 5 self-damage! (HP:{p.health})")
@@ -585,6 +636,9 @@ class CombatSession:
 
     def _do_block(self, raw, ctx):
         p = self.player
+        if p.combat_flags.get("no_block_this_turn"):
+            print_slow("  ⚔ You cannot gain Block for the rest of this turn.")
+            return
         apply_block(p, BASE_BLOCK)
         alive = self._alive()
         p.trigger_relics(TRIGGER_ON_BLOCK, alive[0] if alive else None, {"raw": raw})
@@ -693,6 +747,13 @@ class CombatSession:
             if self.player.health <= 0:
                 return
 
+        if self.player.combat_flags.pop("defiant_ready", False) and get_block(self.player) > 0:
+            self.player.combat_flags["evade_bonus_ap"] = self.player.combat_flags.get("evade_bonus_ap", 0) + 2
+            self.player.statuses["strength"] = self.player.statuses.get("strength", 0) + 2
+            print_slow("  ⚔ Defiant triggers — Block remained after enemy turn. +2 AP next turn, +2 Strength.")
+
+        self.player.statuses.pop("evade", None)
+
         w = _win()
         if w:
             w.set_combat(self.player, self.room, self.enemies)
@@ -725,12 +786,6 @@ class CombatSession:
 
         enemy.current_ap = effective_ap
 
-        if p.combat_flags.get("evade"):
-            p.combat_flags.pop("evade")
-            p.combat_flags["evade_bonus_ap"] = 2
-            print_slow(f"  🗡 Evade — dodge {enemy.name}'s attack!")
-            enemy._planned_moves = []; enemy._planned_move = None; return
-
         if is_disoriented(enemy) and random.random() < 0.5:
             print_slow(f"  🌪 {enemy.name} disoriented — wastes turn!")
             enemy._planned_moves = []; enemy._planned_move = None; return
@@ -757,6 +812,14 @@ class CombatSession:
         actions_taken = 0
 
         while enemy.current_ap > 0 and enemy.health > 0 and p.health > 0:
+            evade_stacks = p.statuses.get("evade", 0)
+            if evade_stacks > 0 and random.random() < 0.5:
+                p.statuses["evade"] -= 1
+                if p.statuses["evade"] <= 0:
+                    del p.statuses["evade"]
+                p.combat_flags["evade_bonus_ap"] = p.combat_flags.get("evade_bonus_ap", 0) + 2
+                print_slow(f"  🗡 Evade triggers — {enemy.name} misses an action! (+2 AP next turn)")
+                break
             chosen = enemy.choose_affordable_move(enemy.current_ap, used_ids)
             if not chosen:
                 break
@@ -765,6 +828,7 @@ class CombatSession:
             used_ids.add(id(chosen))
             p.journal.record_move(enemy.name, chosen.name)
             chosen.use(enemy, p)
+            self._handle_shield_self(enemy)
             self._handle_shield_allies(enemy)
             # Phalanx — block all allies
             if enemy.statuses.pop("_phalanx", 0) > 0:
@@ -780,6 +844,14 @@ class CombatSession:
 
     def _enemy_basic_attack(self, enemy):
         p       = self.player
+        evade_stacks = p.statuses.get("evade", 0)
+        if evade_stacks > 0 and random.random() < 0.5:
+            p.statuses["evade"] -= 1
+            if p.statuses["evade"] <= 0:
+                del p.statuses["evade"]
+            p.combat_flags["evade_bonus_ap"] = p.combat_flags.get("evade_bonus_ap", 0) + 2
+            print_slow(f"  🗡 Evade triggers — {enemy.name} misses! (+2 AP next turn)")
+            return
         raw_dmg = enemy.roll_damage()   # uses damage_dice
 
         soul_tax = enemy.statuses.get("soul_tax", 0)
@@ -801,36 +873,8 @@ class CombatSession:
                 print_slow(f"  💥 Volatile backfires on {enemy.name}! (HP:{enemy.health})")
         raw_dmg = int(raw_dmg * consume_weak(enemy))
 
-        actual, absorbed = consume_block(p, raw_dmg)
-        if p.combat_flags.get("intangible"):
-            actual = min(actual, 1)
-        if p.combat_flags.get("unbreakable"):
-            from utils.constants import UNBREAKABLE_CAP
-            actual = min(actual, UNBREAKABLE_CAP)
-
-        if absorbed:
-            print_slow(f"  {enemy.name} hits for {raw_dmg} — 🛡 {absorbed} blocked, {actual} taken!")
-        else:
-            print_slow(f"  {enemy.name} hits you for {raw_dmg}!")
-
-        if absorbed > 0 and actual > 0:
-            counter = get_counter(p)
-            if counter:
-                enemy.take_damage(counter)
-                print_slow(f"  🔄 Counter — {enemy.name} takes {counter}! (HP:{max(enemy.health,0)})")
-                del p.statuses["counter"]
-
-        if actual > 0:
-            p.take_damage(actual)
-            print_slow(f"  Your HP: {p.health}")
-
-        sentinel = p.combat_flags.get("sentinel_thorns", 0)
-        if sentinel and actual > 0:
-            enemy.take_damage(sentinel)
-            print_slow(f"  🛡 Sentinel — {enemy.name} takes {sentinel} thorns! (HP:{max(enemy.health,0)})")
-
-        # Intangible clears after one hit
-        p.combat_flags.pop("intangible", None)
+        from entities.enemy_moves import resolve_enemy_hit
+        resolve_enemy_hit(enemy, p, raw_dmg)
 
     def _handle_shield_allies(self, enemy):
         amt = enemy.statuses.pop("_shield_allies", 0)
@@ -838,6 +882,12 @@ class CombatSession:
             for ally in [e for e in self.enemies if e.health > 0]:
                 apply_block(ally, amt)
                 print_slow(f"  🛡 {ally.name} gains {amt} Block from barrier!")
+
+    def _handle_shield_self(self, enemy):
+        amt = enemy.statuses.pop("_shield_self", 0)
+        if amt:
+            apply_block(enemy, amt)
+            print_slow(f"  🛡 {enemy.name} gains {amt} Block.")
 
     def _handle_drops(self, enemy):
         p = self.player
@@ -860,6 +910,18 @@ class CombatSession:
                 rarity = getattr(r,"rarity","Common")
                 print_slow(f"  ✦ Elite drop: {color}{r.name}{RS}  [{rarity}]")
                 print_slow(f"    {r.description}")
+
+    def _grant_shielded_block(self):
+        bonus_block = dice_roll("2d4")
+        apply_block(self.player, bonus_block)
+        print_slow(f"  🛡 Shielded — +{bonus_block} Block from your action.")
+
+    def _combat_end_cleanup(self, ignore_statuses=None):
+        ignore = set(ignore_statuses or self.player.combat_flags.get("status_cleanup_ignore", []))
+        if not ignore:
+            self.player.statuses.clear()
+            return
+        self.player.statuses = {k: v for k, v in self.player.statuses.items() if k in ignore}
 
 
 def combat_loop(player, room):

@@ -55,6 +55,7 @@ def get_command_display(cmd: dict) -> str:
 
 # ── Unlock schedule ───────────────────────────────────────────────────────────
 #   Level  2 → 1 command, auto-unlocked
+#   Level  4 → choose 1 of 2
 #   Level  5 → choose 1 of 3
 #   Level 10 → choose 1 of 3
 #   Level 15 → choose 1 of 3
@@ -67,14 +68,14 @@ SOLDIER_COMMANDS = {
     2: [
         {
             "name": "brace",
-            "desc": "Gain 3 Block; gain 10 instead if you currently have none.",
+            "desc": "Gain 1d6 Block; gain 1d6+2 instead if you currently have no Block.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
         },
     ],
     5: [
         {
             "name": "guard",
-            "desc": "Gain 8 Block; apply Counter 10 — if an attack breaks your Block, deal 10 damage back.",
+            "desc": "Gain 1d6+1 Block; apply Counter 10 — when your Block absorbs damage, deal 10 back.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
@@ -84,14 +85,14 @@ SOLDIER_COMMANDS = {
         },
         {
             "name": "discipline",
-            "desc": "Remove all debuffs (including Cursed, Slow, Soul Tax); gain 23 Block; cannot attack this turn.",
+            "desc": "Remove core debuffs; gain 3d10+3 Block; cannot attack this turn.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
     ],
     10: [
         {
             "name": "rally",
-            "desc": "Gain 6 Block; your next attack deals +6 damage.",
+            "desc": "Gain 1d10 Block; your next attack gains bonus damage equal to that roll.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
@@ -101,19 +102,31 @@ SOLDIER_COMMANDS = {
         },
         {
             "name": "fortify",
-            "desc": "Apply Fortify 5 — gain 5 Block at the start of every turn this combat.",
+            "desc": "Apply Fortify 4 — gain 4 Block at the start of every turn this combat.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+        },
+    ],
+    4: [
+        {
+            "name": "downcut",
+            "desc": "Deal 2d10+4; cannot gain Block for the rest of this turn.",
+            "ap_cost": 7, "mp_cost": 1, "unlock_mode": "choice",
+        },
+        {
+            "name": "defiant",
+            "desc": "If you end the round with Block, gain +2 AP next turn and +2 Strength.",
+            "ap_cost": 7, "mp_cost": 1, "unlock_mode": "choice",
         },
     ],
     15: [
         {
             "name": "warcry",
             "desc": "Apply Weak 2 + Vulnerable 2 to all enemies.",
-            "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
+            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
         },
         {
             "name": "sentinel",
-            "desc": "Gain 16 Block; enemies who hit you take 4 damage back.",
+            "desc": "Gain 2d8 Block; enemies who hit you take 4 damage back.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
@@ -130,7 +143,7 @@ SOLDIER_COMMANDS = {
         },
         {
             "name": "unbreakable",
-            "desc": "Damage capped at 20; Block does not clear between turns.",
+            "desc": "Block no longer resets at end of turn this combat.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
@@ -138,6 +151,11 @@ SOLDIER_COMMANDS = {
             "desc": "Apply Weak 2 + Vulnerable 2 to target; Stun 1 if 3+ statuses.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
+    ],
+    12: [
+        {"name": "quickshot", "desc": "Hit 4 times for 1d4+2 each (same or different targets).", "ap_cost": 9, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "plan", "desc": "Next command costs 1d4 less AP (min 1) and 1 less MP (min 1).", "ap_cost": 4, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "shielded", "desc": "Apply Fortify 2; on your next turn, each damaging action grants 2d4 Block.", "ap_cost": 8, "mp_cost": 1, "unlock_mode": "choice"},
     ],
 }
 
@@ -148,14 +166,18 @@ ROGUE_COMMANDS = {
     2: [
         {
             "name": "cut",
-            "desc": "Deal 6–10 damage.",
+            "desc": "Deal 5–8 damage.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
         },
+    ],
+    4: [
+        {"name": "aim", "desc": "Next attack cannot miss (once/turn); gain Strength 1 this combat.", "ap_cost": 3, "mp_cost": 1, "unlock_mode": "choice"},
+        {"name": "weave", "desc": "Gain Dexterity 1 this combat.", "ap_cost": 5, "mp_cost": 1, "unlock_mode": "choice"},
     ],
     5: [
         {
             "name": "flow",
-            "desc": "Apply Speed 5 — your next 5 actions each cost 1 fewer AP.",
+            "desc": "Gain Speed 5 — your next 5 actions each cost 1 fewer AP.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
@@ -177,12 +199,12 @@ ROGUE_COMMANDS = {
         },
         {
             "name": "flurry",
-            "desc": "Strike 3 times (relic letter-effects count per hit).",
+            "desc": "Hit 3 times for 1d4+3 each (same or different targets).",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
         {
             "name": "dash",
-            "desc": "Gain 8 Block, deal 8 damage, and gain 💨 Speed 1.",
+            "desc": "Gain 1d6+2 Block, deal 8 damage, and gain Speed 1.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
     ],
@@ -199,7 +221,7 @@ ROGUE_COMMANDS = {
         },
         {
             "name": "evade",
-            "desc": "Dodge the next enemy attack; if triggered, gain +2 AP next turn.",
+            "desc": "Gain Evade this round: 50% chance enemy actions miss you; each trigger gives +2 AP next turn.",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
     ],
@@ -220,6 +242,11 @@ ROGUE_COMMANDS = {
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "choice",
         },
     ],
+    12: [
+        {"name": "quickshot", "desc": "Hit 4 times for 1d4+2 each (same or different targets).", "ap_cost": 9, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "plan", "desc": "Next command costs 1d4 less AP (min 1) and 1 less MP (min 1).", "ap_cost": 4, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "shielded", "desc": "Apply Fortify 2; on your next turn, each damaging action grants 2d4 Block.", "ap_cost": 8, "mp_cost": 1, "unlock_mode": "choice"},
+    ],
 }
 
 
@@ -229,15 +256,19 @@ MAGE_COMMANDS = {
     2: [
         {
             "name": "spark",
-            "desc": "Deal 12–18 Lightning damage to one target.  [free — no MP]",
+            "desc": "Hit twice for 1d4+2 Lightning damage each (same or different targets).",
             "ap_cost": None, "mp_cost": 0, "unlock_mode": "auto",
         },
+    ],
+    4: [
+        {"name": "conduit", "desc": "Next non-AOE spell hits one additional target.", "ap_cost": 7, "mp_cost": 2, "unlock_mode": "choice"},
+        {"name": "icewall", "desc": "Gain 2d8+3 Block and apply Weak 1 to all enemies.", "ap_cost": 8, "mp_cost": 1, "unlock_mode": "choice"},
     ],
     5: [
         {
             "name": "bolt",
-            "desc": "Deal 22–32 damage to one target.",
-            "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
+            "desc": "Deal 2d8+4 damage and apply Vulnerable 1.",
+            "ap_cost": None, "mp_cost": 2, "unlock_mode": "choice",
         },
         {
             "name": "coalesce",
@@ -253,17 +284,17 @@ MAGE_COMMANDS = {
     10: [
         {
             "name": "wave",
-            "desc": "Deal 8–14 Lightning damage to ALL enemies.",
+            "desc": "Deal 1d6+4 Lightning damage to all enemies.",
             "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
         },
         {
             "name": "storm",
-            "desc": "Deal 18–24 damage to ALL enemies.",
+            "desc": "Deal 2d6+6 damage to all enemies.",
             "ap_cost": None, "mp_cost": 2, "unlock_mode": "choice",
         },
         {
             "name": "drain",
-            "desc": "Consume target's Poison; heal that many HP.",
+            "desc": "Deal 1d6+2 damage and heal that amount.",
             "ap_cost": None, "mp_cost": 1, "unlock_mode": "choice",
         },
     ],
@@ -280,7 +311,7 @@ MAGE_COMMANDS = {
         },
         {
             "name": "torment",
-            "desc": "Extend every debuff on every enemy by 1 turn.",
+            "desc": "Apply 2d4+2 Poison and Disorient to one target.",
             "ap_cost": None, "mp_cost": 2, "unlock_mode": "choice",
         },
     ],
@@ -292,7 +323,7 @@ MAGE_COMMANDS = {
         },
         {
             "name": "tempest",
-            "desc": "Deal 30–45 damage to ALL enemies.",
+            "desc": "Deal 3d8+3 damage to all enemies.",
             "ap_cost": None, "mp_cost": 3, "unlock_mode": "choice",
         },
         {
@@ -300,6 +331,11 @@ MAGE_COMMANDS = {
             "desc": "Deal (total status stacks across ALL living enemies) × 5 (cap 60).",
             "ap_cost": None, "mp_cost": 3, "unlock_mode": "choice",
         },
+    ],
+    12: [
+        {"name": "quickshot", "desc": "Hit 4 times for 1d4+2 each (same or different targets).", "ap_cost": 9, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "plan", "desc": "Next command costs 1d4 less AP (min 1) and 1 less MP (min 1).", "ap_cost": 4, "mp_cost": 0, "unlock_mode": "choice"},
+        {"name": "shielded", "desc": "Apply Fortify 2; on your next turn, each damaging action grants 2d4 Block.", "ap_cost": 8, "mp_cost": 1, "unlock_mode": "choice"},
     ],
 }
 

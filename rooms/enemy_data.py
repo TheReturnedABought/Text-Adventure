@@ -3,8 +3,9 @@ from entities.enemy_moves import (
     move, damage_attack, poison_attack,
     enrage_self, apply_enemy_vulnerable, apply_enemy_weak,
     stun_attack, self_heal, volatile_self, disorient_attack,
-    shield_allies, slow_player, curse_player, soul_tax_player,
+    shield_allies, shield_self, slow_player, curse_player, soul_tax_player,
     haste_self, fortify_self,
+    ranged_attack_ignore_block, double_hit,
 )
 
 
@@ -12,7 +13,7 @@ from entities.enemy_moves import (
 
 def make_castle_guard():
     return Enemy(
-        "Castle Guard", health=35, attack_power=10, xp_reward=15,
+        "Castle Guard", health=48, attack_power=10, xp_reward=15,
         max_ap=10,
         moves=[
             move("Shield Bash",    weight=5, effect_fn=damage_attack("1d6+3"),           ap_cost=4),
@@ -24,7 +25,7 @@ def make_castle_guard():
 
 def make_crossbowman():
     return Enemy(
-        "Crossbowman", health=20, attack_power=8, xp_reward=12,
+        "Crossbowman", health=32, attack_power=8, xp_reward=12,
         max_ap=8,
         moves=[
             move("Piercing Shot", weight=5, effect_fn=ranged_attack_ignore_block("2d4"), ap_cost=4),
@@ -36,7 +37,7 @@ def make_crossbowman():
 
 def make_goblin():
     return Enemy(
-        "Goblin", health=22, attack_power=8, xp_reward=10,
+        "Goblin", health=30, attack_power=8, xp_reward=10,
         max_ap=7,
         moves=[
             move("Stab",        weight=5, effect_fn=damage_attack("1d6+2"),              ap_cost=4),
@@ -48,7 +49,7 @@ def make_goblin():
 
 def make_goblin_guard():
     return Enemy(
-        "Goblin Guard", health=28, attack_power=9, xp_reward=12,
+        "Goblin Guard", health=40, attack_power=9, xp_reward=12,
         max_ap=8,
         moves=[
             move("Jab",         weight=5, effect_fn=damage_attack("1d6+3"),              ap_cost=4),
@@ -61,7 +62,7 @@ def make_goblin_guard():
 
 def make_goblin_archer():
     return Enemy(
-        "Goblin Archer", health=20, attack_power=8, xp_reward=10,
+        "Goblin Archer", health=30, attack_power=8, xp_reward=10,
         max_ap=8,
         moves=[
             move("Quick Shot",     weight=5, effect_fn=damage_attack("1d4+4"),         ap_cost=3),
@@ -73,7 +74,7 @@ def make_goblin_archer():
 
 def make_giant_rat():
     return Enemy(
-        "Giant Rat", health=18, attack_power=6, xp_reward=8,
+        "Giant Rat", health=26, attack_power=6, xp_reward=8,
         max_ap=6,
         moves=[
             move("Gnaw",       weight=6, effect_fn=damage_attack("1d4+3"), ap_cost=4),
@@ -84,7 +85,7 @@ def make_giant_rat():
 
 def make_rat_swarm():
     return Enemy(
-        "Rat Swarm", health=24, attack_power=8, xp_reward=12,
+        "Rat Swarm", health=42, attack_power=8, xp_reward=12,
         max_ap=10,
         moves=[
             move("Surge",          weight=5, effect_fn=double_hit(damage_expr="1d4+3"), ap_cost=5),
@@ -97,7 +98,7 @@ def make_rat_swarm():
 
 def make_skeleton_servant():
     return Enemy(
-        "Skeleton Servant", health=22, attack_power=8, xp_reward=10,
+        "Skeleton Servant", health=32, attack_power=8, xp_reward=10,
         max_ap=8,
         moves=[
             move("Bone Strike",     weight=5, effect_fn=damage_attack("1d6+2"),          ap_cost=4),
@@ -108,7 +109,7 @@ def make_skeleton_servant():
 
 def make_skeleton():
     return Enemy(
-        "Skeleton", health=25, attack_power=9, xp_reward=12,
+        "Skeleton", health=36, attack_power=9, xp_reward=12,
         max_ap=8,
         moves=[
             move("Bone Strike",   weight=5, effect_fn=damage_attack("1d6+2"),          ap_cost=4),
@@ -119,7 +120,7 @@ def make_skeleton():
 
 def make_skeleton_guard():
     return Enemy(
-        "Skeleton", health=30, attack_power=9, xp_reward=12,
+        "Skeleton Guard", health=46, attack_power=9, xp_reward=12,
         max_ap=9,
         moves=[
             move("Bone Strike",   weight=5, effect_fn=damage_attack("1d6+2"),          ap_cost=4),
@@ -132,7 +133,7 @@ def make_skeleton_guard():
 
 def make_wraith():
     return Enemy(
-        "Wraith", health=30, attack_power=12, xp_reward=20,
+        "Wraith", health=48, attack_power=12, xp_reward=20,
         max_ap=10,
         moves=[
             move("Spectral Touch",  weight=4, effect_fn=damage_attack("1d6+4"),          ap_cost=4),
@@ -143,7 +144,7 @@ def make_wraith():
 
 def make_bone_archer():
     return Enemy(
-        "Bone Archer", health=25, attack_power=10, xp_reward=18,
+        "Bone Archer", health=38, attack_power=10, xp_reward=18,
         max_ap=8,
         moves=[
             move("Bone Arrow",     weight=5, effect_fn=damage_attack("1d6+5"),          ap_cost=3),
@@ -154,11 +155,12 @@ def make_bone_archer():
 
 def make_crypt_warden():
     return Enemy(
-        "Crypt Warden", health=70, attack_power=18, xp_reward=50,
-        max_ap=14,
+        "Crypt Warden", health=130, attack_power=18, xp_reward=50,
+        max_ap=16,
         moves=[
             move("Spectral Slash",    weight=4, effect_fn=damage_attack("2d6+4"),     ap_cost=5),
             move("Barrier",  weight=2, effect_fn=shield_allies("1d8+5"), ap_cost=5, cooldown=2),
+            move("Aegis",           weight=2, effect_fn=shield_self("1d8+6"),        ap_cost=4, cooldown=2),
             move("Iron Bastion",      weight=1, effect_fn=fortify_self(stacks=3),     ap_cost=5, cooldown=5),
         ],
         guaranteed_relic="wardens brand",

@@ -22,6 +22,11 @@ STATUS_ICONS = {
     "slow":       "🕸",   # DEBUFF: next stacks commands cost 1 more AP, consumed per action
     "soul_tax":   "⚰",   # DEBUFF: at turn end take (stacks × AP_spent) damage
     "counter":    "🔄",   # BUFF: when hit deal stacks damage back; persists, no decay
+    "strength":   "💪",
+    "dexterity":  "🧶",
+    "evade":      "🫥",
+    "aim":        "🎯",
+    "targeting":  "🎯",
 }
 
 

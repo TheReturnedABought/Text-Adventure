@@ -1,5 +1,5 @@
 # entities/player.py
-from utils.constants import MAX_HEALTH, MAX_AP, MAX_MANA, XP_PER_LEVEL, UNBREAKABLE_CAP
+from utils.constants import MAX_AP, MAX_MANA, XP_PER_LEVEL
 from game_engine.journal import Journal
 
 
@@ -7,11 +7,13 @@ class Player:
     def __init__(self, name, char_class="soldier"):
         self.name       = name
         self.char_class = char_class.lower()
+        self.base_health = {"soldier": 50, "rogue": 40, "mage": 35}.get(self.char_class, 40)
 
         # ── Stats ─────────────────────────────────────────────────────────────
-        self.health     = MAX_HEALTH
-        self.max_health = MAX_HEALTH
-        self.current_ap = MAX_AP
+        self.health     = self.base_health
+        self.max_health = self.base_health
+        self.max_ap     = MAX_AP
+        self.current_ap = self.max_ap
         self.mana       = MAX_MANA
         self.max_mana   = MAX_MANA
 
@@ -46,8 +48,6 @@ class Player:
         self.mana = min(self.mana + amount, MAX_MANA)
 
     def take_damage(self, amount):
-        if self.combat_flags.get("unbreakable"):
-            amount = min(amount, UNBREAKABLE_CAP)
         self.health = max(0, self.health - amount)
 
     def is_alive(self):
@@ -60,8 +60,18 @@ class Player:
         while self.xp >= self.level * XP_PER_LEVEL:
             self.xp -= self.level * XP_PER_LEVEL
             self.level += 1
+            self._apply_level_growth(self.level)
             self.level_ups.append(self.level)
             self._check_command_unlock(self.level)
+
+    def _apply_level_growth(self, level):
+        hp_gain = int(round(self.base_health * 0.10))
+        if self.char_class == "mage":
+            hp_gain = 3 if level % 2 == 0 else 4
+        self.max_health += hp_gain
+        self.health = min(self.max_health, self.health + hp_gain)
+        if level in (9, 16):
+            self.max_ap += 1
 
     def _check_command_unlock(self, new_level):
         from entities.class_data import CLASS_COMMANDS
