@@ -57,3 +57,19 @@ def max_roll(expr: str) -> int:
 
 def describe(expr: str) -> str:
     return f"{min_roll(expr)}–{max_roll(expr)}"
+
+
+def add_dice(expr: str, extra_dice: int) -> str:
+    """
+    Return a dice expression with additional dice of the same size.
+    Example: add_dice("1d4+2", 1) -> "2d4+2"
+    """
+    expr = str(expr).strip()
+    m = _DICE.match(expr)
+    if not m:
+        return expr
+    n = int(m.group(1)) if m.group(1) else 1
+    d = int(m.group(2))
+    mod = m.group(3) or ""
+    n = max(1, n + max(0, int(extra_dice)))
+    return f"{n}d{d}{mod}"

@@ -178,8 +178,8 @@ def setup_area1():
 
     pantry = Room(
         "Pantry",
-        "A tight pantry packed with a foodstuffs.",
-        items = ["bread", "bread", "bread", "apple"],
+        "A tight pantry packed with foodstuffs.",
+        items=["bread", "bread", "bread", "apple"],
     )
 
     # ── Crypt Gate ────────────────────────────────────────────────────────────
@@ -276,7 +276,7 @@ def setup_area1():
     standard_chest = EnvObject(
         name="alcove walls",
         use_fn=standard_chest,
-        examine_fn=lambda p, r, e=None: print_slow("A normal Chest."),
+        examine_fn=lambda p, r, e=None: print_slow("A normal chest."),
         uses=1
     )
     entrance.add_env_object(standard_chest)
@@ -388,8 +388,6 @@ def setup_area1():
         input("\n  Press Enter to continue...")
     puzzle_room.on_enter = _puzzle_room_enter
 
-    puzzle_room.env_objects.append(puzzle_room.puzzle)  # chest puzzle
-
     def _ratssss_enter(player):
         from utils.ascii_art import RATSSSS, print_art
         print_art(RATSSSS, indent=6)
@@ -429,7 +427,7 @@ def setup_area1():
             print_slow("\n  You stop. A hooded figure stands by the eastern door.")
             print_slow("  They do not startle. They were waiting.")
             print_slow('  "Two locked doors. Two distant places."')
-            print_slow('  "The Catacomb Key lies deep in the crypt below.')
+            print_slow('  "The Courtyard Key lies deep in the crypt below.')
             print_slow('   Find it, and the other keys will follow."')
             print_slow("  Before you can speak, they are gone.")
             player.journal.add_lore(
@@ -447,15 +445,15 @@ def setup_area1():
     locked_hall.on_enter = _locked_hall_enter
 
     def servants_kitchen_enter(player):
-        print_slow("\n  Two skeletons work tirelessly kneading dust like flower.")
-        print_slow(" As you enter their heads tun towards you and they ready their weapons.")
+        print_slow("\n  Two skeletons work tirelessly, kneading dust like flour.")
+        print_slow("  As you enter, their heads turn toward you and they ready their weapons.")
         input("\n  Press Enter to continue...")
     servants_kitchen.on_enter = servants_kitchen_enter
 
     def pantry_enter(player):
         from utils.ascii_art import PANTRY, print_art
         print_art(PANTRY, indent=6)
-        print_slow('  "You enter a walk in pantry."')
+        print_slow('  "You enter a walk-in pantry."')
         print_slow('  "There is food here."')
     pantry.on_enter = pantry_enter
 
