@@ -341,25 +341,8 @@ def cmd_shadowstrike(player, enemies, target, ctx):
 # ────────────────────────────────
 #  MAGE COMMANDS
 # ────────────────────────────────
-def _spend_mp(player, cost, ward=False):
-    discount = player.combat_flags.pop("plan_mp_discount_active", 0)
-    coalesce_discount = 1 if player.combat_flags.get("coalesce_mp_discount_turns", 0) > 0 else 0
-    real_cost = max(0, cost - (1 if ward else 0) - discount - coalesce_discount)
-    if player.mana < real_cost:
-        print_slow(f"  {BLUE}Not enough MP! Need {real_cost}, have {player.mana}.{RESET}")
-        return False
-    player.mana -= real_cost
-    if real_cost>0:
-        print_slow(f"  {BLUE}[-{real_cost} MP → {player.mana}/{player.max_mana}]{RESET}")
-    if player.combat_flags.get("coalesce_mp_discount_turns", 0) > 0:
-        player.combat_flags["coalesce_mp_discount_turns"] -= 1
-        if player.combat_flags["coalesce_mp_discount_turns"] <= 0:
-            player.combat_flags.pop("coalesce_mp_discount_turns", None)
-            print_slow(f"  {BLUE}✦ Coalesce's MP discount fades.{RESET}")
-    return True
 
 def cmd_spark(player, enemies, target, ctx):
-    if not _spend_mp(player,0,ctx.get("ward_active")): return False
     targets = _prompt_multi_targets(enemies, 2, "spark hits")
     if not targets:
         return False
@@ -373,7 +356,6 @@ def cmd_spark(player, enemies, target, ctx):
     return True
 
 def cmd_bolt(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"bolt"): return False
     dmg = _roll_offensive(player, "2d8+4")
     _deal(player,target,dmg,ctx,"⚡ Bolt:")
@@ -387,7 +369,6 @@ def cmd_bolt(player, enemies, target, ctx):
     return True
 
 def cmd_coalesce(player, enemies, target, ctx):
-    if not _spend_mp(player,0,ctx.get("ward_active")): return False
     blk = _roll_defensive(player, "2d8+8")
     _grant_block(player, blk)
     player.combat_flags["coalesce_mp_discount_turns"] = 2
@@ -395,7 +376,6 @@ def cmd_coalesce(player, enemies, target, ctx):
     return True
 
 def cmd_delay(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
     if not _require_target(target, "delay"): return False
     from utils.status_effects import apply_slow
     apply_slow(target, 1)
@@ -403,21 +383,18 @@ def cmd_delay(player, enemies, target, ctx):
     return True
 
 def cmd_wave(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
     print_slow(f"  {BLUE}🌊 Wave — lightning hits all enemies!{RESET}")
     for e in _alive(enemies):
         _deal(player, e, _roll_offensive(player, "1d6+4"), ctx, "Wave:")
     return True
 
 def cmd_storm(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     print_slow(f"  {BLUE}⛈ Storm — heavy lightning hits all enemies!{RESET}")
     for e in _alive(enemies):
         _deal(player, e, _roll_offensive(player, "2d6+6"), ctx, "Storm:")
     return True
 
 def cmd_ward(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
     blk = _roll_defensive(player, "1d8+2")
     _grant_block(player, blk)
     ctx["ward_active"]=True
@@ -432,7 +409,6 @@ def cmd_curse(player, enemies, target, ctx):
     return True
 
 def cmd_blaze(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"blaze"): return False
     apply_poison(target, roll("1d4+2"))
     apply_volatile(target)
@@ -443,7 +419,6 @@ def cmd_charm(player, enemies, target, ctx):
     if ctx.get("charm_cooldown"):
         print_slow(f"  {BLUE}Charm is on cooldown until next turn.{RESET}")
         return False
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"charm"): return False
     apply_stun(target,1)
     ctx["charm_cooldown"]=True
@@ -451,7 +426,6 @@ def cmd_charm(player, enemies, target, ctx):
     return True
 
 def cmd_drain(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
     if not _require_target(target, "drain"):
         return False
     amount = _roll_offensive(player, "1d6+2")
@@ -461,7 +435,6 @@ def cmd_drain(player, enemies, target, ctx):
     return True
 
 def cmd_shatter(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"shatter"): return False
     mana_bonus = max(player.mana, 0)
     dmg = (roll("1d6") * mana_bonus) + 3
@@ -469,7 +442,6 @@ def cmd_shatter(player, enemies, target, ctx):
     return True
 
 def cmd_silence(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
     if not _require_target(target,"silence"): return False
     apply_stun(target,1)
     apply_weak(target,2)
@@ -477,7 +449,6 @@ def cmd_silence(player, enemies, target, ctx):
     return True
 
 def cmd_torment(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")): return False
     if not _require_target(target,"torment"): return False
     apply_poison(target,roll("2d4+2"))
     apply_disorient(target)
@@ -485,7 +456,6 @@ def cmd_torment(player, enemies, target, ctx):
     return True
 
 def cmd_obliterate(player, enemies, target, ctx):
-    if not _spend_mp(player,3,ctx.get("ward_active")): return False
     if not _require_target(target,"obliterate"): return False
     dmg = roll("6d6+20")
     _deal(player,target,dmg,ctx,"Obliterate:")
@@ -496,8 +466,6 @@ def cmd_rift(player, enemies, target, ctx):
     Mage utility — restore 3 MP; apply Vulnerable 1 to yourself and all living enemies.
     MP cost: 1
     """
-    if not _spend_mp(player, 1, ctx.get("ward_active")):
-        return False
     from utils.status_effects import apply_vulnerable
     gained = min(3, player.max_mana - player.mana)
     player.mana += gained
@@ -509,7 +477,6 @@ def cmd_rift(player, enemies, target, ctx):
     return True
 
 def cmd_apocalypse(player, enemies, target, ctx):
-    if not _spend_mp(player,4,ctx.get("ward_active")): return False
     if not _require_target(target,"apocalypse"): return False
     total = sum(v for v in target.statuses.values() if isinstance(v,int))
     dmg = min(total*roll("1d5"),40)
@@ -517,15 +484,11 @@ def cmd_apocalypse(player, enemies, target, ctx):
     return True
 
 def cmd_conduit(player, enemies, target, ctx):
-    if not _spend_mp(player,2,ctx.get("ward_active")):
-        return False
     player.statuses["targeting"] = player.statuses.get("targeting", 0) + 1
     print_slow(f"  {BLUE}🔮 Conduit — next non-AOE spell hits an additional target.{RESET}")
     return True
 
 def cmd_icewall(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")):
-        return False
     blk = _roll_defensive(player, "2d8+3")
     _grant_block(player, blk)
     for e in _alive(enemies):
@@ -550,7 +513,7 @@ def cmd_plan(player, enemies, target, ctx):
     return True
 
 def cmd_shielded(player, enemies, target, ctx):
-    if not _spend_mp(player,1,ctx.get("ward_active")): return False
+
     from utils.status_effects import apply_fortify
     apply_fortify(player, 2)
     player.combat_flags["shielded_pending"] = 1
@@ -558,7 +521,7 @@ def cmd_shielded(player, enemies, target, ctx):
     return True
 
 def cmd_tempest(player, enemies, target, ctx):
-    if not _spend_mp(player,3,ctx.get("ward_active")): return False
+
     print_slow(f"  {BLUE}🌩 Tempest — devastating lightning on all enemies!{RESET}")
     for e in _alive(enemies):
         _deal(player, e, _roll_offensive(player, "3d8+3"), ctx, "Tempest:")

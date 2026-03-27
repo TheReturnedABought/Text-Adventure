@@ -313,9 +313,22 @@ class CombatSession:
             return _NEXT
 
         mp_spent = 0
-        if is_class and p.char_class != "mage":
+        if is_class:
             cmd_def = get_command_def(p.char_class, command)
             mp_cost = cmd_mp_cost(cmd_def) if cmd_def else 0
+
+
+            if ctx.get("ward_active"):
+                 mp_cost = max(1, mp_cost - 1)
+            if p.combat_flags.get("coalesce_mp_discount_turns", 0) > 0:
+                mp_cost = max(1, mp_cost - 1)
+
+            # Plan discount — all classes
+            if p.combat_flags.get("plan_mp_discount_active", 0):
+                discount = p.combat_flags.pop("plan_mp_discount_active")
+                mp_cost = max(1, mp_cost - discount)
+                print_slow(f"  📜 Plan — −{discount} MP on this command!")
+
             if p.mana < mp_cost:
                 print_slow(f"  Not enough MP! '{command}' needs {mp_cost}, you have {p.mana}.")
                 return _NEXT
@@ -323,6 +336,13 @@ class CombatSession:
                 p.mana -= mp_cost
                 mp_spent = mp_cost
                 print_slow(f"  🔷 {command} costs {mp_cost} MP. (MP: {p.mana}/{p.max_mana})")
+
+            # Tick coalesce after spend
+            if p.char_class == "mage" and p.combat_flags.get("coalesce_mp_discount_turns", 0) > 0:
+                p.combat_flags["coalesce_mp_discount_turns"] -= 1
+                if p.combat_flags["coalesce_mp_discount_turns"] <= 0:
+                    p.combat_flags.pop("coalesce_mp_discount_turns", None)
+                    print_slow(f"  {BLUE}✦ Coalesce's MP discount fades.{RESET}")
 
         # Record pre-block AP for BulwarkFragment
         if command == "block":
@@ -819,7 +839,9 @@ class CombatSession:
                     del p.statuses["evade"]
                 p.combat_flags["evade_bonus_ap"] = p.combat_flags.get("evade_bonus_ap", 0) + 2
                 print_slow(f"  🗡 Evade triggers — {enemy.name} misses an action! (+2 AP next turn)")
+                actions_taken += 1
                 break
+
             chosen = enemy.choose_affordable_move(enemy.current_ap, used_ids)
             if not chosen:
                 break
