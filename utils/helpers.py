@@ -53,7 +53,7 @@ def print_status(player):
     print(f"  HP [{hp_bar}] {player.health}/{player.max_health}  "
           f"AP [{ap_bar}] {player.current_ap}/{MAX_AP}  "
           f"{BLUE}MP [{mana_bar}] {player.mana}/{MAX_MANA}{RESET}  "
-          f"LVL {player.level}  XP {player.xp}")
+          f"LVL {player.level}  XP {player.xp}  Gold {getattr(player, 'gold', 0)}")
 
 
 def make_bar(current, maximum, length=20, fill="█", empty="░"):

@@ -27,6 +27,7 @@ import threading
 import tkinter as tk
 import builtins
 from collections import deque
+from collections import Counter
 
 _ANSI_RE    = re.compile(r'\x1b\[[0-9;]*[mABCDEFGHJKSThlsurp]')
 _ANSI_SPLIT = re.compile(r'(\x1b\[[0-9;]*m)')
@@ -34,6 +35,16 @@ _ANSI_SPLIT = re.compile(r'(\x1b\[[0-9;]*m)')
 
 def _strip(s: str) -> str:
     return _ANSI_RE.sub('', str(s))
+
+
+def _stacked_items(items):
+    counts = Counter(items)
+    return [f"{count} x {name}" if count > 1 else name for name, count in counts.items()]
+
+
+def _move_hint(move):
+    hint = getattr(move, "intent_hint", "")
+    return f" {hint}" if hint else ""
 
 
 _CODE_TAG = {
@@ -370,7 +381,7 @@ class GameWindow:
         elif getattr(enemy, '_planned_moves', []):
             m0    = enemy._planned_moves[0]
             extra = f'+{len(enemy._planned_moves)-1}' if len(enemy._planned_moves) > 1 else ''
-            intent, itag = f'→{m0.name}({m0.ap_cost}){extra}', 'red'
+            intent, itag = f'→{m0.name}({m0.ap_cost}){_move_hint(m0)}{extra}', 'red'
         else:
             intent, itag = '→ ???', 'dim'
 
@@ -407,6 +418,12 @@ class GameWindow:
         if not room:
             return
 
+        desc = str(getattr(room, "description", "")).strip()
+        if desc:
+            for ln in desc.splitlines()[:3]:
+                t.insert('end', f'  {ln}\n', 'white')
+            t.insert('end', '\n')
+
         art_str = ROOM_ART.get(room.name, '')
         if art_str:
             for ln in art_str.strip('\n').splitlines()[:5]:
@@ -422,7 +439,7 @@ class GameWindow:
             t.insert('end', ', '.join(r.name for r in room.relics) + '\n', 'cyan')
         if room.items:
             t.insert('end', '  Items:    ', 'bold')
-            t.insert('end', ', '.join(room.items) + '\n', 'white')
+            t.insert('end', ', '.join(_stacked_items(room.items)) + '\n', 'white')
         ev = getattr(room, 'event', None)
         if ev and not getattr(ev, 'resolved', True):
             t.insert('end', '  Event:    ', 'bold')
@@ -458,7 +475,14 @@ class GameWindow:
         W   = max(c.winfo_width(), 700)
         pad = 10
 
-        bar_w = max(80, (W - pad * 2 - 200) // 3)
+        label_w = 26
+        value_w = 46
+        min_bar = 70
+        min_step = label_w + min_bar + value_w
+        available = max(min_step * 3, W - pad * 2 - 16)
+        step = available // 3
+        bar_w = max(min_bar, step - label_w - value_w)
+        step = label_w + bar_w + value_w
         bar_h = 14
         y1    = 8
 
@@ -480,7 +504,6 @@ class GameWindow:
         hpct = p.health / max(p.max_health, 1)
         hfil = self.C_GREEN if hpct > 0.5 else (self.C_YELLOW if hpct > 0.25 else self.C_RED)
 
-        step = bar_w + 65
         _bar(pad,          'HP', p.health,     p.max_health, hfil)
         _bar(pad + step,   'AP', p.current_ap, MAX_AP,       self.C_AP)
         _bar(pad + step*2, 'MP', p.mana,        p.max_mana,   self.C_MP)

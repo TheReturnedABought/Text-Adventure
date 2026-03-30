@@ -122,6 +122,7 @@ class SaveManager:
             "xp":                     p.xp,
             "level":                  p.level,
             "inventory":              list(p.inventory),
+            "gold":                   getattr(p, "gold", 0),
             "relics":                 [r.name for r in p.relics],
             "known_commands":         list(p.known_commands),
             "statuses":               dict(p.statuses),
@@ -145,6 +146,7 @@ class SaveManager:
         player.xp         = data["xp"]
         player.level      = data["level"]
         player.inventory  = list(data["inventory"])
+        player.gold       = data.get("gold", 0)
         player.statuses   = dict(data.get("statuses", {}))
         player.known_commands = set(data.get("known_commands", []))
         player.pending_combat_effects = [

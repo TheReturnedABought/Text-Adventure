@@ -80,6 +80,30 @@ def _grant_block(player, amount):
     apply_block(player, amount)
     return True
 
+
+def _roll_dash_values(player):
+    """
+    Dash roll model:
+      - Base: 1d6+3
+      - Strength contributes extra attack-only d6 rolls
+      - Dexterity contributes extra block-only d6 rolls
+      - Shared min(str, dex) contributes shared d6 rolls (same value used for both)
+    """
+    strength = max(0, int(player.statuses.get("strength", 0)))
+    dexterity = max(0, int(player.statuses.get("dexterity", 0)))
+    shared = min(strength, dexterity)
+
+    shared_roll = roll(add_dice("1d6+3", shared))
+    extra_str = strength - shared
+    extra_dex = dexterity - shared
+
+    str_roll = roll(f"{extra_str}d6") if extra_str > 0 else 0
+    dex_roll = roll(f"{extra_dex}d6") if extra_dex > 0 else 0
+
+    attack = shared_roll + str_roll
+    block = shared_roll + dex_roll
+    return block, attack, shared_roll, str_roll, dex_roll, shared, extra_str, extra_dex
+
 # ────────────────────────────────
 #  SOLDIER COMMANDS
 # ────────────────────────────────
@@ -259,12 +283,21 @@ def cmd_flurry(player, enemies, target, ctx):
     return True
 
 def cmd_dash(player, enemies, target, ctx):
-    blk = _roll_defensive(player, "1d6+2")
+    blk, dash_damage, shared_roll, str_roll, dex_roll, shared, extra_str, extra_dex = _roll_dash_values(player)
     _grant_block(player, blk)
     if target and target.health>0:
-        _deal(player, target, 8, ctx, "Dash:")
+        _deal(player, target, dash_damage, ctx, "Dash:")
     apply_speed(player, 1)
-    print_slow(f"  🗡 Dash — +{blk} Block, dealt 8, gained Speed 1.")
+    if shared > 0:
+        shared_expr = f"1d6+3+{shared}d6"
+    else:
+        shared_expr = "1d6+3"
+    detail = f"shared {shared_expr}→{shared_roll}"
+    if extra_str > 0:
+        detail += f", +STR {extra_str}d6→{str_roll}"
+    if extra_dex > 0:
+        detail += f", +DEX {extra_dex}d6→{dex_roll}"
+    print_slow(f"  🗡 Dash — +{blk} Block, dealt {dash_damage}, gained Speed 1. ({detail})")
     return True
 
 def cmd_toxin(player, enemies, target, ctx):

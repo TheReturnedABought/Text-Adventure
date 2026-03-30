@@ -62,6 +62,11 @@ _SHIELDED_DAMAGE_COMMANDS = {
 }
 
 
+def _intent_hint(move):
+    hint = getattr(move, "intent_hint", "")
+    return f" {hint}" if hint else ""
+
+
 def _win():
     try:
         from utils.window import window
@@ -697,7 +702,7 @@ class CombatSession:
             if is_stunned(e):
                 intent = "  → ⚡ STUNNED"
             elif e._planned_moves:
-                intent = "  → " + " → ".join(f"{m.name}({m.ap_cost})" for m in e._planned_moves)
+                intent = "  → " + " → ".join(f"{m.name}({m.ap_cost}){_intent_hint(m)}" for m in e._planned_moves)
             else:
                 intent = "  → ???"
             print_slow(f"  [{i}] {e.name:<14} HP:{e.health}/{e.max_health}  AP:{e.current_ap}/{e.max_ap}{tag}{intent}")
@@ -845,7 +850,7 @@ class CombatSession:
             chosen = enemy.choose_affordable_move(enemy.current_ap, used_ids)
             if not chosen:
                 break
-            print_slow(f"  [ {enemy.name} — {chosen.name} ({chosen.ap_cost}AP) ]")
+            print_slow(f"  [ {enemy.name} — {chosen.name} ({chosen.ap_cost}AP){_intent_hint(chosen)} ]")
             enemy.current_ap -= chosen.ap_cost
             used_ids.add(id(chosen))
             p.journal.record_move(enemy.name, chosen.name)
