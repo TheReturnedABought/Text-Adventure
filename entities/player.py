@@ -28,6 +28,7 @@ class Player:
 
         # ── Inventory / relics ────────────────────────────────────────────────
         self.inventory    = []
+        self.gold         = 0
         self.relics       = []
         self.statuses     = {}
         self.combat_flags = {}

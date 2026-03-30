@@ -4,6 +4,12 @@ from utils.constants import (
     BASE_COMMANDS, BASE_ATTACK_MIN, BASE_ATTACK_MAX,
     BASE_HEAL_MIN, BASE_HEAL_MAX, BASE_BLOCK, HEAL_MP_COST,
 )
+from collections import Counter
+
+
+def _stacked_items(items):
+    counts = Counter(items)
+    return [f"{count} x {name}" if count > 1 else name for name, count in counts.items()]
 
 
 def show_intro():
@@ -62,7 +68,7 @@ def show_room(room):
         print_slow(f"  {random.choice(room.ambient)}")
         print()
     if room.items:
-        print(f"  Items  : {', '.join(room.items)}")
+        print(f"  Items  : {', '.join(_stacked_items(room.items))}")
     if room.relics:
         relic_strs = [rarity_colored(r) for r in room.relics]
         print(f"  Relics : {', '.join(relic_strs)}")
@@ -98,9 +104,9 @@ def show_help(player=None):
         "",
         "  Exploration:",
         "    north/south/east/west  - Move in a direction  (🔒 = locked)",
-        "    take <item/relic>      - Pick up an item or relic",
-        "    drop <item>            - Drop an item",
-        "    use <item>             - Use a consumable",
+        "    take [n] <item/relic>  - Pick up 1..n matching items/relics",
+        "    drop [n] <item>        - Drop 1..n matching items",
+        "    use [n] <item>         - Use 1..n consumables",
         "    inventory              - Show your items",
         "    relics                 - Show your relics and effects",
         "    interact <>             - Interact with an event or NPC",

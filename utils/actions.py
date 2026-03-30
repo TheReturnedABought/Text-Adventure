@@ -1,10 +1,46 @@
 # utils/actions.py
 from utils.helpers import print_slow
 from utils.constants import MAX_AP
+from collections import Counter
 
 
 def get_alive_enemies(room):
     return [e for e in room.enemies if e.health > 0]
+
+
+def _stacked_items(items):
+    counts = Counter(items)
+    out = []
+    for name, count in counts.items():
+        out.append(f"{count} x {name}" if count > 1 else name)
+    return out
+
+
+def _parse_amount_and_query(args):
+    if not args:
+        return None, ""
+
+    amount = None
+    parts = list(args)
+
+    if parts[0].isdigit():
+        amount = max(1, int(parts[0]))
+        parts = parts[1:]
+    elif parts[-1].isdigit():
+        amount = max(1, int(parts[-1]))
+        parts = parts[:-1]
+
+    return amount, " ".join(parts).strip().lower()
+
+
+def _ask_amount(action, item_name, max_count):
+    while True:
+        raw = input(f"  How many {item_name} to {action}? (1-{max_count}): ").strip()
+        if raw.isdigit():
+            val = int(raw)
+            if 1 <= val <= max_count:
+                return val
+        print_slow(f"  Enter a number between 1 and {max_count}.")
 
 
 def do_move(player, room, args):
@@ -26,7 +62,7 @@ def do_move(player, room, args):
 
 
 def do_take_relic(player, room, args):
-    query = " ".join(args).lower() if args else ""
+    amount, query = _parse_amount_and_query(args)
     if not query:
         print_slow("  Take what?")
         return
@@ -46,31 +82,54 @@ def do_take_relic(player, room, args):
         print_slow(f"    [{rarity}] {relic_match.description}")
         input("\n  Press Enter to continue...")
         return
-    item_match = next((i for i in room.items if query in i.lower()), None)
-    if item_match:
-        player.inventory.append(item_match)
-        room.items.remove(item_match)
-        print_slow(f"  You pick up: {item_match}")
+    item_matches = [i for i in room.items if query in i.lower()]
+    if item_matches:
+        if amount is None:
+            amount = _ask_amount("pick up", item_matches[0], len(item_matches)) if len(item_matches) > 1 else 1
+        amount = min(amount, len(item_matches))
+        picked = item_matches[:amount]
+        for item in picked:
+            room.items.remove(item)
+
+        gold_taken = sum(1 for i in picked if "gold coin" in i.lower())
+        normal_items = [i for i in picked if "gold coin" not in i.lower()]
+        if gold_taken:
+            player.gold = getattr(player, "gold", 0) + gold_taken
+            print_slow(f"  You collect {gold_taken} gold coin(s). (Gold: {player.gold})")
+        if normal_items:
+            player.inventory.extend(normal_items)
+            stacked = ", ".join(_stacked_items(normal_items))
+            print_slow(f"  You pick up: {stacked}")
         return
     print_slow(f"  Nothing here matches '{query}'.")
 
 
 def do_drop(player, room, args):
-    query = " ".join(args).lower() if args else ""
-    match = next((i for i in player.inventory if query in i.lower()), None)
-    if match:
-        player.inventory.remove(match)
-        room.items.append(match)
-        print_slow(f"  You drop: {match}")
-    else:
+    amount, query = _parse_amount_and_query(args)
+    if not query:
+        print_slow("  Drop what?")
+        return
+    matches = [i for i in player.inventory if query in i.lower()]
+    if not matches:
         print_slow("  You don't have that.")
+        return
+
+    if amount is None:
+        amount = _ask_amount("drop", matches[0], len(matches)) if len(matches) > 1 else 1
+    amount = min(amount, len(matches))
+    dropped = matches[:amount]
+    for item in dropped:
+        player.inventory.remove(item)
+        room.items.append(item)
+    print_slow(f"  You drop: {', '.join(_stacked_items(dropped))}")
 
 
 def do_inventory(player):
     if player.inventory:
-        print_slow("  Inventory: " + ", ".join(player.inventory))
+        print_slow("  Inventory: " + ", ".join(_stacked_items(player.inventory)))
     else:
         print_slow("  Your inventory is empty.")
+    print_slow(f"  Gold: {getattr(player, 'gold', 0)}")
 
 
 def do_listen(player, room):
@@ -160,33 +219,40 @@ FOOD_ITEMS = {"apple": 15, "bread": 20}
 
 def use_item(player, room, args):
     import random
-    query = " ".join(args).lower() if args else ""
+    amount, query = _parse_amount_and_query(args)
     if not query:
         print_slow("  Use what?")
         return
-    match = next((i for i in player.inventory if query in i.lower()), None)
-    if not match:
+    matches = [i for i in player.inventory if query in i.lower()]
+    if not matches:
         print_slow(f"  You don't have '{query}'.")
         return
-    name_lower = match.lower()
+    if amount is None:
+        amount = _ask_amount("use", matches[0], len(matches)) if len(matches) > 1 else 1
+    amount = min(amount, len(matches))
+    used = matches[:amount]
+    name_lower = used[0].lower()
 
     # Food
     for food, hp in FOOD_ITEMS.items():
         if food in name_lower:
-            player.inventory.remove(match)
-            player.heal(hp)
-            print_slow(f"  You eat the {match}. (+{hp} HP → {player.health}/{player.max_health})")
+            for item in used:
+                player.inventory.remove(item)
+            total_heal = hp * amount
+            player.heal(total_heal)
+            print_slow(f"  You eat {amount} x {food}. (+{total_heal} HP → {player.health}/{player.max_health})")
             return
 
     # Mushroom
     if "mushroom" in name_lower:
-        player.inventory.remove(match)
-        effect = MUSHROOM_EFFECTS.get(name_lower)
-        if effect is None:
-            effect = random.choice(_GENERIC_MUSHROOM_POOL)
-        player.pending_combat_effects.append(effect)
-        print_slow(f"  You eat the {match}.")
-        print_slow("  Something stirs in your blood — the effect will manifest when next you fight.")
+        for item in used:
+            player.inventory.remove(item)
+            effect = MUSHROOM_EFFECTS.get(item.lower())
+            if effect is None:
+                effect = random.choice(_GENERIC_MUSHROOM_POOL)
+            player.pending_combat_effects.append(effect)
+        print_slow(f"  You eat {', '.join(_stacked_items(used))}.")
+        print_slow("  Something stirs in your blood — the effect(s) will manifest when next you fight.")
         return
 
-    print_slow(f"  You can't use the {match} here.")
+    print_slow(f"  You can't use the {used[0]} here.")
