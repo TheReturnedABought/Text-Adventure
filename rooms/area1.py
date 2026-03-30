@@ -175,8 +175,8 @@ def setup_area1():
     )
     pantry = Room(
         "Pantry",
-        "A tight pantry packed with foodstuffs.",
-        items=["bread", "bread", "bread", "apple"],
+        "A tight pantry packed with foodstuffs; At least before a rat passed through here.",
+        items=["bread", "apple"],
     )
     # ── Crypt Gate ────────────────────────────────────────────────────────────
     crypt_gate = Room(
@@ -185,7 +185,6 @@ def setup_area1():
         "bears the sigil of the Crypt Warden — who stands before it, waiting.\n"
         "The passage west leads back to the Riddle Hall.",
         items=["gold coin"],
-        relics=[r for r in [get_relic("vampiric blade")] if r],
         ambient=[
             "The air tastes of iron and old stone.",
             "The Warden does not blink. It simply waits.",
@@ -198,7 +197,6 @@ def setup_area1():
         "Shields and rusty armor lie scattered across the floor.\n"
         "The only exit is north, back to the Puzzle Alcove.",
         items=["rusty sword", "iron shield", "torch"],
-        relics=[r for r in [get_relic("steel gauntlets")] if r],
         ambient=[
             "The metal smells of old iron and oil.",
             "You hear a faint creak as if something shifts in the shadows.",
@@ -363,9 +361,6 @@ def setup_area1():
     def _riddle_hall_enter(player):
         from utils.ascii_art import RIDDLE_HALL, print_art
         print_art(RIDDLE_HALL, indent=6)
-        print_slow("\n  Two goblins wheel around as you enter, blades already drawn.")
-        print_slow('  "Fresh meat!" one shrieks, in a voice like grinding gravel.')
-        print_slow("  The other simply grins.")
         input("\n  Press Enter to continue...")
     riddle_hall.on_enter = _riddle_hall_enter
     def _puzzle_room_enter(player):
@@ -435,7 +430,8 @@ def setup_area1():
         from utils.ascii_art import PANTRY, print_art
         print_art(PANTRY, indent=6)
         print_slow('  "You enter a walk-in pantry."')
-        print_slow('  "There is food here."')
+        print_slow('  "The smell of bread fills the air."')
+        print_slow('  "It seems that everything else has been eaten by this rat!"')
     pantry.on_enter = pantry_enter
     def _crypt_enter(player):
         from utils.ascii_art import CRYPT_GATE, print_art
@@ -453,6 +449,7 @@ def setup_area1():
     ratssss.enemies.append(make_giant_rat())
     ratssss.enemies.append(make_giant_rat())
     ratssss.enemies.append(make_rat_swarm())
+    pantry.enemies.append(make_giant_rat())
     servants_quarters.enemies.append(make_skeleton_servant())
     servants_quarters.enemies.append(make_skeleton_servant())
     servants_kitchen.enemies.append(make_skeleton_servant())
