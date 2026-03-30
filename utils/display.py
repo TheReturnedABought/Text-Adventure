@@ -170,8 +170,6 @@ def show_levelup(player):
 
     while player.level_ups:
         lvl = player.level_ups.pop(0)
-        player.max_health += 10
-        player.health += 10
         print()
         print_slow("  ╔══════════════════════════════════════╗")
         print_slow(f"  ║   ✦  LEVEL UP  —  LVL {lvl:<2}            ✦  ║")

@@ -226,9 +226,9 @@ def soul_tax_player(stacks=1):
 
 # ── Move factory ──────────────────────────────────────────────────────────────
 
-def move(name: str, weight: int, effect_fn, cooldown: int = 0, ap_cost: int = 4):
+def move(name: str, weight: int, effect_fn, cooldown: int = 0, ap_cost: int = 4, tags=None):
     """Create an EnemyMove."""
     from entities.enemy import EnemyMove
-    mv = EnemyMove(name, weight, effect_fn, cooldown=cooldown, ap_cost=ap_cost)
+    mv = EnemyMove(name, weight, effect_fn, cooldown=cooldown, ap_cost=ap_cost, tags=tags)
     mv.intent_hint = getattr(effect_fn, "intent_hint", "")
     return mv

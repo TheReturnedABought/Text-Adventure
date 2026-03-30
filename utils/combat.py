@@ -34,6 +34,7 @@ from utils.constants import (
     BASE_ATTACK_MIN, BASE_ATTACK_MAX, BASE_HEAL_MIN, BASE_HEAL_MAX,
     BASE_COMMANDS,
 )
+from utils.damage import apply_typed_damage, class_base_attack_type
 from utils.status_effects import (
     tick_statuses, clear_block, modified_heal,
     is_stunned, is_raging, is_volatile, is_disoriented, get_echo,
@@ -123,6 +124,10 @@ class CombatSession:
         for relic in p.relics:
             if alive:
                 relic.on_combat_start(p, alive[0])
+
+        for e in alive:
+            if hasattr(e, "on_combat_start"):
+                e.on_combat_start(player=p, combat_session=self)
 
         if p.has_relic("Warden's Brand"):
             from utils.status_effects import apply_vulnerable
@@ -247,6 +252,8 @@ class CombatSession:
             "charm_cooldown":      p.combat_flags.pop("charm_cooldown", False),
             "ap_spent_this_turn":  0,
             "_enemies":            self.enemies,   # for AOE relics
+            "combat_session":      self,
+            "last_command_this_turn": None,
         }
 
     def _resolve_turn_end(self, ctx):
@@ -341,6 +348,7 @@ class CombatSession:
                 p.mana -= mp_cost
                 mp_spent = mp_cost
                 print_slow(f"  🔷 {command} costs {mp_cost} MP. (MP: {p.mana}/{p.max_mana})")
+                ctx["_last_mp_spent"] = mp_cost
 
             # Tick coalesce after spend
             if p.char_class == "mage" and p.combat_flags.get("coalesce_mp_discount_turns", 0) > 0:
@@ -368,6 +376,7 @@ class CombatSession:
             ctx["ap_spent_this_turn"] -= ap_cost
             if mp_spent:
                 p.mana = min(p.max_mana, p.mana + mp_spent)
+            ctx.pop("_last_mp_spent", None)
             return _NEXT
 
         result = self._post_action(command, raw, action_target, ctx)
@@ -530,7 +539,9 @@ class CombatSession:
             or (alive[0] if alive else None)
         )
         p.trigger_relics(TRIGGER_ON_ACTION, relic_target,
-                         {**ctx, "raw": raw, "command": command})
+                         {**ctx, "raw": raw, "command": command, "previous_command": ctx.get("last_command_this_turn"), "mp_spent": ctx.pop("_last_mp_spent", 0)})
+
+        ctx["last_command_this_turn"] = command
 
         if p.combat_flags.get("shielded_active") and command in _SHIELDED_DAMAGE_COMMANDS:
             self._grant_shielded_block()
@@ -619,12 +630,16 @@ class CombatSession:
             dmg *= 2
             print_slow(f"  💀 Mark of Death — DOUBLE damage!")
 
-        actual, absorbed = consume_block(enemy, dmg)
-        enemy.take_damage(actual)
-        if absorbed:
-            print_slow(f"  > Strike {enemy.name} for {dmg} — 🛡 {absorbed} blocked, {actual} dealt! (HP:{max(enemy.health,0)})")
-        else:
-            print_slow(f"  > Strike {enemy.name} for {dmg}! (HP:{max(enemy.health,0)})")
+        base_type = class_base_attack_type(p.char_class)
+        actual, absorbed, _ = apply_typed_damage(
+            attacker=p,
+            target=enemy,
+            dmg=dmg,
+            damage_type=base_type,
+            label="Strike",
+            ctx=ctx,
+        )
+        print_slow(f"  {enemy.name} HP: {max(enemy.health,0)}")
 
         if enemy.health <= 0:
             self._on_enemy_death(enemy, p)
@@ -644,6 +659,7 @@ class CombatSession:
             print_slow(f"  {BLUE}Not enough Mana!{RESET}")
             return False
         p.mana -= HEAL_MP_COST
+        ctx["_last_mp_spent"] = HEAL_MP_COST
 
         base = dice_roll(BASE_HEAL_DICE)
 
@@ -855,6 +871,7 @@ class CombatSession:
             used_ids.add(id(chosen))
             p.journal.record_move(enemy.name, chosen.name)
             chosen.use(enemy, p)
+            enemy.on_move_used(chosen.name, combat_session=self, ctx={"player": p})
             self._handle_shield_self(enemy)
             self._handle_shield_allies(enemy)
             # Phalanx — block all allies
@@ -901,7 +918,7 @@ class CombatSession:
         raw_dmg = int(raw_dmg * consume_weak(enemy))
 
         from entities.enemy_moves import resolve_enemy_hit
-        resolve_enemy_hit(enemy, p, raw_dmg)
+        resolve_enemy_hit(enemy, p, raw_dmg, detail=getattr(enemy, "damage_type", "physical"))
 
     def _handle_shield_allies(self, enemy):
         amt = enemy.statuses.pop("_shield_allies", 0)
