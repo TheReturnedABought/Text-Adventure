@@ -54,7 +54,6 @@ def _enemy_hint(enemy_name):
 
 
 # ── EnvObject ─────────────────────────────────────────────────────────────────
-from utils.helpers import print_slow
 
 
 class EnvObject:
@@ -110,11 +109,11 @@ class EnvObject:
         elif self.examine_fn:
             self.examine_fn(player, room)
         else:
-            print_slow(f"  Nothing stands out.")
+            print_slow("  Nothing stands out.")
 
         # Show options if defined
         if self._options:
-            print_slow(f"\n  What do you do?")
+            print_slow("\n  What do you do?")
             available = []
             locked = []
             option_map = {}
@@ -281,13 +280,6 @@ class Room:
     def add_env_object(self, obj: EnvObject):
         self.env_objects.append(obj)
 
-    def get_env_object(self, name: str):
-        name = name.lower()
-        return next(
-            (o for o in self.env_objects if o.visible and name in o.name.lower()),
-            None
-        )
-
     def add_relic(self, relic):
         self.relics.append(relic)
 
@@ -339,9 +331,24 @@ class Room:
     # ── Env objects ───────────────────────────────────────────────────────────
 
     def get_env_object(self, name: str) -> "EnvObject | None":
-        """Find an EnvObject by partial name match."""
-        name = name.lower()
-        return next((o for o in self.env_objects if name in o.name.lower()), None)
+        """Find a *visible* EnvObject by exact/partial name match."""
+        query = name.lower().strip()
+        visible = [o for o in self.env_objects if o.visible]
+        if not query:
+            return visible[0] if visible else None
+
+        # 1) exact name match
+        exact = next((o for o in visible if o.name.lower() == query), None)
+        if exact:
+            return exact
+
+        # 2) partial contains match
+        contains = next((o for o in visible if query in o.name.lower()), None)
+        if contains:
+            return contains
+
+        # 3) reverse contains (helps commands like "inspect wall" -> "alcove walls")
+        return next((o for o in visible if o.name.lower() in query), None)
 
     # ── State queries ─────────────────────────────────────────────────────────
 

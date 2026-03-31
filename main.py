@@ -23,9 +23,9 @@ from rooms.map_data         import setup_rooms
 from rooms.room             import Room
 from game_engine.engine     import GameEngine
 from game_engine.parser     import parse_command
-from game_engine.game_state import GameState, GameMode
+from game_engine.game_state import GameState
 from game_engine.save_manager import SaveManager
-from utils.helpers  import print_slow, print_status, RARITY_COLORS, RESET
+from utils.helpers  import print_slow, RARITY_COLORS, RESET
 from utils.display  import (
     show_intro, show_room, show_help, show_combat_enter,
     show_class_selection, show_relics, show_map, show_journal,
@@ -51,7 +51,6 @@ class CommandRouter:
         self._build()
 
     def _build(self):
-        g = self._game
         t = self._table
 
         for alias in ("move", "go", "walk"):
@@ -66,7 +65,7 @@ class CommandRouter:
         t["relics"]    = t["relic"]   = lambda g, a: show_relics(g.player)
         t["use"]                      = lambda g, a: use_item(g.player, g.room, a)
         t["listen"]   = t["hear"]     = lambda g, a: do_listen(g.player, g.room)
-        t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room)
+        t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room, a)
         t["examine"]  = t["inspect"]  = lambda g, a: do_examine(g.player, g.room, a)
         t["solve"]                    = lambda g, a: do_solve(g.player, g.room, a)
         t["look"]     = t["l"]        = lambda g, a: show_room(g.room)
@@ -76,16 +75,18 @@ class CommandRouter:
         t["map"]                      = lambda g, a: show_map(g.start_room, g.room)
         t["journal"]                  = lambda g, a: show_journal(g.player)
 
-    def dispatch(self, command: str, args: list):
+    def dispatch(self, command: str, args: list) -> bool:
         handler = self._table.get(command)
         if handler:
             result = handler(self._game, args)
             if isinstance(result, Room):
                 self._game.state.room = result
+            return True
         else:
             print_slow(
                 f"  Unknown command '{command}'. Type 'help' for a list of commands."
             )
+            return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -97,6 +98,7 @@ class Game:
         self.state:    "GameState | None" = None
         self.router:   "CommandRouter | None" = None
         self.save_mgr: SaveManager = SaveManager()
+        self._show_room_on_next_turn = True
 
     @property
     def player(self) -> Player:
@@ -229,7 +231,13 @@ class Game:
 
     def _run_explore_turn(self):
         window.set_explore(self.player, self.room)
-        show_room(self.room)
+        if self._show_room_on_next_turn:
+            self._show_room_on_next_turn = False
+            show_room(self.room)
+        else:
+            if self.room.ambient:
+                print()
+                print_slow(f"  {self.room.ambient_line()}")
 
         raw = input("\n> ").lower().strip()
         if not raw:
@@ -241,7 +249,9 @@ class Game:
             return
 
         command, args = parse_command(raw)
-        self.router.dispatch(command, args)
+        handled = self.router.dispatch(command, args)
+        if not handled:
+            return
 
     def _handle_death(self):
         print_slow("\n  You have died. Game over.")
@@ -252,8 +262,10 @@ class Game:
         new_room = do_move(self.player, self.room, args)
         if new_room is not self.room:
             new_room.visit_count += 1
-            new_room.on_enter(self.player)
+            if new_room.visit_count == 1:
+                new_room.on_enter(self.player)
             self.state.enter_room(new_room)
+            self._show_room_on_next_turn = True
             window.set_explore(self.player, new_room)
             self._autosave()
         return new_room

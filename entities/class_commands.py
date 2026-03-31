@@ -8,28 +8,30 @@ from utils.helpers import print_slow, BLUE, RESET
 from utils.status_effects import (
     apply_poison, apply_stun, apply_vulnerable, apply_weak,
     apply_rage, apply_volatile, apply_disorient, apply_block,
-    consume_block, get_block, apply_speed
+    get_block, apply_speed
 )
 from utils.dice import roll, add_dice
+from utils.damage import apply_typed_damage, command_damage_type
 
 # ────────────────────────────────
 #  Shared helpers
 # ────────────────────────────────
-def _deal(player, enemy, dmg, ctx=None, label="You strike"):
-    """Apply mark bonus, consume block, deal damage."""
+def _deal(player, enemy, dmg, ctx=None, label="You strike", damage_type="physical"):
+    """Apply mark bonus, typed damage scaling, and deal damage."""
     bonus = 0
     if ctx and ctx.get("mark_bonus", 0):
         bonus = ctx["mark_bonus"]
         ctx["mark_bonus"] = 0
         print_slow(f"  🗡 Mark bonus: +{bonus} damage!")
     total = dmg + bonus
-    actual, absorbed = consume_block(enemy, total)
-    enemy.take_damage(actual)
-    if absorbed:
-        print_slow(f"  {label} {enemy.name} for {total} — 🛡 blocked {absorbed}, taking {actual}!")
-    else:
-        print_slow(f"  {label} {enemy.name} for {total}!")
-    print_slow(f"  {enemy.name} HP: {max(enemy.health, 0)}")
+    actual, _absorbed, _ = apply_typed_damage(
+        attacker=player,
+        target=enemy,
+        dmg=total,
+        damage_type=damage_type,
+        label=label,
+        ctx=ctx,
+    )
     if enemy.health <= 0:
         print_slow(f"  > {enemy.name} defeated! +{enemy.xp_reward} XP")
         player.gain_xp(enemy.xp_reward)
@@ -123,7 +125,7 @@ def cmd_guard(player, enemies, target, ctx):
 def cmd_berserk(player, enemies, target, ctx):
     apply_rage(player, 2)
     apply_volatile(player)
-    print_slow(f"  🔥 Berserk — Rage ×2 + Volatile!")
+    print_slow("  🔥 Berserk — Rage ×2 + Volatile!")
     return True
 
 def cmd_discipline(player, enemies, target, ctx):
@@ -150,10 +152,8 @@ def cmd_cleave(player, enemies, target, ctx):
     print_slow(f"  ⚔ Cleave — striking all enemies twice for {dmg} each!")
     for e in _alive(enemies):
         for i in range(2):
-            actual, absorbed = consume_block(e, dmg)
-            e.take_damage(actual)
-            tag = f" (blocked {absorbed})" if absorbed else ""
-            print_slow(f"    {e.name} hit {i+1}: {actual}{tag} | HP:{max(e.health,0)}")
+            actual, absorbed, _ = apply_typed_damage(player, e, dmg, command_damage_type("cleave"), label=f"Cleave hit {i+1}", ctx=ctx)
+            print_slow(f"    {e.name} HP:{max(e.health,0)}")
             if e.health <= 0:
                 print_slow(f"  > {e.name} defeated! +{e.xp_reward} XP")
                 player.gain_xp(e.xp_reward)
@@ -163,11 +163,11 @@ def cmd_cleave(player, enemies, target, ctx):
 def cmd_fortify(player, enemies, target, ctx):
     from utils.status_effects import apply_fortify
     apply_fortify(player, 4)
-    print_slow(f"  🏰 Fortify — Fortify 4 applied! Gain 4 Block at the start of every turn.")
+    print_slow("  🏰 Fortify — Fortify 4 applied! Gain 4 Block at the start of every turn.")
     return True
 
 def cmd_warcry(player, enemies, target, ctx):
-    print_slow(f"  ⚔ Warcry — weakening all foes!")
+    print_slow("  ⚔ Warcry — weakening all foes!")
     for e in _alive(enemies):
         apply_weak(e, 2)
         apply_vulnerable(e, 2)
@@ -187,7 +187,7 @@ def cmd_execute(player, enemies, target, ctx):
     block_mult = blk // 10
     player.statuses.pop("block", None)
     dmg = int(_roll_offensive(player, "2d6+6") * (3.0 if target.health/target.max_health < 0.3 else 2.0)) + block_mult
-    _deal(player, target, dmg, ctx, "Execute:")
+    _deal(player, target, dmg, ctx, "Execute:", command_damage_type("execute"))
     print_slow(f"  ⚔ Execute ×{2 if target.health/target.max_health >= 0.3 else 3:.1f} (+{block_mult} from Block)")
     return True
 
@@ -195,14 +195,14 @@ def cmd_juggernaut(player, enemies, target, ctx):
     if not _require_target(target, "juggernaut"):
         return False
     dmg = _roll_offensive(player, "2d6+6")
-    _deal(player, target, dmg, ctx, "Juggernaut:")
+    _deal(player, target, dmg, ctx, "Juggernaut:", command_damage_type("juggernaut"))
     _grant_block(player, dmg)
     print_slow(f"  🛡 Juggernaut — gained {dmg} Block!")
     return True
 
 def cmd_unbreakable(player, enemies, target, ctx):
     player.combat_flags["persistent_block"] = True
-    print_slow(f"  🛡 Unbreakable — Block no longer resets at end of turn this combat.")
+    print_slow("  🛡 Unbreakable — Block no longer resets at end of turn this combat.")
     return True
 
 def cmd_overwhelm(player, enemies, target, ctx):
@@ -221,7 +221,7 @@ def cmd_downcut(player, enemies, target, ctx):
     if not _require_target(target, "downcut"):
         return False
     dmg = _roll_offensive(player, "2d10+4")
-    _deal(player, target, dmg, ctx, "Downcut:")
+    _deal(player, target, dmg, ctx, "Downcut:", command_damage_type("downcut"))
     player.combat_flags["no_block_this_turn"] = True
     print_slow("  ⚔ Downcut — you cannot gain Block for the rest of this turn.")
     return True
@@ -237,7 +237,7 @@ def cmd_defiant(player, enemies, target, ctx):
 def cmd_cut(player, enemies, target, ctx):
     if not _require_target(target, "cut"): return False
     dmg = _roll_offensive(player, "1d4+4")
-    _deal(player, target, dmg, ctx, "Cut:")
+    _deal(player, target, dmg, ctx, "Cut:", command_damage_type("cut"))
     return True
 
 def cmd_flow(player, enemies, target, ctx):
@@ -276,17 +276,14 @@ def cmd_flurry(player, enemies, target, ctx):
         if t.health <= 0:
             continue
         dmg = _roll_offensive(player, "1d4+3")
-        actual, absorbed = consume_block(t, dmg)
-        t.take_damage(actual)
-        tag = f" (blocked {absorbed})" if absorbed else ""
-        print_slow(f"    Hit {i+1} on {t.name}: {actual}{tag}")
+        _actual, _absorbed, _ = apply_typed_damage(player, t, dmg, command_damage_type("flurry"), label=f"Flurry hit {i+1}", ctx=ctx)
     return True
 
 def cmd_dash(player, enemies, target, ctx):
     blk, dash_damage, shared_roll, str_roll, dex_roll, shared, extra_str, extra_dex = _roll_dash_values(player)
     _grant_block(player, blk)
     if target and target.health>0:
-        _deal(player, target, dash_damage, ctx, "Dash:")
+        _deal(player, target, dash_damage, ctx, "Dash:", command_damage_type("dash"))
     apply_speed(player, 1)
     if shared > 0:
         shared_expr = f"1d6+3+{shared}d6"
@@ -305,7 +302,7 @@ def cmd_toxin(player, enemies, target, ctx):
     current = target.statuses.get("poison",0)
     if current==0:
         apply_poison(target,2)
-        print_slow(f"  🗡 Toxin — no poison to double, applied 2 stacks.")
+        print_slow("  🗡 Toxin — no poison to double, applied 2 stacks.")
     else:
         new_val = min(current*2,8)
         target.statuses["poison"]=new_val
@@ -320,15 +317,12 @@ def cmd_assault(player, enemies, target, ctx):
     for i in range(hits):
         if target.health<=0: break
         dmg = _roll_offensive(player, f"1d6+{i}")
-        actual, absorbed = consume_block(target,dmg)
-        target.take_damage(actual)
-        tag = f" (blocked {absorbed})" if absorbed else ""
-        print_slow(f"    Hit {i+1}: {actual}{tag}")
+        _actual, _absorbed, _ = apply_typed_damage(player, target, dmg, command_damage_type("assault"), label=f"Assault hit {i+1}", ctx=ctx)
     return True
 
 def cmd_evade(player, enemies, target, ctx):
     player.statuses["evade"] = max(1, player.statuses.get("evade", 0))
-    print_slow(f"  🗡 Evade — active for this enemy turn: 50% chance enemy attacks miss you; gain +2 AP when triggered.")
+    print_slow("  🗡 Evade — active for this enemy turn: 50% chance enemy attacks miss you; gain +2 AP when triggered.")
     return True
 
 def cmd_aim(player, enemies, target, ctx):
@@ -360,7 +354,7 @@ def cmd_assassinate(player, enemies, target, ctx):
     if ctx.get("actions_this_turn",0)==0:
         dmg = int(dmg*1.5)
         print_slow("  🗡 Assassinate — FIRST STRIKE BONUS!")
-    _deal(player,target,dmg,ctx,"Assassinate:")
+    _deal(player,target,dmg,ctx,"Assassinate:", command_damage_type("assassinate"))
     return True
 
 def cmd_shadowstrike(player, enemies, target, ctx):
@@ -368,7 +362,7 @@ def cmd_shadowstrike(player, enemies, target, ctx):
     actions = max(ctx.get("actions_this_combat",1),1)
     dmg = min(6*actions,80)
     print_slow(f"  🗡 Shadowstrike — {actions} combat actions × 6 = {dmg} damage!")
-    _deal(player,target,dmg,ctx,"Shadowstrike:")
+    _deal(player,target,dmg,ctx,"Shadowstrike:", command_damage_type("shadowstrike"))
     return True
 
 # ────────────────────────────────
@@ -385,19 +379,19 @@ def cmd_spark(player, enemies, target, ctx):
         if t.health <= 0:
             continue
         dmg = _roll_offensive(player, "1d4+2")
-        _deal(player, t, dmg, ctx, "⚡ Spark:")
+        _deal(player, t, dmg, ctx, "⚡ Spark:", command_damage_type("spark"))
     return True
 
 def cmd_bolt(player, enemies, target, ctx):
     if not _require_target(target,"bolt"): return False
     dmg = _roll_offensive(player, "2d8+4")
-    _deal(player,target,dmg,ctx,"⚡ Bolt:")
+    _deal(player,target,dmg,ctx,"⚡ Bolt:", command_damage_type("bolt"))
     apply_vulnerable(target, 1)
     if player.statuses.get("targeting", 0) > 0:
         player.statuses["targeting"] -= 1
         extra = _prompt_multi_targets(_alive(enemies), 1, "conduit bonus hit")
         if extra:
-            _deal(player, extra[0], _roll_offensive(player, "2d8+4"), ctx, "⚡ Conduit bolt:")
+            _deal(player, extra[0], _roll_offensive(player, "2d8+4"), ctx, "⚡ Conduit bolt:", command_damage_type("bolt"))
             apply_vulnerable(extra[0], 1)
     return True
 
@@ -418,13 +412,13 @@ def cmd_delay(player, enemies, target, ctx):
 def cmd_wave(player, enemies, target, ctx):
     print_slow(f"  {BLUE}🌊 Wave — lightning hits all enemies!{RESET}")
     for e in _alive(enemies):
-        _deal(player, e, _roll_offensive(player, "1d6+4"), ctx, "Wave:")
+        _deal(player, e, _roll_offensive(player, "1d6+4"), ctx, "Wave:", command_damage_type("wave"))
     return True
 
 def cmd_storm(player, enemies, target, ctx):
     print_slow(f"  {BLUE}⛈ Storm — heavy lightning hits all enemies!{RESET}")
     for e in _alive(enemies):
-        _deal(player, e, _roll_offensive(player, "2d6+6"), ctx, "Storm:")
+        _deal(player, e, _roll_offensive(player, "2d6+6"), ctx, "Storm:", command_damage_type("storm"))
     return True
 
 def cmd_ward(player, enemies, target, ctx):
@@ -462,7 +456,7 @@ def cmd_drain(player, enemies, target, ctx):
     if not _require_target(target, "drain"):
         return False
     amount = _roll_offensive(player, "1d6+2")
-    _deal(player, target, amount, ctx, "Drain:")
+    _deal(player, target, amount, ctx, "Drain:", command_damage_type("drain"))
     player.heal(amount)
     print_slow(f"  {BLUE}🔮 Drain — healed for {amount}.{RESET}")
     return True
@@ -471,7 +465,7 @@ def cmd_shatter(player, enemies, target, ctx):
     if not _require_target(target,"shatter"): return False
     mana_bonus = max(player.mana, 0)
     dmg = (roll("1d6") * mana_bonus) + 3
-    _deal(player,target,dmg,ctx,"Shatter:")
+    _deal(player,target,dmg,ctx,"Shatter:", command_damage_type("shatter"))
     return True
 
 def cmd_silence(player, enemies, target, ctx):
@@ -491,7 +485,7 @@ def cmd_torment(player, enemies, target, ctx):
 def cmd_obliterate(player, enemies, target, ctx):
     if not _require_target(target,"obliterate"): return False
     dmg = roll("6d6+20")
-    _deal(player,target,dmg,ctx,"Obliterate:")
+    _deal(player,target,dmg,ctx,"Obliterate:", command_damage_type("obliterate"))
     return True
 
 def cmd_rift(player, enemies, target, ctx):
@@ -513,7 +507,7 @@ def cmd_apocalypse(player, enemies, target, ctx):
     if not _require_target(target,"apocalypse"): return False
     total = sum(v for v in target.statuses.values() if isinstance(v,int))
     dmg = min(total*roll("1d5"),40)
-    _deal(player,target,dmg,ctx,"Apocalypse:")
+    _deal(player,target,dmg,ctx,"Apocalypse:", command_damage_type("apocalypse"))
     return True
 
 def cmd_conduit(player, enemies, target, ctx):
@@ -535,7 +529,7 @@ def cmd_quickshot(player, enemies, target, ctx):
         return False
     for t in targets:
         dmg = _roll_offensive(player, "1d4+2")
-        _deal(player, t, dmg, ctx, "Quickshot:")
+        _deal(player, t, dmg, ctx, "Quickshot:", command_damage_type("quickshot"))
     return True
 
 def cmd_plan(player, enemies, target, ctx):
@@ -557,7 +551,7 @@ def cmd_tempest(player, enemies, target, ctx):
 
     print_slow(f"  {BLUE}🌩 Tempest — devastating lightning on all enemies!{RESET}")
     for e in _alive(enemies):
-        _deal(player, e, _roll_offensive(player, "3d8+3"), ctx, "Tempest:")
+        _deal(player, e, _roll_offensive(player, "3d8+3"), ctx, "Tempest:", command_damage_type("tempest"))
     return True
 
 # ─────────────────────────────────────────────────────────────────────────────

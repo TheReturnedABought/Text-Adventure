@@ -146,7 +146,6 @@ def consume_block(entity, incoming_dmg, ignore_first_block=False):
 
 def tick_statuses(entity):
     """Tick DOTs and durations at end of entity's turn. Block clears at START of turn (handled in regen_ap)."""
-    import random
     name = getattr(entity, "name", "You")
 
     # Poison — deals stacks damage, then stacks decay by 1 (StS style)

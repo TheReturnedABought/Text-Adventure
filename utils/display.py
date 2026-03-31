@@ -1,5 +1,5 @@
 # utils/display.py
-from utils.helpers import print_slow, print_status, rarity_colored, RARITY_COLORS, RESET, BLUE
+from utils.helpers import print_slow, print_status, rarity_colored, RARITY_COLORS, RESET
 from utils.constants import (
     BASE_COMMANDS, BASE_ATTACK_MIN, BASE_ATTACK_MAX,
     BASE_HEAL_MIN, BASE_HEAL_MAX, BASE_BLOCK, HEAL_MP_COST,
@@ -67,8 +67,10 @@ def show_room(room):
     if room.ambient:
         print_slow(f"  {random.choice(room.ambient)}")
         print()
-    if room.items:
-        print(f"  Items  : {', '.join(_stacked_items(room.items))}")
+    visible_objects = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
+    room_objects = _stacked_items(room.items) + visible_objects
+    if room_objects:
+        print(f"  Objects: {', '.join(room_objects)}")
     if room.relics:
         relic_strs = [rarity_colored(r) for r in room.relics]
         print(f"  Relics : {', '.join(relic_strs)}")
@@ -80,14 +82,6 @@ def show_room(room):
             f"[{i+1}] {e.name} (HP:{e.health})" for i, e in enumerate(alive)
         )
         print(f"  Enemies: {enemy_str}")
-    exits   = list(room.connections.keys())
-    locked  = room.locked_connections
-    exit_strs = [f"{d}🔒" if d in locked else d for d in exits]
-    print(f"  Exits  : {', '.join(exit_strs)}")
-    if room.env_objects:
-        usable = [o.name for o in room.env_objects if o._uses_left > 0]
-        if usable:
-            print(f"  Objects: {', '.join(usable)}")
 
 
 def show_help(player=None):
@@ -127,7 +121,7 @@ def show_help(player=None):
         "    Enemy planned moves are shown in the combat HUD each turn.",
     ]
     if player and player.known_commands:
-        from entities.class_data import CLASS_COMMANDS, cmd_ap_cost, get_command_def
+        from entities.class_data import cmd_ap_cost, get_command_def
         lines.append("")
         lines.append("  Class commands (unlocked):")
         for name in sorted(player.known_commands):
@@ -170,8 +164,6 @@ def show_levelup(player):
 
     while player.level_ups:
         lvl = player.level_ups.pop(0)
-        player.max_health += 10
-        player.health += 10
         print()
         print_slow("  ╔══════════════════════════════════════╗")
         print_slow(f"  ║   ✦  LEVEL UP  —  LVL {lvl:<2}            ✦  ║")
@@ -194,9 +186,9 @@ def show_levelup(player):
     while player.pending_command_choices:
         level, choices = player.pending_command_choices.pop(0)
         print()
-        print_slow(f"  ╔══════════════════════════════════════╗")
+        print_slow("  ╔══════════════════════════════════════╗")
         print_slow(f"  ║   Choose a new command  (Lvl {level:<2})      ║")
-        print_slow(f"  ╚══════════════════════════════════════╝")
+        print_slow("  ╚══════════════════════════════════════╝")
         print()
         for i, cmd in enumerate(choices, 1):
             ap     = cmd_ap_cost(cmd)

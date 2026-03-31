@@ -11,6 +11,7 @@ ALIASES = {
     "g":  "go",
     "j":  "journal",
     "m":  "map",
+    "open": "interact",
 }
 
 

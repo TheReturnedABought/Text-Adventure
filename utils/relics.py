@@ -1,15 +1,13 @@
 # utils/relics.py
-import random
 from entities.relic import (
     Relic,
-    TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HEAL,
-    TRIGGER_ON_BLOCK, TRIGGER_ON_HIT, TRIGGER_TURN_END, TRIGGER_TURN_START,
+    TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HIT, TRIGGER_TURN_END, TRIGGER_TURN_START,
 )
 from utils.status_effects import (
-    apply_poison, apply_stun, apply_rage,
+    apply_poison, apply_rage,
     apply_vulnerable, apply_weak, apply_block,
 )
-from utils.helpers import print_slow, RARITY_COLORS, RESET
+from utils.helpers import print_slow
 
 VOWELS = set("aeiou")
 
@@ -32,7 +30,7 @@ class IronCastHelm(Relic):
 
     def on_combat_start(self, player, enemy):
         apply_block(player, 12)
-        print_slow(f"  🪖 Iron-Cast Helm — +12 Block at combat start!")
+        print_slow("  🪖 Iron-Cast Helm — +12 Block at combat start!")
 
 
 class SleightmakersGlove(Relic):
@@ -246,6 +244,38 @@ class EtchedStone(Relic):
                 apply_vulnerable(enemy, n)
 
 
+
+class ManaInfusedBone(Relic):
+    name        = "Mana Infused Bone"
+    description = "Gain 1 Dexterity for every MP you spend."
+    rarity      = RARE
+
+    def trigger(self, event, player, enemy, ctx):
+        if event != TRIGGER_ON_ACTION:
+            return
+        spent = int(ctx.get("mp_spent", 0) or 0)
+        if spent <= 0:
+            return
+        player.statuses["dexterity"] = player.statuses.get("dexterity", 0) + spent
+        print_slow(f"  🦴 Mana Infused Bone — +{spent} Dexterity this combat.")
+
+
+class TheStaticHunger(Relic):
+    name        = "The Static Hunger"
+    description = "Repeating the same action grants +1 Strength this turn."
+    rarity      = UNCOMMON
+
+    def trigger(self, event, player, enemy, ctx):
+        if event != TRIGGER_ON_ACTION:
+            return
+        cmd = (ctx.get("command") or "").strip().lower()
+        prev = (ctx.get("previous_command") or "").strip().lower()
+        if not cmd or not prev or cmd != prev:
+            return
+        player.statuses["strength"] = player.statuses.get("strength", 0) + 1
+        print_slow("  ⚡ The Static Hunger — repeated action, +1 Strength!")
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 ALL_RELICS = {
@@ -269,6 +299,8 @@ ALL_RELICS = {
     "echo chamber":        EchoChamber,
     "wardens brand":       WardensBrand,
     "etched stone":        EtchedStone,
+    "mana infused bone":   ManaInfusedBone,
+    "the static hunger":   TheStaticHunger,
 }
 
 
