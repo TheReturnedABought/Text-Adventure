@@ -67,8 +67,10 @@ def show_room(room):
     if room.ambient:
         print_slow(f"  {random.choice(room.ambient)}")
         print()
-    if room.items:
-        print(f"  Items  : {', '.join(_stacked_items(room.items))}")
+    visible_objects = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
+    room_objects = _stacked_items(room.items) + visible_objects
+    if room_objects:
+        print(f"  Objects: {', '.join(room_objects)}")
     if room.relics:
         relic_strs = [rarity_colored(r) for r in room.relics]
         print(f"  Relics : {', '.join(relic_strs)}")
@@ -80,14 +82,6 @@ def show_room(room):
             f"[{i+1}] {e.name} (HP:{e.health})" for i, e in enumerate(alive)
         )
         print(f"  Enemies: {enemy_str}")
-    exits   = list(room.connections.keys())
-    locked  = room.locked_connections
-    exit_strs = [f"{d}🔒" if d in locked else d for d in exits]
-    print(f"  Exits  : {', '.join(exit_strs)}")
-    if room.env_objects:
-        visible = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
-        if visible:
-            print(f"  Objects: {', '.join(visible)}")
 
 
 def show_help(player=None):

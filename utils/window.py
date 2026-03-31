@@ -418,12 +418,6 @@ class GameWindow:
         if not room:
             return
 
-        desc = str(getattr(room, "description", "")).strip()
-        if desc:
-            for ln in desc.splitlines()[:3]:
-                t.insert('end', f'  {ln}\n', 'white')
-            t.insert('end', '\n')
-
         art_str = ROOM_ART.get(room.name, '')
         if art_str:
             for ln in art_str.strip('\n').splitlines()[:5]:
@@ -437,9 +431,11 @@ class GameWindow:
         if room.relics:
             t.insert('end', '  Relics:   ', 'bold')
             t.insert('end', ', '.join(r.name for r in room.relics) + '\n', 'cyan')
-        if room.items:
-            t.insert('end', '  Items:    ', 'bold')
-            t.insert('end', ', '.join(_stacked_items(room.items)) + '\n', 'white')
+        visible_objects = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
+        room_objects = _stacked_items(room.items) + visible_objects
+        if room_objects:
+            t.insert('end', '  Objects:  ', 'bold')
+            t.insert('end', ', '.join(room_objects) + '\n', 'white')
         ev = getattr(room, 'event', None)
         if ev and not getattr(ev, 'resolved', True):
             t.insert('end', '  Event:    ', 'bold')
@@ -449,11 +445,6 @@ class GameWindow:
             t.insert('end', '  Puzzle:   ', 'bold')
             t.insert('end', pz.name + '  (examine / solve)\n', 'magenta')
 
-        exits  = list(room.connections.keys())
-        locked = room.locked_connections
-        exs    = [f'{d}🔒' if d in locked else d for d in exits]
-        t.insert('end', '  Exits:    ', 'bold')
-        t.insert('end', ', '.join(exs) + '\n', 'green')
 
     # ── STATUS / HUD ──────────────────────────────────────────────────────────
 
