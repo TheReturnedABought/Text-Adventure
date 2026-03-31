@@ -32,7 +32,6 @@ def _deal(player, enemy, dmg, ctx=None, label="You strike", damage_type="physica
         label=label,
         ctx=ctx,
     )
-    print_slow(f"  {enemy.name} HP: {max(enemy.health, 0)}")
     if enemy.health <= 0:
         print_slow(f"  > {enemy.name} defeated! +{enemy.xp_reward} XP")
         player.gain_xp(enemy.xp_reward)

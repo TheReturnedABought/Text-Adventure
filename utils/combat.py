@@ -637,8 +637,6 @@ class CombatSession:
             label="Strike",
             ctx=ctx,
         )
-        print_slow(f"  {enemy.name} HP: {max(enemy.health,0)}")
-
         if enemy.health <= 0:
             self._on_enemy_death(enemy, p)
 

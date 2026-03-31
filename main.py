@@ -65,7 +65,7 @@ class CommandRouter:
         t["relics"]    = t["relic"]   = lambda g, a: show_relics(g.player)
         t["use"]                      = lambda g, a: use_item(g.player, g.room, a)
         t["listen"]   = t["hear"]     = lambda g, a: do_listen(g.player, g.room)
-        t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room)
+        t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room, a)
         t["examine"]  = t["inspect"]  = lambda g, a: do_examine(g.player, g.room, a)
         t["solve"]                    = lambda g, a: do_solve(g.player, g.room, a)
         t["look"]     = t["l"]        = lambda g, a: show_room(g.room)

@@ -46,7 +46,6 @@ def resolve_enemy_hit(enemy, player, dmg, label=None, ignore_first_block=False, 
 
     if actual > 0:
         player.take_damage(actual)
-        print_slow(f"  Your HP: {player.health}")
         sentinel = player.combat_flags.get("sentinel_thorns", 0)
         if sentinel:
             enemy.take_damage(sentinel)
@@ -126,7 +125,7 @@ def stun_attack(damage_expr="1d6+3"):
         dmg = roll(damage_expr)
         resolve_enemy_hit(enemy, player, dmg, label="Stunning Blow", detail=damage_expr)
         apply_stun(player, 1)
-        print_slow(f"  Your HP: {player.health} — you are STUNNED!")
+        print_slow("  You are STUNNED!")
     effect.intent_hint = f"(ATK {damage_expr} + STUN)"
     return effect
 
@@ -154,7 +153,7 @@ def disorient_attack(damage_expr="1d6+3"):
         dmg = roll(damage_expr)
         resolve_enemy_hit(enemy, player, dmg, label="Disorienting Slash", detail=damage_expr)
         apply_disorient(player, 1)
-        print_slow(f"  Your HP: {player.health} — you are DISORIENTED!")
+        print_slow("  You are DISORIENTED!")
     effect.intent_hint = f"(ATK {damage_expr} + DISORIENT)"
     return effect
 
