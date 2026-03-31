@@ -269,8 +269,12 @@ def setup_area1():
     )
 
     def examine_entrance_walls(player, room):
-        print_slow("  One recess hides a normal chest.")
-        entrance_chest.visible = True
+        print_slow("  One recess hides a sturdy chest, unremarkable save for its lock.")
+        existing = next((o for o in room.env_objects if o.name.lower() == "chest"), None)
+        if existing is None:
+            room.add_env_object(entrance_chest)
+            existing = entrance_chest
+        existing.visible = True
 
     entrance_walls = EnvObject(
         name="alcove walls",
