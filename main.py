@@ -76,16 +76,18 @@ class CommandRouter:
         t["map"]                      = lambda g, a: show_map(g.start_room, g.room)
         t["journal"]                  = lambda g, a: show_journal(g.player)
 
-    def dispatch(self, command: str, args: list):
+    def dispatch(self, command: str, args: list) -> bool:
         handler = self._table.get(command)
         if handler:
             result = handler(self._game, args)
             if isinstance(result, Room):
                 self._game.state.room = result
+            return True
         else:
             print_slow(
                 f"  Unknown command '{command}'. Type 'help' for a list of commands."
             )
+            return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -97,6 +99,7 @@ class Game:
         self.state:    "GameState | None" = None
         self.router:   "CommandRouter | None" = None
         self.save_mgr: SaveManager = SaveManager()
+        self._suppress_room_render_once = False
 
     @property
     def player(self) -> Player:
@@ -229,7 +232,10 @@ class Game:
 
     def _run_explore_turn(self):
         window.set_explore(self.player, self.room)
-        show_room(self.room)
+        if self._suppress_room_render_once:
+            self._suppress_room_render_once = False
+        else:
+            show_room(self.room)
 
         raw = input("\n> ").lower().strip()
         if not raw:
@@ -241,7 +247,9 @@ class Game:
             return
 
         command, args = parse_command(raw)
-        self.router.dispatch(command, args)
+        handled = self.router.dispatch(command, args)
+        if not handled:
+            self._suppress_room_render_once = True
 
     def _handle_death(self):
         print_slow("\n  You have died. Game over.")
@@ -252,7 +260,8 @@ class Game:
         new_room = do_move(self.player, self.room, args)
         if new_room is not self.room:
             new_room.visit_count += 1
-            new_room.on_enter(self.player)
+            if new_room.visit_count == 1:
+                new_room.on_enter(self.player)
             self.state.enter_room(new_room)
             window.set_explore(self.player, new_room)
             self._autosave()

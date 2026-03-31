@@ -256,16 +256,31 @@ def setup_area1():
         ]
     )
     crossroads.add_env_object(brazier)
-    def standard_chest():
-        entrance.add_item("gold coin")
-        print_slow("A gold coin is in the chest")
-    standard_chest = EnvObject(
-        name="alcove walls",
-        use_fn=standard_chest,
-        examine_fn=lambda p, r, e=None: print_slow("A normal chest."),
-        uses=1
+    def open_entrance_chest(player, room, enemies=None):
+        room.add_item("gold coin")
+        print_slow("  You open the chest. A gold coin tumbles out.")
+
+    entrance_chest = EnvObject(
+        name="chest",
+        examine_fn=lambda p, r: print_slow("  A normal chest."),
+        use_fn=open_entrance_chest,
+        uses=1,
+        visible=False,
     )
-    entrance.add_env_object(standard_chest)
+
+    def examine_entrance_walls(player, room):
+        print_slow("  One recess hides a normal chest.")
+        entrance_chest.visible = True
+
+    entrance_walls = EnvObject(
+        name="alcove walls",
+        use_fn=lambda p, r, e=None: print_slow("  You brush dust from the cracked stone."),
+        examine_fn=examine_entrance_walls,
+        uses=99,
+    )
+
+    entrance.add_env_object(entrance_walls)
+    entrance.add_env_object(entrance_chest)
     # Puzzle Alcove — alcove walls (examine to reveal hidden corner)
     def examine_alcove_for_hidden_corner(player, room):
         print_slow(
@@ -339,9 +354,6 @@ def setup_area1():
     puzzle_room.add_env_object(main_dais)
     # ── on_enter hooks ────────────────────────────────────────────────────────
     def _entrance_enter(player):
-        from utils.ascii_art import ENTRANCE_HALL, print_art
-        print_art(ENTRANCE_HALL, indent=6)
-        print()
         print_slow("  Tutorial — Area 1 Basics")
         print_slow("  • Movement: north/south/east/west")
         print_slow("  • Combat: attack, block, heal, end")

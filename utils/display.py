@@ -85,9 +85,9 @@ def show_room(room):
     exit_strs = [f"{d}🔒" if d in locked else d for d in exits]
     print(f"  Exits  : {', '.join(exit_strs)}")
     if room.env_objects:
-        usable = [o.name for o in room.env_objects if o._uses_left > 0]
-        if usable:
-            print(f"  Objects: {', '.join(usable)}")
+        visible = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
+        if visible:
+            print(f"  Objects: {', '.join(visible)}")
 
 
 def show_help(player=None):
