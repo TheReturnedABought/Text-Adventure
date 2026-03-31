@@ -23,9 +23,9 @@ from rooms.map_data         import setup_rooms
 from rooms.room             import Room
 from game_engine.engine     import GameEngine
 from game_engine.parser     import parse_command
-from game_engine.game_state import GameState, GameMode
+from game_engine.game_state import GameState
 from game_engine.save_manager import SaveManager
-from utils.helpers  import print_slow, print_status, RARITY_COLORS, RESET
+from utils.helpers  import print_slow, RARITY_COLORS, RESET
 from utils.display  import (
     show_intro, show_room, show_help, show_combat_enter,
     show_class_selection, show_relics, show_map, show_journal,
@@ -51,7 +51,6 @@ class CommandRouter:
         self._build()
 
     def _build(self):
-        g = self._game
         t = self._table
 
         for alias in ("move", "go", "walk"):
@@ -99,7 +98,7 @@ class Game:
         self.state:    "GameState | None" = None
         self.router:   "CommandRouter | None" = None
         self.save_mgr: SaveManager = SaveManager()
-        self._suppress_room_render_once = False
+        self._show_room_on_next_turn = True
 
     @property
     def player(self) -> Player:
@@ -232,10 +231,13 @@ class Game:
 
     def _run_explore_turn(self):
         window.set_explore(self.player, self.room)
-        if self._suppress_room_render_once:
-            self._suppress_room_render_once = False
-        else:
+        if self._show_room_on_next_turn:
+            self._show_room_on_next_turn = False
             show_room(self.room)
+        else:
+            if self.room.ambient:
+                print()
+                print_slow(f"  {self.room.ambient_line()}")
 
         raw = input("\n> ").lower().strip()
         if not raw:
@@ -249,7 +251,7 @@ class Game:
         command, args = parse_command(raw)
         handled = self.router.dispatch(command, args)
         if not handled:
-            self._suppress_room_render_once = True
+            return
 
     def _handle_death(self):
         print_slow("\n  You have died. Game over.")
@@ -263,6 +265,7 @@ class Game:
             if new_room.visit_count == 1:
                 new_room.on_enter(self.player)
             self.state.enter_room(new_room)
+            self._show_room_on_next_turn = True
             window.set_explore(self.player, new_room)
             self._autosave()
         return new_room

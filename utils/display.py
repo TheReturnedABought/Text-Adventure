@@ -1,5 +1,5 @@
 # utils/display.py
-from utils.helpers import print_slow, print_status, rarity_colored, RARITY_COLORS, RESET, BLUE
+from utils.helpers import print_slow, print_status, rarity_colored, RARITY_COLORS, RESET
 from utils.constants import (
     BASE_COMMANDS, BASE_ATTACK_MIN, BASE_ATTACK_MAX,
     BASE_HEAL_MIN, BASE_HEAL_MAX, BASE_BLOCK, HEAL_MP_COST,
@@ -127,7 +127,7 @@ def show_help(player=None):
         "    Enemy planned moves are shown in the combat HUD each turn.",
     ]
     if player and player.known_commands:
-        from entities.class_data import CLASS_COMMANDS, cmd_ap_cost, get_command_def
+        from entities.class_data import cmd_ap_cost, get_command_def
         lines.append("")
         lines.append("  Class commands (unlocked):")
         for name in sorted(player.known_commands):
@@ -192,9 +192,9 @@ def show_levelup(player):
     while player.pending_command_choices:
         level, choices = player.pending_command_choices.pop(0)
         print()
-        print_slow(f"  ╔══════════════════════════════════════╗")
+        print_slow("  ╔══════════════════════════════════════╗")
         print_slow(f"  ║   Choose a new command  (Lvl {level:<2})      ║")
-        print_slow(f"  ╚══════════════════════════════════════╝")
+        print_slow("  ╚══════════════════════════════════════╝")
         print()
         for i, cmd in enumerate(choices, 1):
             ap     = cmd_ap_cost(cmd)

@@ -9,7 +9,6 @@ ENEMY_ART  : dict[enemy_name  -> list[str]]  (portrait lines, window.py)
 ROOM_ART   : dict[room_name   -> str]   (window.py ART panel explore mode)
 print_art  : helper to print a multiline art string with fixed indent
 """
-from utils.helpers import print_slow
 
 
 def print_art(art, indent=2):

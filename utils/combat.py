@@ -31,19 +31,17 @@ from utils.helpers   import print_slow, print_status, BLUE, RESET
 from utils.constants import (
     BASE_BLOCK,
     BASE_ATTACK_DICE, BASE_HEAL_DICE, HEAL_MP_COST,
-    BASE_ATTACK_MIN, BASE_ATTACK_MAX, BASE_HEAL_MIN, BASE_HEAL_MAX,
     BASE_COMMANDS,
 )
 from utils.damage import apply_typed_damage, class_base_attack_type
 from utils.status_effects import (
     tick_statuses, clear_block, modified_heal,
-    is_stunned, is_raging, is_volatile, is_disoriented, get_echo,
-    apply_block, consume_block,
-    consume_weak, consume_vulnerable, consume_rage,
+    is_stunned, is_volatile, is_disoriented, get_echo,
+    apply_block, consume_weak, consume_vulnerable, consume_rage,
     format_statuses, get_block,
     get_regen, get_burden,
     get_fortify, get_speed, get_slow, get_soul_tax,
-    apply_weak, apply_speed, apply_slow,
+    apply_weak,
 )
 from entities.relic import (
     TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HEAL,
@@ -628,7 +626,7 @@ class CombatSession:
         # Mark of Death enemy flag
         if enemy.statuses.pop("mark_of_death", 0):
             dmg *= 2
-            print_slow(f"  💀 Mark of Death — DOUBLE damage!")
+            print_slow("  💀 Mark of Death — DOUBLE damage!")
 
         base_type = class_base_attack_type(p.char_class)
         actual, absorbed, _ = apply_typed_damage(

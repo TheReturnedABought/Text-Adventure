@@ -54,7 +54,6 @@ def _enemy_hint(enemy_name):
 
 
 # ── EnvObject ─────────────────────────────────────────────────────────────────
-from utils.helpers import print_slow
 
 
 class EnvObject:
@@ -110,11 +109,11 @@ class EnvObject:
         elif self.examine_fn:
             self.examine_fn(player, room)
         else:
-            print_slow(f"  Nothing stands out.")
+            print_slow("  Nothing stands out.")
 
         # Show options if defined
         if self._options:
-            print_slow(f"\n  What do you do?")
+            print_slow("\n  What do you do?")
             available = []
             locked = []
             option_map = {}
