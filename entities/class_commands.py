@@ -8,7 +8,7 @@ from utils.helpers import print_slow, BLUE, RESET
 from utils.status_effects import (
     apply_poison, apply_stun, apply_vulnerable, apply_weak,
     apply_rage, apply_volatile, apply_disorient, apply_block,
-    consume_block, get_block, apply_speed
+    get_block, apply_speed
 )
 from utils.dice import roll, add_dice
 from utils.damage import apply_typed_damage, command_damage_type
@@ -126,7 +126,7 @@ def cmd_guard(player, enemies, target, ctx):
 def cmd_berserk(player, enemies, target, ctx):
     apply_rage(player, 2)
     apply_volatile(player)
-    print_slow(f"  🔥 Berserk — Rage ×2 + Volatile!")
+    print_slow("  🔥 Berserk — Rage ×2 + Volatile!")
     return True
 
 def cmd_discipline(player, enemies, target, ctx):
@@ -164,11 +164,11 @@ def cmd_cleave(player, enemies, target, ctx):
 def cmd_fortify(player, enemies, target, ctx):
     from utils.status_effects import apply_fortify
     apply_fortify(player, 4)
-    print_slow(f"  🏰 Fortify — Fortify 4 applied! Gain 4 Block at the start of every turn.")
+    print_slow("  🏰 Fortify — Fortify 4 applied! Gain 4 Block at the start of every turn.")
     return True
 
 def cmd_warcry(player, enemies, target, ctx):
-    print_slow(f"  ⚔ Warcry — weakening all foes!")
+    print_slow("  ⚔ Warcry — weakening all foes!")
     for e in _alive(enemies):
         apply_weak(e, 2)
         apply_vulnerable(e, 2)
@@ -203,7 +203,7 @@ def cmd_juggernaut(player, enemies, target, ctx):
 
 def cmd_unbreakable(player, enemies, target, ctx):
     player.combat_flags["persistent_block"] = True
-    print_slow(f"  🛡 Unbreakable — Block no longer resets at end of turn this combat.")
+    print_slow("  🛡 Unbreakable — Block no longer resets at end of turn this combat.")
     return True
 
 def cmd_overwhelm(player, enemies, target, ctx):
@@ -303,7 +303,7 @@ def cmd_toxin(player, enemies, target, ctx):
     current = target.statuses.get("poison",0)
     if current==0:
         apply_poison(target,2)
-        print_slow(f"  🗡 Toxin — no poison to double, applied 2 stacks.")
+        print_slow("  🗡 Toxin — no poison to double, applied 2 stacks.")
     else:
         new_val = min(current*2,8)
         target.statuses["poison"]=new_val
@@ -323,7 +323,7 @@ def cmd_assault(player, enemies, target, ctx):
 
 def cmd_evade(player, enemies, target, ctx):
     player.statuses["evade"] = max(1, player.statuses.get("evade", 0))
-    print_slow(f"  🗡 Evade — active for this enemy turn: 50% chance enemy attacks miss you; gain +2 AP when triggered.")
+    print_slow("  🗡 Evade — active for this enemy turn: 50% chance enemy attacks miss you; gain +2 AP when triggered.")
     return True
 
 def cmd_aim(player, enemies, target, ctx):

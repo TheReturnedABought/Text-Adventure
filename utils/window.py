@@ -465,8 +465,7 @@ class GameWindow:
             return
 
         try:
-            from utils.helpers import make_bar
-            from utils.constants import MAX_AP, MAX_MANA, BASE_COMMANDS, HEAL_MP_COST
+            from utils.constants import MAX_AP, BASE_COMMANDS, HEAL_MP_COST
             from utils.status_effects import format_statuses
             from entities.class_data import get_command_def, cmd_ap_cost as _apc
         except ImportError:
@@ -610,8 +609,8 @@ class GameWindow:
             game_fn()
         except SystemExit:
             pass
-        except Exception as e:
-            self._schedule(lambda: self._append_log(f'\n  [Error: {e}]'))
+        except Exception as exc:
+            self._schedule(lambda err=exc: self._append_log(f'\n  [Error: {err}]'))
         finally:
             self._input_result = ''
             self._input_event.set()

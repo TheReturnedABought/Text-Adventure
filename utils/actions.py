@@ -1,7 +1,7 @@
 # utils/actions.py
 from utils.helpers import print_slow
-from utils.constants import MAX_AP
 from collections import Counter
+from rooms.room import Puzzle
 
 
 def get_alive_enemies(room):

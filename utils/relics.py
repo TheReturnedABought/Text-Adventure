@@ -1,15 +1,13 @@
 # utils/relics.py
-import random
 from entities.relic import (
     Relic,
-    TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HEAL,
-    TRIGGER_ON_BLOCK, TRIGGER_ON_HIT, TRIGGER_TURN_END, TRIGGER_TURN_START,
+    TRIGGER_ON_ACTION, TRIGGER_ON_ATTACK, TRIGGER_ON_HIT, TRIGGER_TURN_END, TRIGGER_TURN_START,
 )
 from utils.status_effects import (
-    apply_poison, apply_stun, apply_rage,
+    apply_poison, apply_rage,
     apply_vulnerable, apply_weak, apply_block,
 )
-from utils.helpers import print_slow, RARITY_COLORS, RESET
+from utils.helpers import print_slow
 
 VOWELS = set("aeiou")
 
@@ -32,7 +30,7 @@ class IronCastHelm(Relic):
 
     def on_combat_start(self, player, enemy):
         apply_block(player, 12)
-        print_slow(f"  🪖 Iron-Cast Helm — +12 Block at combat start!")
+        print_slow("  🪖 Iron-Cast Helm — +12 Block at combat start!")
 
 
 class SleightmakersGlove(Relic):
