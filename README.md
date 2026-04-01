@@ -125,7 +125,13 @@ entities/
   enemy.py           # enemy AI + phase/reactive/combo hooks
   enemy_moves.py     # move behaviors and factory
 game_engine/
-  parser.py          # command parser
+  parser.py          # legacy parser facade + syntax parser entrypoint
+  syntax_engine/     # OO syntax-combat parsing engine
+    parser.py
+    resolver.py
+    unlocks.py
+    lexicon.py
+    models.py
   save_manager.py    # save/load system
 utils/
   combat.py          # combat session + AP/MP loop
