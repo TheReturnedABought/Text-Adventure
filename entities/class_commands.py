@@ -235,7 +235,8 @@ def cmd_defiant(player, enemies, target, ctx):
 #  ROGUE COMMANDS
 # ────────────────────────────────
 def cmd_cut(player, enemies, target, ctx):
-    if not _require_target(target, "cut"): return False
+    if not _require_target(target, "cut"):
+        return False
     dmg = _roll_offensive(player, "1d4+4")
     _deal(player, target, dmg, ctx, "Cut:", command_damage_type("cut"))
     return True
@@ -246,21 +247,24 @@ def cmd_flow(player, enemies, target, ctx):
     return True
 
 def cmd_feint(player, enemies, target, ctx):
-    if not _require_target(target, "feint"): return False
+    if not _require_target(target, "feint"):
+        return False
     apply_disorient(target,2)
     ctx["feint_no_miss"] = True
     print_slow(f"  🗡 Feint — {target.name} disoriented! Your next attack cannot miss.")
     return True
 
 def cmd_mark(player, enemies, target, ctx):
-    if not _require_target(target, "mark"): return False
+    if not _require_target(target, "mark"):
+        return False
     apply_vulnerable(target,2)
     ctx["mark_bonus"] = ctx.get("mark_bonus",0)+5
     print_slow(f"  🗡 Mark — {target.name} marked! Vulnerable 2 + next hit +5 damage.")
     return True
 
 def cmd_venom(player, enemies, target, ctx):
-    if not _require_target(target, "venom"): return False
+    if not _require_target(target, "venom"):
+        return False
     stacks = 4 if target.statuses.get("vulnerable",0)>0 else 3
     apply_poison(target, stacks)
     print_slow(f"  🗡 Venom — {target.name} poisoned ×{stacks}!" + (" (+1 Vulnerable bonus)" if stacks==4 else ""))
@@ -298,7 +302,8 @@ def cmd_dash(player, enemies, target, ctx):
     return True
 
 def cmd_toxin(player, enemies, target, ctx):
-    if not _require_target(target, "toxin"): return False
+    if not _require_target(target, "toxin"):
+        return False
     current = target.statuses.get("poison",0)
     if current==0:
         apply_poison(target,2)
@@ -310,12 +315,14 @@ def cmd_toxin(player, enemies, target, ctx):
     return True
 
 def cmd_assault(player, enemies, target, ctx):
-    if not _require_target(target,"assault"): return False
+    if not _require_target(target,"assault"):
+        return False
     prior = ctx.get("actions_this_turn",0)
     hits = min(1+prior,6)
     print_slow(f"  🗡 Assault — {hits} strikes!")
     for i in range(hits):
-        if target.health<=0: break
+        if target.health<=0:
+            break
         dmg = _roll_offensive(player, f"1d6+{i}")
         _actual, _absorbed, _ = apply_typed_damage(player, target, dmg, command_damage_type("assault"), label=f"Assault hit {i+1}", ctx=ctx)
     return True
@@ -341,7 +348,8 @@ def cmd_weave(player, enemies, target, ctx):
     return True
 
 def cmd_pandemic(player, enemies, target, ctx):
-    if not _require_target(target,"pandemic"): return False
+    if not _require_target(target,"pandemic"):
+        return False
     bonus = 3 if target.statuses.get("poison",0)>0 else 0
     stacks = 6 + bonus
     apply_poison(target, stacks)
@@ -349,7 +357,8 @@ def cmd_pandemic(player, enemies, target, ctx):
     return True
 
 def cmd_assassinate(player, enemies, target, ctx):
-    if not _require_target(target,"assassinate"): return False
+    if not _require_target(target,"assassinate"):
+        return False
     dmg = _roll_offensive(player, "3d6+10")
     if ctx.get("actions_this_turn",0)==0:
         dmg = int(dmg*1.5)
@@ -358,7 +367,8 @@ def cmd_assassinate(player, enemies, target, ctx):
     return True
 
 def cmd_shadowstrike(player, enemies, target, ctx):
-    if not _require_target(target,"shadowstrike"): return False
+    if not _require_target(target,"shadowstrike"):
+        return False
     actions = max(ctx.get("actions_this_combat",1),1)
     dmg = min(6*actions,80)
     print_slow(f"  🗡 Shadowstrike — {actions} combat actions × 6 = {dmg} damage!")
@@ -383,7 +393,8 @@ def cmd_spark(player, enemies, target, ctx):
     return True
 
 def cmd_bolt(player, enemies, target, ctx):
-    if not _require_target(target,"bolt"): return False
+    if not _require_target(target,"bolt"):
+        return False
     dmg = _roll_offensive(player, "2d8+4")
     _deal(player,target,dmg,ctx,"⚡ Bolt:", command_damage_type("bolt"))
     apply_vulnerable(target, 1)
@@ -403,7 +414,8 @@ def cmd_coalesce(player, enemies, target, ctx):
     return True
 
 def cmd_delay(player, enemies, target, ctx):
-    if not _require_target(target, "delay"): return False
+    if not _require_target(target, "delay"):
+        return False
     from utils.status_effects import apply_slow
     apply_slow(target, 1)
     print_slow(f"  {BLUE}🔮 Delay — {target.name} is Slowed 1.{RESET}")
@@ -429,14 +441,16 @@ def cmd_ward(player, enemies, target, ctx):
     return True
 
 def cmd_curse(player, enemies, target, ctx):
-    if not _require_target(target,"curse"): return False
+    if not _require_target(target,"curse"):
+        return False
     apply_vulnerable(target,2)
     apply_weak(target,2)
     print_slow(f"  {BLUE}🔮 Curse — Vulnerable 2 + Weak 2 on {target.name}!{RESET}")
     return True
 
 def cmd_blaze(player, enemies, target, ctx):
-    if not _require_target(target,"blaze"): return False
+    if not _require_target(target,"blaze"):
+        return False
     apply_poison(target, roll("1d4+2"))
     apply_volatile(target)
     print_slow(f"  {BLUE}🔥 Blaze — {target.name} takes Burn + Volatile!{RESET}")
@@ -446,7 +460,8 @@ def cmd_charm(player, enemies, target, ctx):
     if ctx.get("charm_cooldown"):
         print_slow(f"  {BLUE}Charm is on cooldown until next turn.{RESET}")
         return False
-    if not _require_target(target,"charm"): return False
+    if not _require_target(target,"charm"):
+        return False
     apply_stun(target,1)
     ctx["charm_cooldown"]=True
     print_slow(f"  {BLUE}🔮 Charm — {target.name} stunned!{RESET}")
@@ -462,28 +477,32 @@ def cmd_drain(player, enemies, target, ctx):
     return True
 
 def cmd_shatter(player, enemies, target, ctx):
-    if not _require_target(target,"shatter"): return False
+    if not _require_target(target,"shatter"):
+        return False
     mana_bonus = max(player.mana, 0)
     dmg = (roll("1d6") * mana_bonus) + 3
     _deal(player,target,dmg,ctx,"Shatter:", command_damage_type("shatter"))
     return True
 
 def cmd_silence(player, enemies, target, ctx):
-    if not _require_target(target,"silence"): return False
+    if not _require_target(target,"silence"):
+        return False
     apply_stun(target,1)
     apply_weak(target,2)
     print_slow(f"  {BLUE}🔮 Silence — {target.name} silenced + Weak 2!{RESET}")
     return True
 
 def cmd_torment(player, enemies, target, ctx):
-    if not _require_target(target,"torment"): return False
+    if not _require_target(target, "torment"):
+        return False
     apply_poison(target,roll("2d4+2"))
     apply_disorient(target)
     print_slow(f"  {BLUE}🔥 Torment — {target.name} poisoned + disoriented!{RESET}")
     return True
 
 def cmd_obliterate(player, enemies, target, ctx):
-    if not _require_target(target,"obliterate"): return False
+    if not _require_target(target,"obliterate"):
+        return False
     dmg = roll("6d6+20")
     _deal(player,target,dmg,ctx,"Obliterate:", command_damage_type("obliterate"))
     return True
@@ -504,7 +523,8 @@ def cmd_rift(player, enemies, target, ctx):
     return True
 
 def cmd_apocalypse(player, enemies, target, ctx):
-    if not _require_target(target,"apocalypse"): return False
+    if not _require_target(target,"apocalypse"):
+        return False
     total = sum(v for v in target.statuses.values() if isinstance(v,int))
     dmg = min(total*roll("1d5"),40)
     _deal(player,target,dmg,ctx,"Apocalypse:", command_damage_type("apocalypse"))
@@ -600,7 +620,7 @@ COMMAND_EFFECTS = {
     "storm":       (cmd_storm,       False),
     "drain":       (cmd_drain,       True),
     "silence":     (cmd_silence,     True),
-    "torment":     (cmd_torment,     False),
+    "torment":     (cmd_torment,     True),
     "obliterate":  (cmd_obliterate,  True),
     "rift":        (cmd_rift,        False),
     "tempest":     (cmd_tempest,     False),

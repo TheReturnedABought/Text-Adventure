@@ -82,13 +82,24 @@ class UIState:
 
 class GameWindow:
     # ── Palette ───────────────────────────────────────────────────────────────
-    C_BG      = '#0d0d1a';  C_PANEL   = '#11111f';  C_BORDER  = '#2a2a50'
-    C_SEP     = '#1e1e38';  C_TEXT    = '#d0d0e8';  C_DIM     = '#505068'
-    C_HP      = '#e05555';  C_AP      = '#5588ee';  C_MP      = '#9955ee'
-    C_GOLD    = '#ddaa33'
-    C_RED     = '#e05555';  C_GREEN   = '#55cc88';  C_YELLOW  = '#ddcc44'
-    C_BLUE    = '#5588ee';  C_CYAN    = '#44cccc';  C_MAGENTA = '#cc55cc'
-    C_GRAY    = '#505068';  C_WHITE   = '#d0d0e8'
+    C_BG = '#0d0d1a'
+    C_PANEL = '#11111f'
+    C_BORDER = '#2a2a50'
+    C_SEP = '#1e1e38'
+    C_TEXT = '#d0d0e8'
+    C_DIM = '#505068'
+    C_HP = '#e05555'
+    C_AP = '#5588ee'
+    C_MP = '#9955ee'
+    C_GOLD = '#ddaa33'
+    C_RED = '#e05555'
+    C_GREEN = '#55cc88'
+    C_YELLOW = '#ddcc44'
+    C_BLUE = '#5588ee'
+    C_CYAN = '#44cccc'
+    C_MAGENTA = '#cc55cc'
+    C_GRAY = '#505068'
+    C_WHITE = '#d0d0e8'
 
     FONT    = ('Courier New', 10)
     FONT_B  = ('Courier New', 10, 'bold')

@@ -52,7 +52,9 @@ from entities.class_data import cmd_ap_cost, get_command_def
 from entities.class_data import cmd_mp_cost
 from game_engine.parser import parse_command
 
-_END = "end"; _NEXT = "next"; _DONE = "done"
+_END = "end"
+_NEXT = "next"
+_DONE = "done"
 _STARLIT = set("starlit")
 _SHIELDED_DAMAGE_COMMANDS = {
     "cut", "flurry", "dash", "assault", "assassinate", "shadowstrike", "pandemic",
@@ -398,19 +400,24 @@ class CombatSession:
             return True
         if command in ["inventory","inv","i"]:
             from utils.actions import do_inventory
-            do_inventory(p); return True
+            do_inventory(p)
+            return True
         if command in ["relics","relic"]:
             from utils.display import show_relics
-            show_relics(p); return True
+            show_relics(p)
+            return True
         if command in ["look","l"]:
             print_slow(f"  Fighting: {', '.join(e.name for e in self._alive())}.")
             return True
         if command in ["help","?"]:
             from utils.display import show_help
-            show_help(p); input("  Press Enter to continue..."); return True
+            show_help(p)
+            input("  Press Enter to continue...")
+            return True
         if command in ["journal","j"]:
             from utils.display import show_journal
-            show_journal(p); return True
+            show_journal(p)
+            return True
         return False
 
     # ── AP cost calculation (all passive relics) ──────────────────────────────
@@ -825,7 +832,9 @@ class CombatSession:
 
         if is_disoriented(enemy) and random.random() < 0.5:
             print_slow(f"  🌪 {enemy.name} disoriented — wastes turn!")
-            enemy._planned_moves = []; enemy._planned_move = None; return
+            enemy._planned_moves = []
+            enemy._planned_move = None
+            return
 
         if get_slow(enemy) > 0:
             enemy.statuses["slow"] -= 1
@@ -833,7 +842,9 @@ class CombatSession:
                 del enemy.statuses["slow"]
             if random.random() < 0.5:
                 print_slow(f"  🕸 {enemy.name} Slowed — loses turn!")
-                enemy._planned_moves = []; enemy._planned_move = None; return
+                enemy._planned_moves = []
+                enemy._planned_move = None
+                return
             print_slow(f"  🕸 {enemy.name} Slowed — pushes through!")
 
         # Trap check

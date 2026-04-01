@@ -402,7 +402,7 @@ def setup_area1():
     crossroads.on_enter = _crossroads_enter
     def _alcove_enter(player):
         print_slow("\n  The alcove is quiet. A sealed iron chest dominates the far wall.")
-        print_slow("  Type 'examine chest' to inspect the lock, 'solve <answer>' to try it.")
+        print_slow("  Type 'examine chest' to inspect the lock, then type the answer directly.")
         input("\n  Press Enter to continue...")
     puzzle_alcove.on_enter = _alcove_enter
     def _servants_enter(player):
