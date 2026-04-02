@@ -182,27 +182,21 @@ class ArticleType(Enum):
 
 @dataclass
 class ParsedCommand:
-    """Fully normalised output of CommandParser.parse().
+    """Fully normalised output of CommandParser.parse()."""
 
-    Attributes:
-        intent          – canonical command name (e.g. 'attack', 'block', 'smash')
-        raw             – original typed string (used for AP cost calculation)
-        target_name     – name fragment of the intended target (or None)
-        target_index    – 1-based index if player typed a number to disambiguate
-        article         – SPECIFIC / GENERIC / NONE
-        modifiers       – ordered list of modifier names found (e.g. ['heavy'])
-        item_name       – item or ability name for equip/ability commands
-        is_world_action – True if intent is valid in world context but not combat
-    """
-
-    intent: str
+    intent: str | None
     raw: str = ""
     target_name: str | None = None
     target_index: int | None = None
     article: ArticleType = ArticleType.NONE
     modifiers: list[str] = field(default_factory=list)
     item_name: str | None = None
+    ap_cost: int = 0
+    mp_cost: int = 0
+    valid: bool = True
+    error: str | None = None
     is_world_action: bool = False
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════

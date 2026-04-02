@@ -1,23 +1,21 @@
 from __future__ import annotations
 
+import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
+from game.dice import DiceExpression
 from game.effects import EffectTrigger
-from game.models import BattleContext, ParsedCommand
+from game.models import ParsedCommand, ArticleType
 
 if TYPE_CHECKING:
     from game.entities import Enemy, Player
     from game.parser import CommandParser
     from game.commands import CommandRegistry, CommandDefinition
-    from game.dice import DiceExpression
+    from game.world import WorldMap
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Combat result
-# ══════════════════════════════════════════════════════════════════════════════
 
 class CombatOutcome(Enum):
     ONGOING = auto()
@@ -28,7 +26,6 @@ class CombatOutcome(Enum):
 
 @dataclass
 class TurnResult:
-    """Collected log of everything that happened in one entity's turn."""
     lines: list[str] = field(default_factory=list)
     ap_spent: int = 0
     outcome: CombatOutcome = CombatOutcome.ONGOING
@@ -43,228 +40,416 @@ class TurnResult:
         return "\n".join(self.lines)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Combat controller
-# ══════════════════════════════════════════════════════════════════════════════
-
 class CombatController:
-    """Turn-based combat engine driven by parsed player commands.
-
-    One CombatController is instantiated per combat encounter and discarded
-    when the encounter ends.
-
-    Attributes:
-        parser      – shared CommandParser
-        registry    – shared CommandRegistry
-        enemies     – all enemies in this encounter (may be >1)
-        player      – the player entity
-        round       – current round number (increments after all entities act)
-        log         – full combat log as a list of strings
-    """
-
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
-                 player: "Player", enemies: list["Enemy"]) -> None:
+                 player: "Player", enemies: list["Enemy"],
+                 world: "WorldMap | None" = None,
+                 player_room_id: str | None = None) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
         self.enemies = enemies
-        self.round: int = 1
+        self.world = world
+        self.player_room_id = player_room_id
+        self.round = 1
         self.log: list[str] = []
         self._pending_disambiguation: list["Enemy"] | None = None
-
-    # ══════════════════════════════════════════════════════════════════════
-    # Public API (called by game.py loop)
-    # ══════════════════════════════════════════════════════════════════════
+        self.combat_zone: set[str] = set()
 
     def start_encounter(self) -> str:
-        """Called once when combat begins (line-of-sight trigger or room entry).
-
-        Returns the opening narration shown to the player.
-        Plan first-round enemy intents.
-        """
-        ...
+        self._refresh_combat_zone()
+        for enemy in self.enemies:
+            enemy.reset_ap()
+            enemy.plan_turn(self.player)
+        names = ", ".join(e.name for e in self.enemies if e.is_alive)
+        return f"Combat begins! You face: {names}."
 
     def player_input(self, raw: str) -> TurnResult:
-        """Process one player command string.
+        result = TurnResult()
+        direction = raw.strip().lower()
+        if self._is_combat_movement(direction):
+            return self._handle_combat_movement(direction, raw)
 
-        Steps:
-        1. Check if we're waiting for disambiguation → route to resolve_disambiguation().
-        2. parse() in COMBAT context.
-        3. Check intent: 'flee', 'look', 'status', 'help' → non-AP costing meta commands.
-        4. Check AP: if cost > current_ap → return 'Not enough AP.' (turn not wasted).
-        5. Dispatch to the correct resolve_* method.
-        6. Spend AP via player.spend_ap().
-        7. Tick ON_ACTION effects.
-        8. Check win/defeat conditions → set outcome if met.
-        9. If player's AP reaches 0 → end_player_turn().
-        """
-        ...
+        if self._pending_disambiguation is not None:
+            target = self.resolve_disambiguation(raw, result)
+            if target is None:
+                return result
+            result.add(f"Target selected: {target.name}.")
+            return result
+
+        parsed = self.parser.parse(raw, self.player, CommandContext.COMBAT)
+        if not parsed.valid:
+            result.add(parsed.error or "Invalid command.")
+            return result
+
+        intent = parsed.intent or ""
+        if intent in {"status", "look"}:
+            self.resolve_status(result)
+            return result
+        if intent == "help":
+            self.resolve_help(result)
+            return result
+        if intent in {"wait", "end"}:
+            return self.end_player_turn()
+
+        if parsed.ap_cost > self.player.current_ap:
+            result.add("Not enough AP.")
+            return result
+
+        if intent in {"attack", "strike", "hit"}:
+            self.resolve_attack(parsed, result)
+        elif intent == "block":
+            self.resolve_block(parsed, result)
+        elif intent in {"ability", "cast", "use"}:
+            self.resolve_ability(parsed, result)
+        elif intent == "equip":
+            self.resolve_equip(parsed, result)
+        elif intent == "flee":
+            self.resolve_flee(parsed, result)
+        else:
+            result.add("That command has no combat resolver yet.")
+
+        if result.outcome == CombatOutcome.ONGOING:
+            self.player.spend_ap(parsed.ap_cost)
+            result.ap_spent += parsed.ap_cost
+            for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
+                result.add(line)
+            self._refresh_combat_zone()
+
+        result.outcome = self.check_outcome() if result.outcome == CombatOutcome.ONGOING else result.outcome
+        if result.outcome == CombatOutcome.ONGOING and self.player.current_ap <= 0:
+            end = self.end_player_turn()
+            result.lines.extend(end.lines)
+            result.outcome = end.outcome
+        return result
 
     def end_player_turn(self) -> TurnResult:
-        """Called automatically when player AP is exhausted, or by 'wait' command.
+        result = TurnResult()
+        self.player.clear_block()
+        for line in self.player.tick_effects(EffectTrigger.ON_TURN_END):
+            result.add(line)
 
-        Steps:
-        1. Clear player block.
-        2. Tick ON_TURN_END effects on player.
-        3. Reset player AP for next round.
-        4. Run enemy_turn() for each living enemy.
-        5. Increment round counter.
-        6. Plan enemy intents for next round.
-        7. Tick ON_TURN_START effects on player.
-        8. Return combined TurnResult.
-        """
-        ...
+        for enemy in [e for e in self.enemies if e.is_alive]:
+            if not self._enemy_in_zone(enemy):
+                continue
+            enemy_result = self.enemy_turn(enemy)
+            result.lines.extend(enemy_result.lines)
+            if enemy_result.outcome != CombatOutcome.ONGOING:
+                result.outcome = enemy_result.outcome
+                return result
+
+        self.round += 1
+        self.player.reset_ap()
+        for enemy in self.enemies:
+            enemy.reset_ap()
+            enemy.plan_turn(self.player)
+        for line in self.player.tick_effects(EffectTrigger.ON_TURN_START):
+            result.add(line)
+        result.outcome = self.check_outcome()
+        return result
 
     def enemy_turn(self, enemy: "Enemy") -> TurnResult:
-        """Execute all of this enemy's active_intents in order.
-
-        For each intent:
-        1. Spend enemy AP.
-        2. Call resolve_enemy_intent().
-        3. Add to result log.
-        4. Clear enemy block (at start of their micro-turn).
-        Tick ON_TURN_END on enemy after all intents done.
-        """
-        ...
+        result = TurnResult()
+        enemy.clear_block()
+        for intent in list(enemy.active_intents):
+            if not enemy.is_alive:
+                break
+            if not enemy.spend_ap(intent.ap_cost):
+                continue
+            self.resolve_enemy_intent(enemy, intent, result)
+            if self.check_outcome() == CombatOutcome.PLAYER_DEFEATED:
+                result.outcome = CombatOutcome.PLAYER_DEFEATED
+                return result
+        for line in enemy.tick_effects(EffectTrigger.ON_TURN_END):
+            result.add(line)
+        return result
 
     def check_outcome(self) -> CombatOutcome:
-        """Evaluate win/loss conditions. Called after each action."""
-        ...
-
-    # ══════════════════════════════════════════════════════════════════════
-    # Player action resolution
-    # ══════════════════════════════════════════════════════════════════════
+        if not self.player.is_alive:
+            return CombatOutcome.PLAYER_DEFEATED
+        if not any(e.is_alive for e in self.enemies):
+            return CombatOutcome.PLAYER_WON
+        return CombatOutcome.ONGOING
 
     def resolve_attack(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        """Resolve a basic attack command.
-
-        Steps:
-        1. Identify target: resolve_target() handles multi-enemy + disambiguation.
-        2. Build DiceExpression from command base_dice + modifiers.
-        3. Apply article bonus (generic article → +flat_bonus).
-        4. Roll damage.
-        5. Apply target block and defense via enemy.receive_damage().
-        6. Apply effect_on_hit if command specifies one.
-        7. Tick ON_DAMAGE_DEALT on player.
-        8. Log result.
-        """
-        ...
+        target = self.resolve_target(parsed, result)
+        if target is None:
+            return
+        cmd = self.registry.get_command(parsed.intent or "attack")
+        dice = self.build_attack_dice(cmd, parsed, self.player) if cmd else DiceExpression.flat(self.player.attack_value())
+        total, rolls, mod = dice.roll_with_breakdown()
+        if parsed.article == ArticleType.GENERIC:
+            total += self.registry.article_rule.generic_flat_bonus
+        elif parsed.article == ArticleType.SPECIFIC:
+            total += self.registry.article_rule.specific_flat_bonus
+        dealt = target.receive_damage(total + self.player.attack_value())
+        result.add(f"You hit {target.name} for {dealt} damage ({self.format_roll(dice, rolls, total)}).")
 
     def resolve_block(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        """Resolve a block command.
-
-        Roll block dice → call player.add_block().
-        Apply any modifier scaling (a modifier could reduce or increase block).
-        """
-        ...
+        cmd = self.registry.get_command(parsed.intent or "block")
+        dice = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(max(1, self.player.defense_value()))
+        dice = self.apply_modifiers_to_dice(dice, parsed.modifiers)
+        block = max(0, dice.roll())
+        self.player.add_block(block)
+        result.add(f"You gain {block} block.")
 
     def resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        """Resolve an ability command (e.g. 'use spark', 'cast ember slash').
-
-        1. Find ability in player.equipped by ability name.
-        2. Build BattleContext snapshot.
-        3. Call ability.execute(context).
-        4. Apply effect_on_hit if specified.
-        5. Log result.
-        """
-        ...
+        name = (parsed.item_name or parsed.target_name or "").lower().strip()
+        for item in self.player.equipped.values():
+            for ability in item.abilities:
+                if name and name not in ability.name.lower() and name != ability.id.lower():
+                    continue
+                result.add(f"You use {ability.name}.")
+                return
+        result.add("No matching ability is equipped.")
 
     def resolve_equip(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        """Equip or unequip an item mid-combat (costs AP like any other command)."""
-        ...
+        if not parsed.item_name and not parsed.target_name:
+            result.add("Equip what?")
+            return
+        item_name = parsed.item_name or parsed.target_name or ""
+        result.add(self.player.equip(item_name))
 
     def resolve_flee(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        """Attempt to flee combat.
-
-        Implement flee success chance here (e.g. dice roll vs enemy level).
-        On success → set outcome PLAYER_FLED.
-        """
-        ...
+        _ = parsed
+        chance = 0.5
+        if random.random() < chance:
+            result.add("You successfully flee.")
+            result.outcome = CombatOutcome.PLAYER_FLED
+        else:
+            result.add("You fail to flee!")
 
     def resolve_status(self, result: TurnResult) -> None:
-        """Print full status: player HP/AP/block/effects, all enemy HP/intents."""
-        ...
+        result.add(self.player.status_line())
+        for enemy in self.enemies:
+            if enemy.is_alive:
+                result.add(enemy.status_line() + f" | Intents: {enemy.intent_display()}")
 
     def resolve_help(self, result: TurnResult) -> None:
-        """Print available combat commands with AP costs for this player."""
-        ...
+        cmds = self.registry.available_for(self.player, CommandContext.COMBAT)
+        if not cmds:
+            result.add("No combat commands available.")
+            return
+        for cmd in sorted(cmds, key=lambda c: c.name):
+            cost = self.registry.ap_cost_for(cmd.name, cmd, self.player)
+            result.add(f"{cmd.name} (AP {cost}) - {cmd.description}")
 
-    # ══════════════════════════════════════════════════════════════════════
-    # Enemy action resolution
-    # ══════════════════════════════════════════════════════════════════════
-
-    def resolve_enemy_intent(self, enemy: "Enemy",
-                             intent, result: TurnResult) -> None:
-        """Execute one EnemyIntent.
-
-        ATTACK: roll dice → player.receive_damage() → apply effect_on_hit.
-        BLOCK:  roll dice → enemy.add_block().
-        BUFF/DEBUFF: apply status effect.
-        FLEE/WAIT: narrate only.
-        """
-        ...
-
-    # ══════════════════════════════════════════════════════════════════════
-    # Target resolution
-    # ══════════════════════════════════════════════════════════════════════
+    def resolve_enemy_intent(self, enemy: "Enemy", intent, result: TurnResult) -> None:
+        kind = getattr(intent.intent_type, "name", "ATTACK")
+        if kind == "ATTACK" and not self._enemy_can_hit_player(enemy, intent):
+            if self._enemy_step_toward_player(enemy):
+                result.add(f"{enemy.name} advances toward your position.")
+            if not self._enemy_can_hit_player(enemy, intent):
+                result.add(f"{enemy.name} cannot reach you from there.")
+                return
+        elif not self._enemy_can_hit_player(enemy, intent):
+            result.add(f"{enemy.name} cannot reach you from there.")
+            return
+        if kind == "ATTACK":
+            dice = DiceExpression.parse(intent.dice_expression) if intent.dice_expression else DiceExpression.flat(enemy.attack)
+            dmg = max(0, dice.roll() + enemy.attack)
+            dealt = self.player.receive_damage(dmg)
+            result.add(f"{enemy.name} {intent.description} for {dealt} damage.")
+        elif kind == "BLOCK":
+            dice = DiceExpression.parse(intent.dice_expression) if intent.dice_expression else DiceExpression.flat(enemy.defense)
+            block = max(0, dice.roll())
+            enemy.add_block(block)
+            result.add(f"{enemy.name} gains {block} block.")
+        elif kind == "FLEE":
+            enemy.current_hp = 0
+            result.add(f"{enemy.name} flees!")
+        else:
+            result.add(f"{enemy.name} {intent.description}.")
 
     def resolve_target(self, parsed: ParsedCommand,
                        result: TurnResult) -> "Enemy | None":
-        """Identify which enemy the player's command targets.
-
-        Logic:
-        1. If parsed.target_index is set → get_enemy_by_index().
-        2. Else if parsed.target_name → filter living enemies by name fragment.
-        3. If exactly 1 match → return it.
-        4. If 0 matches → error.
-        5. If >1 matches and article is GENERIC → pick randomly.
-        6. If >1 matches and article is SPECIFIC → set _pending_disambiguation,
-           return None (caller must halt and ask player to type a number).
-        7. If no target_name and only 1 living enemy → auto-target it.
-        8. If no target_name and multiple enemies → disambiguation.
-        """
-        ...
+        cmd = self.registry.get_command(parsed.intent or "")
+        ranged = bool(cmd and "ranged" in [t.lower() for t in cmd.tags])
+        living = self._eligible_targets(ranged=ranged)
+        if not living:
+            result.add("There are no enemies left.")
+            return None
+        if parsed.target_index is not None:
+            target = living[parsed.target_index - 1] if 1 <= parsed.target_index <= len(living) else None
+            if target is None:
+                result.add("Invalid target number.")
+            return target
+        if parsed.target_name:
+            matches = [e for e in living if parsed.target_name.lower() in e.name.lower()]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) == 0:
+                result.add("No target matches that name.")
+                return None
+            if parsed.article == ArticleType.GENERIC:
+                return random.choice(matches)
+            self._pending_disambiguation = matches
+            result.add("Which one?")
+            for i, e in enumerate(matches, 1):
+                result.add(f"  {i}. {e.name}")
+            return None
+        if len(living) == 1:
+            return living[0]
+        self._pending_disambiguation = living
+        result.add("Which enemy?")
+        for i, e in enumerate(living, 1):
+            result.add(f"  {i}. {e.name}")
+        return None
 
     def resolve_disambiguation(self, raw: str, result: TurnResult) -> "Enemy | None":
-        """Called when _pending_disambiguation is set.
+        if self._pending_disambiguation is None:
+            return None
+        text = raw.strip()
+        if not text.isdigit():
+            result.add("Please enter a number.")
+            return None
+        idx = int(text)
+        if not (1 <= idx <= len(self._pending_disambiguation)):
+            result.add("Number out of range.")
+            return None
+        enemy = self._pending_disambiguation[idx - 1]
+        self._pending_disambiguation = None
+        return enemy
 
-        raw is the player's response (expected to be a number).
-        Clears _pending_disambiguation on success.
-        """
-        ...
+    def _is_combat_movement(self, direction: str) -> bool:
+        if not self.world or not self.player_room_id:
+            return False
+        room = self.world.get_room(self.player_room_id)
+        return bool(room and direction in room.exits)
 
-    # ══════════════════════════════════════════════════════════════════════
-    # Dice and modifier application
-    # ══════════════════════════════════════════════════════════════════════
+    def _handle_combat_movement(self, direction: str, raw: str) -> TurnResult:
+        result = TurnResult()
+        ap_cost = max(1, len(raw.strip()) - self.player.ap_cost_reduction_for(direction))
+        if ap_cost > self.player.current_ap:
+            result.add("Not enough AP to move.")
+            return result
+        assert self.world is not None and self.player_room_id is not None
+        room = self.world.get_room(self.player_room_id)
+        if room is None or direction not in room.exits:
+            result.add("You cannot go that way.")
+            return result
+        self.player.spend_ap(ap_cost)
+        result.ap_spent += ap_cost
+        destination = room.exits[direction]
+        self.player_room_id = destination
+        self.world.current_room_id = destination
+        self._refresh_combat_zone()
+        result.add(f"You move {direction} ({ap_cost} AP).")
 
-    def build_attack_dice(self, cmd: "CommandDefinition",
+        if destination not in self.combat_zone:
+            result.add("You moved out of the combat zone!")
+            for enemy in [e for e in self.enemies if e.is_alive]:
+                if not self._enemy_in_zone(enemy):
+                    continue
+                free_turn = self.enemy_turn(enemy)
+                result.lines.extend(free_turn.lines)
+            result.outcome = CombatOutcome.PLAYER_FLED
+            return result
+
+        if self.player.current_ap <= 0:
+            end = self.end_player_turn()
+            result.lines.extend(end.lines)
+            result.outcome = end.outcome
+        return result
+
+    def _refresh_combat_zone(self) -> None:
+        if self.world is None:
+            self.combat_zone = set()
+            return
+        zone: set[str] = set()
+        if self.player_room_id:
+            zone |= self._zone_from_anchor(self.player_room_id)
+        for enemy in self.enemies:
+            if not enemy.is_alive:
+                continue
+            enemy_room = getattr(enemy, "combat_room_id", None)
+            if enemy_room:
+                zone |= self._zone_from_anchor(enemy_room)
+        self.combat_zone = zone
+
+    def _zone_from_anchor(self, room_id: str) -> set[str]:
+        if not self.world:
+            return set()
+        room = self.world.get_room(room_id)
+        if room is None:
+            return set()
+        return {room.id, *room.line_of_sight}
+
+    def _enemy_in_zone(self, enemy: "Enemy") -> bool:
+        room_id = getattr(enemy, "combat_room_id", self.player_room_id)
+        return not self.combat_zone or room_id in self.combat_zone
+
+    def _eligible_targets(self, ranged: bool) -> list["Enemy"]:
+        living = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
+        if ranged or self.world is None:
+            return living
+        return [
+            e for e in living
+            if getattr(e, "combat_room_id", self.player_room_id) == self.player_room_id
+        ]
+
+    def _enemy_can_hit_player(self, enemy: "Enemy", intent) -> bool:
+        if self.world is None:
+            return True
+        enemy_room = getattr(enemy, "combat_room_id", self.player_room_id)
+        if enemy_room == self.player_room_id:
+            return True
+        tags = [str(t).lower() for t in getattr(intent, "tags", [])]
+        if "ranged" in tags:
+            return bool(self.player_room_id in self._zone_from_anchor(enemy_room))
+        return False
+
+    def _enemy_step_toward_player(self, enemy: "Enemy") -> bool:
+        if self.world is None or self.player_room_id is None:
+            return False
+        enemy_room = getattr(enemy, "combat_room_id", None)
+        if enemy_room is None or enemy_room == self.player_room_id:
+            return False
+        path = self.world.shortest_path(enemy_room, self.player_room_id)
+        if len(path) < 2:
+            return False
+        next_zone = path[1]
+        current_room = self.world.get_room(enemy_room)
+        next_room = self.world.get_room(next_zone)
+        if current_room is None or next_room is None:
+            return False
+        # move only if this is a direct movement along exits
+        if next_zone not in current_room.exits.values():
+            return False
+        current_room.remove_enemy(enemy)
+        next_room.add_enemy(enemy)
+        setattr(enemy, "combat_room_id", next_zone)
+        setattr(enemy, "current_zone", next_zone)
+        self._refresh_combat_zone()
+        return True
+
+    def build_attack_dice(self, cmd: "CommandDefinition" | None,
                           parsed: ParsedCommand,
-                          player: "Player") -> "DiceExpression":
-        """Construct the final DiceExpression for an attack.
+                          player: "Player") -> DiceExpression:
+        if cmd and cmd.base_dice:
+            base = DiceExpression.parse(cmd.base_dice)
+        else:
+            base = DiceExpression.flat(player.attack_value())
+        return self.apply_modifiers_to_dice(base, parsed.modifiers)
 
-        Applies modifier multipliers (heavy → x2 count), flat article bonus,
-        and any passive equipment bonuses that affect dice.
-        """
-        ...
-
-    def apply_modifiers_to_dice(self, base: "DiceExpression",
-                                modifier_names: list[str]) -> "DiceExpression":
-        """Chain modifier transformations onto a base DiceExpression."""
-        ...
-
-    # ══════════════════════════════════════════════════════════════════════
-    # Display helpers
-    # ══════════════════════════════════════════════════════════════════════
+    def apply_modifiers_to_dice(self, base: DiceExpression,
+                                modifier_names: list[str]) -> DiceExpression:
+        out = base
+        for name in modifier_names:
+            mod = self.registry.get_modifier(name)
+            if mod is None:
+                continue
+            out = out.multiply_count(mod.dice_count_mult)
+            if mod.dice_sides_mult != 1.0:
+                out = DiceExpression(out.count, max(1, int(round(out.sides * mod.dice_sides_mult))), out.modifier, out.raw)
+            if mod.flat_bonus:
+                out = out.add_modifier(mod.flat_bonus)
+        return out
 
     def combat_header(self) -> str:
-        """Status bar shown at the start of each player input prompt.
+        enemy_parts = [f"[{e.name}] HP: {e.current_hp}/{e.max_hp} | Intends: {e.intent_display()}" for e in self.enemies if e.is_alive]
+        return f"Round {self.round} | [{self.player.name}] HP: {self.player.current_hp}/{self.player.max_hp} AP: {self.player.current_ap}/{self.player.total_ap} Block: {self.player.block}\n" + "\n".join(enemy_parts)
 
-        Format:  Round N | [Hero] HP: 40/40  AP: 18/24  Block: 0
-                          [Goblin] HP: 8/12  | Intends: scratch (1d4+1), cower
-        """
-        ...
-
-    def format_roll(self, expression: "DiceExpression", rolls: list[int],
+    def format_roll(self, expression: DiceExpression, rolls: list[int],
                     total: int) -> str:
-        """Format a dice roll for the log: 'rolled 3d6+2 → [4,2,5] +2 = 13'."""
-        ...
+        return f"rolled {expression} -> {rolls} = {total}"

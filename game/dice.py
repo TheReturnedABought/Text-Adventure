@@ -1,80 +1,87 @@
 from __future__ import annotations
 
+import math
+import random
+import re
 from dataclasses import dataclass
+
+"""Dice utilities used by combat and world resolution.
+
+This implementation keeps the scaffold contract:
+- parse() accepts canonical dice strings and flat integers
+- roll helpers return both totals and roll breakdowns
+- scaling helpers return new immutable DiceExpression values
+"""
+
+_DICE_RE = re.compile(r"^\s*(\d+)d(\d+)([+-]\d+)?\s*$", re.I)
 
 
 @dataclass
 class DiceExpression:
-    """Represents a parsed dice expression like '3d6+2' or '1d4-1'.
-
-    Attributes:
-        count    – number of dice to roll (the 3 in 3d6)
-        sides    – faces per die            (the 6 in 3d6)
-        modifier – flat bonus/penalty added after rolling
-        raw      – original string for display purposes
-    """
+    """Represents a parsed dice expression like '3d6+2' or '1d4-1'."""
 
     count: int
     sides: int
     modifier: int = 0
     raw: str = ""
 
-    # ── Construction ──────────────────────────────────────────────────────
-
     @classmethod
     def parse(cls, expression: str) -> "DiceExpression":
-        """Parse a string like '3d6+2', '1d4', or '2d8-1' into a DiceExpression.
-
-        Raises ValueError on malformed input.
-        """
-        ...
+        text = str(expression or "").strip().lower()
+        if text.isdigit() or (text.startswith("-") and text[1:].isdigit()):
+            return cls.flat(int(text))
+        m = _DICE_RE.match(text)
+        if not m:
+            raise ValueError(f"Malformed dice expression: {expression!r}")
+        count, sides, mod = m.groups()
+        c = int(count)
+        s = int(sides)
+        if c < 0 or s <= 0:
+            raise ValueError(f"Invalid dice values in expression: {expression!r}")
+        return cls(count=c, sides=s, modifier=int(mod or 0), raw=text)
 
     @classmethod
     def flat(cls, value: int) -> "DiceExpression":
-        """Create a fixed-value expression (0 dice, modifier = value)."""
-        ...
-
-    # ── Rolling ───────────────────────────────────────────────────────────
+        return cls(count=0, sides=1, modifier=int(value), raw=str(value))
 
     def roll(self) -> int:
-        """Roll all dice, sum results, add modifier. Return total."""
-        ...
+        total, _, _ = self.roll_with_breakdown()
+        return total
 
     def roll_with_breakdown(self) -> tuple[int, list[int], int]:
-        """Roll and return (total, [individual_die_results], modifier)."""
-        ...
+        rolls = [random.randint(1, self.sides) for _ in range(max(0, self.count))]
+        total = sum(rolls) + self.modifier
+        return total, rolls, self.modifier
 
     def min_value(self) -> int:
-        """Theoretical minimum roll (all 1s + modifier)."""
-        ...
+        if self.count <= 0:
+            return self.modifier
+        return self.count + self.modifier
 
     def max_value(self) -> int:
-        """Theoretical maximum roll (all max + modifier)."""
-        ...
+        if self.count <= 0:
+            return self.modifier
+        return self.count * self.sides + self.modifier
 
     def average(self) -> float:
-        """Statistical average of this expression."""
-        ...
-
-    # ── Modifiers ─────────────────────────────────────────────────────────
+        if self.count <= 0:
+            return float(self.modifier)
+        return self.count * (self.sides + 1) / 2 + self.modifier
 
     def multiply_count(self, factor: float) -> "DiceExpression":
-        """Return a new expression with dice count scaled by factor (e.g. heavy = x2).
-
-        Rounds count up to nearest int.
-        """
-        ...
+        new_count = max(0, int(math.ceil(self.count * float(factor))))
+        return DiceExpression(new_count, self.sides, self.modifier, self.raw)
 
     def add_modifier(self, bonus: int) -> "DiceExpression":
-        """Return a new expression with a flat bonus added to the modifier."""
-        ...
+        return DiceExpression(self.count, self.sides, self.modifier + int(bonus), self.raw)
 
     def with_extra_die(self, count: int = 1) -> "DiceExpression":
-        """Return a new expression with additional dice of the same size."""
-        ...
-
-    # ── Display ───────────────────────────────────────────────────────────
+        return DiceExpression(self.count + max(0, int(count)), self.sides, self.modifier, self.raw)
 
     def __str__(self) -> str:
-        """Canonical string form, e.g. '3d6+2'."""
-        ...
+        if self.count <= 0:
+            return str(self.modifier)
+        if self.modifier == 0:
+            return f"{self.count}d{self.sides}"
+        sign = "+" if self.modifier > 0 else ""
+        return f"{self.count}d{self.sides}{sign}{self.modifier}"
