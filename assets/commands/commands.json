@@ -24,7 +24,7 @@
     },
     {
       "name": "quick",
-      "description": "Halves the damage dice but costs 3 fewer AP.",
+      "description": "applies speed 1 after action",
       "dice_count_mult": 0.5,
       "dice_sides_mult": 1.0,
       "flat_bonus": 0,
