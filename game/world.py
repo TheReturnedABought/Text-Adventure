@@ -307,6 +307,7 @@ class WorldMap:
         self.rooms: dict[str, Room] = {}
         self.current_room_id: str | None = None
         self.start_room_id: str | None = None
+        self.moves : int | None = 0
 
     def add_room(self, room: Room) -> None:
         self.rooms[room.id] = room

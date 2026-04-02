@@ -293,6 +293,7 @@ class TextAdventureGame:
             "player": self._serialise_player(),
             "room_id": self._room_id,
             "state": self.state.name,
+            "moves": self.world.moves
         }
         (save_dir / f"slot_{slot}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"Saved to slot {slot}.")
@@ -303,6 +304,7 @@ class TextAdventureGame:
         self.player = self._deserialise_player(data.get("player", {}))
         self._room_id = data.get("room_id", self._room_id)
         self.state = GameState[data.get("state", "EXPLORING")]
+        self.world.moves = data.get("moves", self.world.moves)
 
     def _serialise_player(self) -> dict:
         if self.player is None:

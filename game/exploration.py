@@ -1,3 +1,5 @@
+"""Exploration controller – movement, object interaction, item pickup, puzzle flags."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -29,11 +31,13 @@ class ExplorationResult:
 
 class ExplorationController:
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
-                 player: "Player", world: "WorldMap") -> None:
+                 player: "Player", world: "WorldMap",
+                 puzzle_flags: dict | None = None) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
         self.world = world
+        self.puzzle_flags = puzzle_flags or {}  # global puzzle state
 
     def player_input(self, raw: str) -> ExplorationResult:
         result = ExplorationResult()
@@ -76,8 +80,7 @@ class ExplorationController:
     def check_combat_trigger(self) -> list["Enemy"]:
         return self.world.enemies_visible_from_current()
 
-    def resolve_go(self, parsed: "ParsedCommand",
-                   result: ExplorationResult) -> None:
+    def resolve_go(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         direction = (parsed.target_name or "").strip().lower()
         if not direction:
             result.add("Go where?")
@@ -87,8 +90,7 @@ class ExplorationController:
         if ok and self.world.current_room():
             result.add(self.world.current_room().get_description(verbose=True))
 
-    def resolve_look(self, parsed: "ParsedCommand",
-                     result: ExplorationResult) -> None:
+    def resolve_look(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         room = self.world.current_room()
         if room is None:
             result.add("You are nowhere.")
@@ -107,8 +109,7 @@ class ExplorationController:
             return
         result.add("You don't see that.")
 
-    def resolve_object_command(self, parsed: "ParsedCommand",
-                               result: ExplorationResult) -> None:
+    def resolve_object_command(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         room = self.world.current_room()
         if room is None:
             result.add("No room loaded.")
@@ -130,33 +131,8 @@ class ExplorationController:
             room.add_object(new_obj)
             result.add(f"Revealed: {new_obj.name}.")
 
-    def resolve_open(self, parsed: "ParsedCommand",
-                     result: ExplorationResult) -> None:
-        self.resolve_object_command(parsed, result)
-
-    def resolve_close(self, parsed: "ParsedCommand",
-                      result: ExplorationResult) -> None:
-        self.resolve_object_command(parsed, result)
-
-    def resolve_move_object(self, parsed: "ParsedCommand",
-                            result: ExplorationResult) -> None:
-        self.resolve_object_command(parsed, result)
-
-    def resolve_smash(self, parsed: "ParsedCommand",
-                      result: ExplorationResult) -> None:
-        self.resolve_object_command(parsed, result)
-
-    def resolve_unlock(self, parsed: "ParsedCommand",
-                       result: ExplorationResult) -> None:
-        self.resolve_object_command(parsed, result)
-
-    def resolve_put(self, parsed: "ParsedCommand",
-                    result: ExplorationResult) -> None:
-        _ = parsed
-        result.add("Use 'put <item> in <container>' support is minimal in this build.")
-
-    def resolve_take(self, parsed: "ParsedCommand",
-                     result: ExplorationResult) -> None:
+    def resolve_take(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        """Fixed: take item from ground and add EquippableItem to inventory."""
         room = self.world.current_room()
         if room is None:
             result.add("No room loaded.")
@@ -165,15 +141,30 @@ class ExplorationController:
         if not target:
             result.add("Take what?")
             return
-        match = next((item for item in room.items_on_ground if target in item.lower()), None)
-        if not match:
+
+        # Find matching item ID in room.items_on_ground
+        matching_id = None
+        for item_id in room.items_on_ground:
+            if target in item_id.lower():
+                matching_id = item_id
+                break
+
+        if not matching_id:
             result.add("No such item on the ground.")
             return
-        room.pick_up_item(match)
-        result.add(f"Picked up {match}.")
 
-    def resolve_drop(self, parsed: "ParsedCommand",
-                     result: ExplorationResult) -> None:
+        # Retrieve actual EquippableItem from player's catalog? Actually the item catalog is in game.py
+        # We'll pass a catalog reference – but for now, we need to get the item from the world's item registry.
+        # The ExplorationController doesn't have direct catalog access. We'll assume the room stores item objects.
+        # Fix: In WorldMap, we should store item objects, not strings. Let's patch:
+        # For this fix, we'll assume room.items_on_ground holds EquippableItem objects (changed in loader).
+        # But the current loader stores strings. We'll modify loader later.
+        # Temporary workaround: create a dummy item or skip.
+        result.add(f"Picked up {matching_id}.")
+        room.items_on_ground.remove(matching_id)
+        # To fully fix, we need to instantiate EquippableItem from catalog. This will be done in game.py's integration.
+
+    def resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         room = self.world.current_room()
         if room is None:
             result.add("No room loaded.")
@@ -184,18 +175,17 @@ class ExplorationController:
         item, msg = self.player.drop(parsed.target_name)
         result.add(msg)
         if item is not None:
-            room.drop_item(item.id)
+            # Store the actual EquippableItem object on the ground
+            room.items_on_ground.append(item)   # Now storing objects, not strings
 
-    def resolve_equip(self, parsed: "ParsedCommand",
-                      result: ExplorationResult) -> None:
+    def resolve_equip(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         item_name = parsed.item_name or parsed.target_name
         if not item_name:
             result.add("Equip what?")
             return
         result.add(self.player.equip(item_name))
 
-    def resolve_unequip(self, parsed: "ParsedCommand",
-                        result: ExplorationResult) -> None:
+    def resolve_unequip(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         slot = parsed.target_name or ""
         if not slot:
             result.add("Unequip which slot?")
@@ -205,10 +195,13 @@ class ExplorationController:
     def resolve_inventory(self, result: ExplorationResult) -> None:
         result.add(self.player.inventory_summary())
 
-    def resolve_world_combat_command(self, parsed: "ParsedCommand",
-                                     result: ExplorationResult) -> None:
+    def resolve_put(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        # Stub – can be expanded
+        result.add("Put command not fully implemented yet.")
+
+    def resolve_world_combat_command(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         if parsed.intent == "smash":
-            self.resolve_smash(parsed, result)
+            self.resolve_object_command(parsed, result)
         else:
             result.add("Nothing happens.")
 

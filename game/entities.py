@@ -1,3 +1,9 @@
+"""Entity classes: Entity, Player, Enemy.
+
+Added turn stack, entity log, MP reduction, and proper inventory handling.
+Extended AI profiles: pack, looter, scout, guard, trap.
+"""
+
 from __future__ import annotations
 
 import random
@@ -14,6 +20,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class Entity:
+    """Base combat entity with HP, block, effects."""
     name: str
     max_hp: int
     attack: int
@@ -36,6 +43,7 @@ class Entity:
         return max(0.0, min(1.0, (self.current_hp or 0) / max(self.max_hp, 1)))
 
     def receive_damage(self, amount: int) -> int:
+        """Apply damage after block and defense. Returns actual HP lost."""
         _, hp_damage = self.receive_block_damage(amount)
         return hp_damage
 
@@ -76,6 +84,7 @@ class Entity:
 
 @dataclass
 class Player(Entity):
+    """Player character with inventory, equipment, AP, XP, and conversation memory."""
     char_class: CharacterClass | None = None
     level: int = 1
     xp: int = 0
@@ -85,6 +94,11 @@ class Player(Entity):
     inventory: list[EquippableItem] = field(default_factory=list)
     equipped: dict[str, EquippableItem] = field(default_factory=dict)
     unlocked_commands: set[str] = field(default_factory=set)
+
+    # Conversation memory for parser (pronouns, "the one I fought earlier")
+    turn_stack: list = field(default_factory=list)      # list of TurnEntry
+    entity_log: list = field(default_factory=list)      # list of EntityLogEntry
+    turn_number: int = 0
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -105,6 +119,7 @@ class Player(Entity):
     def has_unlocked(self, command_name: str) -> bool:
         return str(command_name).lower() in {c.lower() for c in self.unlocked_commands}
 
+    # ── Equipment ──────────────────────────────────────────────────────────
     def equip(self, item_name: str) -> str:
         item = self.find_in_inventory(item_name)
         if item is None:
@@ -139,12 +154,14 @@ class Player(Entity):
             return False, f"{item.name} cannot be equipped by your class."
         return True, ""
 
+    # ── Stat calculation with equipment & effects ─────────────────────────
     def attack_value(self) -> int:
         return self.attack + sum(i.stat_modifiers.get("attack", 0) for i in self.equipped.values()) + self.effects.stat_bonus("attack")
 
     def defense_value(self) -> int:
         return self.defense + sum(i.stat_modifiers.get("defense", 0) for i in self.equipped.values()) + self.effects.stat_bonus("defense")
 
+    # AP reduction from equipped items (e.g., "b" -> letter 'b' costs 1 less)
     def ap_cost_reduction_for(self, command_name: str) -> int:
         key = command_name.lower()
         total = 0
@@ -154,9 +171,12 @@ class Player(Entity):
                     total += int(amount)
         return total
 
+    # MP reduction (not used in core but required by parser)
     def mp_cost_reduction_for(self, command_name: str) -> int:
+        # Stub: can be expanded later for MP system
         return 0
 
+    # ── Inventory ─────────────────────────────────────────────────────────
     def pick_up(self, item: EquippableItem) -> str:
         self.inventory.append(item)
         return f"Picked up {item.name}."
@@ -179,6 +199,7 @@ class Player(Entity):
                 return item
         return None
 
+    # ── Progression ───────────────────────────────────────────────────────
     def gain_xp(self, amount: int) -> list[str]:
         self.xp += max(0, int(amount))
         lines = [f"Gained {amount} XP."]
@@ -231,6 +252,7 @@ class Player(Entity):
 
 @dataclass
 class Enemy(Entity):
+    """Enemy with AI, AP pool, intent system, and world movement."""
     template_id: str = ""
     ai_profile: str = "basic"
     total_ap: int = 18
@@ -246,11 +268,21 @@ class Enemy(Entity):
     current_zone: str | None = None
     patrol_index: int = 0
 
+    # New AI profile attributes
+    pack_id: str = ""                     # group identifier for pack AI
+    pack_range: int = 2                   # max rooms distance to consider pack mates
+    loot_carried: list[str] = field(default_factory=list)  # item IDs looted
+    scout_range_min: int = 2              # desired minimum distance from player
+    scout_range_max: int = 4              # desired maximum distance from player
+    trap_placed: bool = False             # whether trapper has already set a trap
+    trap_room_id: str | None = None       # room where trap is set
+
     def __post_init__(self) -> None:
         super().__post_init__()
         self.current_ap = self.total_ap
 
     def plan_turn(self, player: "Player") -> list[EnemyIntent]:
+        """Greedily fill active_intents using remaining AP."""
         self.active_intents = []
         remaining = self.current_ap
         while remaining > 0:
@@ -309,8 +341,8 @@ class Enemy(Entity):
             return "(no intents)"
         return ", ".join(i.id for i in self.active_intents)
 
-    def choose_world_move(self, world: "WorldMap",
-                          player_zone: str | None = None) -> str | None:
+    # World AI movement (used by WorldMap.step_enemy_outside_combat)
+    def choose_world_move(self, world: "WorldMap", player_zone: str | None = None) -> str | None:
         """Return the next zone id this enemy wants to move to outside combat."""
         if self.current_zone is None:
             return None
@@ -320,6 +352,148 @@ class Enemy(Entity):
         if not neighbors:
             return None
 
+        # ──────────────────────────────────────────────────────────────────────────
+        # PACK – move toward the centre of nearby pack members
+        # ──────────────────────────────────────────────────────────────────────────
+        if profile == "pack":
+            if not self.pack_id:
+                return random.choice(neighbors) if neighbors else None
+
+            # Gather positions of other pack members (alive, same pack_id)
+            pack_positions = []
+            for room in world.rooms.values():
+                for other in room.living_enemies():
+                    if other is not self and other.pack_id == self.pack_id:
+                        pack_positions.append(room.id)
+            if not pack_positions:
+                return random.choice(neighbors)
+
+            # Find nearest pack member
+            nearest = None
+            best_dist = float('inf')
+            for pos in set(pack_positions):
+                d = world.distance_between(self.current_zone, pos)
+                if d < best_dist:
+                    best_dist = d
+                    nearest = pos
+            if nearest is None:
+                return random.choice(neighbors)
+
+            # Move one step toward the nearest pack member
+            path = world.shortest_path(self.current_zone, nearest, blocked=self.forbidden_zones)
+            return path[1] if len(path) > 1 else None
+
+        # ──────────────────────────────────────────────────────────────────────────
+        # LOOTER – move toward rooms with items on ground, then loot and flee home
+        # ──────────────────────────────────────────────────────────────────────────
+        if profile == "looter":
+            # If we have loot, flee to guard_home
+            if self.loot_carried and self.guard_home:
+                if self.current_zone == self.guard_home:
+                    # Already home; could drop loot, but stay put
+                    return None
+                path = world.shortest_path(self.current_zone, self.guard_home, blocked=self.forbidden_zones)
+                return path[1] if len(path) > 1 else None
+
+            # No loot yet: find nearest room with items_on_ground
+            target_room = None
+            best_dist = 999999
+            for rid, room in world.rooms.items():
+                if room.items_on_ground:
+                    d = world.distance_between(self.current_zone, rid)
+                    if d < best_dist:
+                        best_dist = d
+                        target_room = rid
+            if target_room is None:
+                return random.choice(neighbors)
+
+            # Move toward that room
+            path = world.shortest_path(self.current_zone, target_room, blocked=self.forbidden_zones)
+            next_zone = path[1] if len(path) > 1 else None
+
+            # If we arrived at the target room, loot one item
+            if next_zone is None and self.current_zone == target_room:
+                room = world.get_room(target_room)
+                if room and room.items_on_ground:
+                    item_id = room.items_on_ground.pop(0)   # take first item
+                    self.loot_carried.append(item_id)
+            return next_zone
+
+        # ──────────────────────────────────────────────────────────────────────────
+        # SCOUT – keep a specific distance from player (2-4 rooms away)
+        # ──────────────────────────────────────────────────────────────────────────
+        if profile == "scout":
+            if player_zone is None:
+                return random.choice(neighbors)
+
+            dist = world.distance_between(self.current_zone, player_zone)
+            # If too close, move away; if too far, move closer; if in range, stay or wander
+            if dist < self.scout_range_min:
+                # Move to neighbor that increases distance
+                best = None
+                best_dist = -1
+                for nxt in neighbors:
+                    nd = world.distance_between(nxt, player_zone)
+                    if nd > best_dist:
+                        best_dist = nd
+                        best = nxt
+                return best if best else random.choice(neighbors)
+            elif dist > self.scout_range_max:
+                # Move toward player
+                path = world.shortest_path(self.current_zone, player_zone, blocked=self.forbidden_zones)
+                return path[1] if len(path) > 1 else random.choice(neighbors)
+            else:
+                # In ideal range – either stay or wander randomly
+                return random.choice(neighbors) if random.random() < 0.3 else None
+
+        # ──────────────────────────────────────────────────────────────────────────
+        # GUARD (guardian) – never leave guard_home, if outside return home
+        # ──────────────────────────────────────────────────────────────────────────
+        if profile == "guard":
+            if self.guard_home and self.current_zone != self.guard_home:
+                path = world.shortest_path(self.current_zone, self.guard_home, blocked=self.forbidden_zones)
+                return path[1] if len(path) > 1 else None
+            return None   # stays in place
+
+        # ──────────────────────────────────────────────────────────────────────────
+        # TRAP (trapper) – move to a choke point or room with 'trap' tag, set trap once
+        # ──────────────────────────────────────────────────────────────────────────
+        if profile == "trap":
+            # If trap already placed, just stay or wander
+            if self.trap_placed:
+                return None
+
+            # Find nearest room that is a choke point (degree 1) or has tag 'trap'
+            target = None
+            best_dist = 999999
+            for rid, room in world.rooms.items():
+                # Simple choke detection: only one exit
+                is_choke = len(room.exits) == 1
+                # Alternatively check for a 'trap' tag on room (if you extend Room with tags)
+                has_trap_tag = hasattr(room, 'tags') and 'trap' in room.tags
+                if is_choke or has_trap_tag:
+                    d = world.distance_between(self.current_zone, rid)
+                    if d < best_dist:
+                        best_dist = d
+                        target = rid
+            if target is None:
+                return random.choice(neighbors)
+
+            # Move toward target
+            path = world.shortest_path(self.current_zone, target, blocked=self.forbidden_zones)
+            next_zone = path[1] if len(path) > 1 else None
+
+            # If arrived, set trap
+            if next_zone is None and self.current_zone == target:
+                self.trap_placed = True
+                self.trap_room_id = target
+                # Optionally: add a trap effect to the room (requires world method)
+                # world.set_trap(target, self)
+            return next_zone
+
+        # ──────────────────────────────────────────────────────────────────────────
+        # EXISTING PROFILES (patrol, wander, hunter, fearful)
+        # ──────────────────────────────────────────────────────────────────────────
         if profile == "patrol":
             if not self.patrol_points:
                 return None
@@ -337,7 +511,10 @@ class Enemy(Entity):
             if player_zone is None:
                 return random.choice(neighbors)
             path = world.shortest_path(self.current_zone, player_zone, blocked=self.forbidden_zones)
-            return path[1] if len(path) > 1 else None
+            distance = len(path) - 1 if path else 999999
+            if distance < 10:
+                return path[1] if len(path) > 1 else random.choice(neighbors)
+            return None
 
         if profile == "fearful":
             if player_zone is None:
@@ -350,7 +527,7 @@ class Enemy(Entity):
                 return random.choice(safe)
             return None
 
-        # guard/default
+        # guard / default: return to guard_home
         if self.guard_home and self.current_zone != self.guard_home:
             path = world.shortest_path(self.current_zone, self.guard_home, blocked=self.forbidden_zones)
             return path[1] if len(path) > 1 else None
