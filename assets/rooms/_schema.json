@@ -8,16 +8,16 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 10,
-  "ambient": "Leaves rustle softly in the breeze.",
+  "ambient": ["Leaves rustle softly in the breeze.", "A song bird sings"],
 
   "exits": {
-    "north": "cave_entrance",
-    "east":  "village_road",
-    "south": "dense_forest"
+    "north": "*cave_entrance",
+    "east":  "*village_road",
+    "south": "*dense_forest"
   },
 
   "line_of_sight": [
-    "cave_entrance"
+    "*cave_entrance"
   ],
 
   "objects": [

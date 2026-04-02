@@ -4,6 +4,7 @@
   "id": "bronze_blade",
   "name": "Bronze Blade",
   "slot": "weapon",
+  "item_type": "sword",
   "description": "A simple bronze sword. Worn but reliable. The blade hums faintly.",
   "material": "metal",
   "rarity": "common",
@@ -14,7 +15,7 @@
     "defense": 0
   },
 
-  "ability_cost_reductions": {
+  "letter_cost_reductions": {
     "b": 1
   },
 

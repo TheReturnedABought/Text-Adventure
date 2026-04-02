@@ -529,8 +529,9 @@ class CommandParser:
         Rules (in priority order):
         1. If the command has no MP cost (costs_mp is False) → 0.
         2. If CommandDefinition.mp_cost_override is set → use that value.
-        3. Else → word count of raw.strip().
-        Minimum cost for MP-bearing commands is 1.
+        3. Use value from costs_mp_amounrt
+        4. Subtract player.ap_cost_reduction_for(intent) from equipped items.
+        minimum cost is always 0.
         """
         cmd_def = self.registry.get_command(intent)
         if not getattr(cmd_def, "costs_mp", False):
