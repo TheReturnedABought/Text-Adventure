@@ -1,93 +1,74 @@
-# Text Adventure
+# Text Adventure (OO Skeleton)
 
-A terminal-first Python RPG with room exploration, puzzle interactions, relic-driven build variety, and AP/MP tactical combat.
+A clean, modular, object-oriented foundation focused on **parser-driven combat** and **equippable items with special abilities**.
 
-## Running the game
+## Current Structure
 
-From the repository root:
+- `main.py` — app entry point.
+- `game/models.py` — data models (abilities, items, classes, parsed commands, battle context).
+- `game/entities.py` — `Entity`, `Player`, and `Enemy` classes.
+- `game/parser.py` — command parsing and intent normalization.
+- `game/combat.py` — combat turn resolution driven by parser intents.
+- `game/world.py` — room and world map skeleton.
+- `game/game.py` — orchestration shell and sample sandbox combat loop.
+- `utils/window.py` — existing GUI window kept as-is.
+- `docs/removed_components.md` — full log of removed code and rationale.
+
+## Required Game Features (Roadmap)
+
+Use this checklist as the required feature scope for the full game.
+
+### 1) Parser and Input System
+
+- [ ] Verb + object grammar (`attack goblin`, `equip iron sword`, `use ember slash`).
+- [ ] Synonym tables and aliasing (`hit`, `strike`, `wear`, `cast`).
+- [ ] Error-tolerant parsing with useful feedback and suggestions.
+- [ ] Intent routing shared by exploration and combat.
+
+### 2) Equipment-First Progression
+
+- [ ] Distinct equipment slots (`weapon`, `offhand`, `armor`, `trinket`, etc.).
+- [ ] Item stat modifiers and special abilities.
+- [ ] Equip/unequip restrictions (class, level, conditions).
+- [ ] Item rarity/tier scaling and upgrade paths.
+
+### 3) Class System
+
+- [ ] Class identity via passive traits and compatible gear themes.
+- [ ] Class-specific command extensions where needed.
+- [ ] Clear class progression hooks (talents, unlock trees, milestones).
+
+### 4) Combat Loop (Parser-Centric)
+
+- [ ] Turn order system with AP/stamina or equivalent economy.
+- [ ] Intent resolution pipeline: parse -> validate -> execute -> report.
+- [ ] Ability effects framework (damage, buffs, debuffs, counters, triggers).
+- [ ] Enemy AI intents that can be surfaced to the parser/UI.
+
+### 5) World and Content
+
+- [ ] Room graph + encounter definitions.
+- [ ] Interactive objects and parser-friendly room actions.
+- [ ] Loot tables centered on equippable items and ability items.
+
+### 6) Persistence and UX
+
+- [ ] Save/load for player, equipment, abilities, and world progression.
+- [ ] Combat log formatting and status summaries.
+- [ ] Optional integration path for `utils/window.py` UI shell.
+
+### 7) Testing and Stability
+
+- [ ] Unit tests for parser normalization and combat resolution.
+- [ ] Data validation for classes/items/enemies.
+- [ ] Regression checks for command compatibility as grammar expands.
+
+## Running
 
 ```bash
 python main.py
 ```
 
-No packaging step is required for local play.
-
-## Core gameplay systems
-
-### Exploration
-- Traverse connected rooms (`north`, `south`, `east`, `west`).
-- Inspect and manipulate environment objects (`look`, `listen`, `examine`, `interact`).
-- Puzzle rooms accept direct answer text (no `solve` prefix required).
-- Manage inventory, relics, map, and journal.
-
-### Combat
-- Turn-based AP economy with optional MP costs for spell/class commands.
-- Enemy intents are shown before enemy actions.
-- Typed damage system (e.g., slashing, lightning, force) with effectiveness modifiers.
-- Status effects and relic passives can heavily alter turn flow.
-
-### Progression
-- Class-specific command unlock trees (`soldier`, `rogue`, `mage`).
-- XP leveling with stat scaling and new command unlocks/choices.
-- Persistent saves include player state, room graph state, enemies, inventory/relics, and journal.
-
-## Parser model
-
-The project currently ships two parser layers:
-
-1. **Legacy command parser** (`game_engine/parser.py`)
-   - Active in the current game loop.
-   - Normalizes aliases and supports Zork-like phrasing:
-     - direction aliases: `n`, `s`, `e`, `w`
-     - noun/verb shorthand: `x statue`, `inv`, `?`
-     - phrasal verbs: `pick up relic`, `look at altar`, `talk to hermit`
-     - movement normalization: `go north`, `walk to east`
-
-2. **Syntax engine parser** (`game_engine/syntax_engine/*`)
-   - Exposed via `parse_syntax_command(...)`.
-   - Supports richer grammar metadata (determiners, prepositions, adverbs, semantic roles, target resolution).
-   - Designed for progressive unlock-based language-combat extensions.
-
-## Project layout
-
-```text
-main.py
-entities/
-  player.py
-  class_data.py
-  class_commands.py
-  enemy.py
-  enemy_moves.py
-  relic.py
-game_engine/
-  engine.py
-  game_state.py
-  parser.py
-  journal.py
-  save_manager.py
-  syntax_engine/
-    parser.py
-    resolver.py
-    lexicon.py
-    models.py
-    unlocks.py
-utils/
-  actions.py
-  combat.py
-  damage.py
-  status_effects.py
-  display.py
-  window.py
-rooms/
-  area1.py
-  room.py
-  map_data.py
-  enemy_data.py
-docs/
-  syntax_combat_design.md
-```
-
 ## Notes
 
-- Recommended terminal size: at least **80x26**.
-- A Tk window HUD adapter exists (`utils/window.py`) and mirrors terminal output/input when enabled.
+This repository is now intentionally lean so you can expand systems cleanly without legacy clashes.
