@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
 from game.dice import DiceExpression
-from game.effects import EffectTrigger, EffectCategory  # <--- FIX: added EffectCategory
+from game.effects import EffectTrigger, EffectCategory
 from game.models import ParsedCommand, ArticleType
 from game.world import DamageType, coerce_damage_type, resolve_material_interaction
 
@@ -97,8 +97,14 @@ class CombatController:
         if intent in {"wait", "end"}:
             return self.end_player_turn()
 
+        # AP check
         if parsed.ap_cost > self.player.current_ap:
             result.add("Not enough AP.")
+            return result
+
+        # MP check (new)
+        if parsed.mp_cost > getattr(self.player, "mana", 0):
+            result.add("Not enough MP.")
             return result
 
         if intent in {"attack", "strike", "hit"}:
@@ -116,6 +122,7 @@ class CombatController:
 
         if result.outcome == CombatOutcome.ONGOING:
             self.player.spend_ap(parsed.ap_cost)
+            self.player.mana -= parsed.mp_cost   # spend MP
             result.ap_spent += parsed.ap_cost
             for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
                 result.add(line)
@@ -218,7 +225,7 @@ class CombatController:
                     name=effect_id.capitalize(),
                     description="",
                     trigger=EffectTrigger.ON_TURN_END,
-                    category=EffectCategory.DEBUFF,  # <--- FIX: added proper category
+                    category=EffectCategory.DEBUFF,
                     duration=2
                 )
                 result.add(target.apply_effect(effect))
@@ -362,7 +369,7 @@ class CombatController:
                     name=intent.effect_on_hit.capitalize(),
                     description="",
                     trigger=EffectTrigger.ON_TURN_END,
-                    category=EffectCategory.DEBUFF,  # <--- FIX: added proper category
+                    category=EffectCategory.DEBUFF,
                     duration=intent.effect_duration
                 )
                 result.add(self.player.apply_effect(effect))
@@ -511,7 +518,6 @@ class CombatController:
         enemy_room = getattr(enemy, "combat_room_id", self.player_room_id)
         if enemy_room == self.player_room_id:
             return True
-        # Use intent.tags if available, fallback to empty list
         tags = getattr(intent, "tags", [])
         if "ranged" in tags:
             return bool(self.player_room_id in self._zone_from_anchor(enemy_room))

@@ -135,10 +135,10 @@ class TextAdventureGame:
         atk = int(base.get("attack", 5))
         defense = int(base.get("defense", 1))
         ap = int(base.get("ap", 20))
+        mana = int(base.get("mana", 0))
 
         from game.models import CharacterClass
 
-        # Build proper CharacterClass object
         char_class = CharacterClass(
             id=class_data.get("id", class_id),
             name=class_data.get("name", class_id),
@@ -149,14 +149,12 @@ class TextAdventureGame:
             choice_unlocks={int(k): [list(g) for g in v] for k, v in (class_data.get("choice_unlocks", {}) or {}).items()},
         )
 
-        player = Player(name="Hero", max_hp=hp, attack=atk, defense=defense, total_ap=ap)
+        player = Player(name="Hero", max_hp=hp, attack=atk, defense=defense, total_ap=ap, max_mana=mana, mana=mana)
         player.current_hp = hp
         player.current_ap = ap
         player.char_class = char_class
         player.unlocked_commands = set(class_data.get("level_unlocks", {}).get("1", []))
         setattr(player, "char_class_name", class_data.get("name", class_id))
-        setattr(player, "max_mana", int(base.get("mana", 0)))
-        setattr(player, "mana", int(base.get("mana", 0)))
         setattr(player, "gold", 0)
         setattr(player, "relics", [])
 
@@ -168,7 +166,6 @@ class TextAdventureGame:
         return player
 
     def run(self) -> None:
-        # all output/input is routed through GameWindow by design
         window.run_game(self._run_loop)
 
     def _run_loop(self) -> None:
@@ -208,7 +205,6 @@ class TextAdventureGame:
                         self._enter_combat(result.aggressors)
             elif self.state == GameState.COMBAT:
                 if not self.combat:
-                    # Fallback combat handling
                     if raw.strip().lower() in {"flee", "run"}:
                         self._on_combat_fled()
                     else:
@@ -282,11 +278,22 @@ class TextAdventureGame:
 
     def _on_combat_won(self) -> None:
         print("You won the encounter.")
-        self.combat = None
-        self.state = GameState.EXPLORING
-        # Refresh world state
-        if self.world and self.exploration:
-            self.exploration.world = self.world
+
+        # Award XP and handle level‑up choices
+        total_xp = sum(e.xp_reward for e in self.combat.enemies if not e.is_alive)
+        lines, choice_groups = self.player.gain_xp(total_xp)
+        for line in lines:
+            print(line)
+        if choice_groups:
+            self._pending_level_up_choices = choice_groups
+            self.state = GameState.LEVEL_UP
+            print("You have new abilities to choose from! (type number)")
+            self._print_choices()
+        else:
+            self.combat = None
+            self.state = GameState.EXPLORING
+            if self.world and self.exploration:
+                self.exploration.world = self.world
 
     def _on_combat_fled(self) -> None:
         if self._prev_room_id:
@@ -302,23 +309,37 @@ class TextAdventureGame:
             return "level-up> "
         return "explore> "
 
+    def _print_choices(self) -> None:
+        if not self._pending_level_up_choices:
+            return
+        for group in self._pending_level_up_choices:
+            print("Choose one of:")
+            for i, opt in enumerate(group, start=1):
+                print(f"  {i}. {opt}")
+
     def _handle_level_up_choice(self, raw: str) -> None:
         if not self._pending_level_up_choices:
             self.state = GameState.EXPLORING
             return
-        options = self._pending_level_up_choices[0]
-        if raw.strip().isdigit() and 1 <= int(raw.strip()) <= len(options):
-            choice = options[int(raw.strip()) - 1]
+        # Current group is the first one
+        group = self._pending_level_up_choices[0]
+        if raw.strip().isdigit() and 1 <= int(raw.strip()) <= len(group):
+            choice = group[int(raw.strip()) - 1]
             if self.player is not None:
-                self.player.unlocked_commands.add(choice)
+                self.player.unlock_command(choice)
             print(f"Unlocked: {choice}")
             self._pending_level_up_choices.pop(0)
         else:
-            for i, opt in enumerate(options, start=1):
+            print("Invalid choice. Enter a number from the list.")
+            for i, opt in enumerate(group, start=1):
                 print(f"  {i}. {opt}")
-            print("Choose by number.")
-        if not self._pending_level_up_choices:
+            return
+        # If there are more groups, continue level‑up state; else back to exploring
+        if self._pending_level_up_choices:
+            self._print_choices()
+        else:
             self.state = GameState.EXPLORING
+            print("Level‑up complete. You continue your journey.")
 
     def _print_room(self) -> None:
         room = self._rooms_raw.get(self._room_id or "")
@@ -383,6 +404,8 @@ class TextAdventureGame:
             "current_hp": self.player.current_hp,
             "total_ap": self.player.total_ap,
             "current_ap": self.player.current_ap,
+            "max_mana": self.player.max_mana,
+            "mana": self.player.mana,
             "level": self.player.level,
             "xp": self.player.xp,
             "unlocked_commands": sorted(self.player.unlocked_commands),
@@ -398,6 +421,8 @@ class TextAdventureGame:
             attack=int(data.get("attack", 5)),
             defense=int(data.get("defense", 1)),
             total_ap=int(data.get("total_ap", 20)),
+            max_mana=int(data.get("max_mana", 0)),
+            mana=int(data.get("mana", 0)),
         )
         p.current_hp = int(data.get("current_hp", p.max_hp))
         p.current_ap = int(data.get("current_ap", p.total_ap))

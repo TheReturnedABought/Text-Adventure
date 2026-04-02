@@ -84,13 +84,15 @@ class Entity:
 
 @dataclass
 class Player(Entity):
-    """Player character with inventory, equipment, AP, XP, and conversation memory."""
+    """Player character with inventory, equipment, AP, MP, XP, and conversation memory."""
     char_class: CharacterClass | None = None
     level: int = 1
     xp: int = 0
     xp_to_next_level: int = 100
     total_ap: int = 24
     current_ap: int = 0
+    max_mana: int = 0      # MP system
+    mana: int = 0           # current MP
     inventory: list[EquippableItem] = field(default_factory=list)
     equipped: dict[str, EquippableItem] = field(default_factory=dict)
     unlocked_commands: set[str] = field(default_factory=set)
@@ -103,6 +105,7 @@ class Player(Entity):
     def __post_init__(self) -> None:
         super().__post_init__()
         self.current_ap = self.total_ap
+        self.mana = self.max_mana
 
     def reset_ap(self) -> None:
         self.current_ap = self.total_ap
@@ -171,13 +174,18 @@ class Player(Entity):
                     total += int(amount)
         return total
 
-    # MP reduction (not used in core but required by parser)
+    # MP reduction (word‑count system)
     def mp_cost_reduction_for(self, command_name: str) -> int:
-        # Stub: can be expanded later for MP system
-        return 0
+        key = command_name.lower()
+        total = 0
+        for item in self.equipped.values():
+            for name, amount in item.ability_cost_reductions.items():
+                if name.lower() == key:
+                    total += int(amount)
+        return total
 
     # ── Inventory ─────────────────────────────────────────────────────────
-    def pick_up(self, item: EquippableItem) -> str:  # <--- FIX: added pick_up method
+    def pick_up(self, item: EquippableItem) -> str:
         self.inventory.append(item)
         return f"Picked up {item.name}."
 
@@ -200,15 +208,20 @@ class Player(Entity):
         return None
 
     # ── Progression ───────────────────────────────────────────────────────
-    def gain_xp(self, amount: int) -> list[str]:
+    def gain_xp(self, amount: int) -> tuple[list[str], list[list[str]]]:
+        """Returns (log_lines, list_of_choice_groups) for level‑ups."""
         self.xp += max(0, int(amount))
         lines = [f"Gained {amount} XP."]
+        all_choice_groups = []
         while self.xp >= self.xp_to_next_level:
             self.xp -= self.xp_to_next_level
-            lines.extend(self.level_up())
-        return lines
+            lvl_lines, choices = self.level_up()
+            lines.extend(lvl_lines)
+            all_choice_groups.extend(choices)
+        return lines, all_choice_groups
 
-    def level_up(self) -> list[str]:
+    def level_up(self) -> tuple[list[str], list[list[str]]]:
+        """Returns (log_lines, choice_groups) for this single level‑up."""
         self.level += 1
         self.max_hp += 5
         self.current_hp = min(self.max_hp, (self.current_hp or 0) + 5)
@@ -216,16 +229,21 @@ class Player(Entity):
         self.defense += 1
         self.total_ap += 1
         self.current_ap = self.total_ap
+        # Optional MP increase per level (customise as needed)
+        self.max_mana += 1
+        self.mana = self.max_mana
+
         unlocked = []
-        # <--- FIX: use self.char_class instead of self.char_class_name
+        choice_groups = []
         if self.char_class:
             unlocked = self.char_class.level_unlocks.get(self.level, [])
+            choice_groups = self.char_class.choice_unlocks.get(self.level, [])
             for cmd in unlocked:
                 self.unlock_command(cmd)
         lines = [f"Level up! You are now level {self.level}."]
         if unlocked:
             lines.append("Unlocked: " + ", ".join(unlocked))
-        return lines
+        return lines, choice_groups
 
     def unlock_command(self, command_name: str) -> None:
         self.unlocked_commands.add(command_name)

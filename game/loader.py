@@ -129,7 +129,8 @@ class AssetLoader:
                           templates: dict[str, dict]) -> "Enemy":
         t = templates[template_id]
         intents = []
-        for i in t.get("intents", []):
+        # FIX: use "intent_pool" instead of "intents"
+        for i in t.get("intent_pool", []):
             intent_type = IntentType[str(i.get("intent_type", "ATTACK")).upper()] if str(i.get("intent_type", "ATTACK")).upper() in IntentType.__members__ else IntentType.ATTACK
             intents.append(EnemyIntent(
                 id=i.get("id", "action"),
@@ -141,6 +142,7 @@ class AssetLoader:
                 condition=i.get("condition"),
                 effect_on_hit=i.get("effect_on_hit"),
                 effect_duration=int(i.get("effect_duration", 1)),
+                tags=i.get("tags", []),
             ))
         loot = [LootEntry(item_id=row.get("item_id", ""), chance=float(row.get("chance", 0.0)), count_expression=str(row.get("count_expression", "1"))) for row in t.get("loot_table", [])]
         return Enemy(
