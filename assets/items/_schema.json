@@ -1,0 +1,41 @@
+{
+  "_comment": "ITEM SCHEMA — one file per item in assets/items/",
+
+  "id": "bronze_blade",
+  "name": "Bronze Blade",
+  "slot": "weapon",
+  "description": "A simple bronze sword. Worn but reliable. The blade hums faintly.",
+  "material": "metal",
+  "rarity": "common",
+  "tier": 1,
+
+  "stat_modifiers": {
+    "attack":  2,
+    "defense": 0
+  },
+
+  "ability_cost_reductions": {
+    "b": 1
+  },
+
+  "abilities": [
+    {
+      "id": "spark",
+      "name": "Spark",
+      "description": "Channel lightning through the blade. Deals bonus damage and may shock.",
+      "ap_cost": null,
+      "dice_expression": "1d4+1",
+      "effect_on_hit": "shocked",
+      "effect_duration": 2,
+      "effect_stacks": 1,
+      "tags": ["lightning", "single-target"]
+    }
+  ],
+
+  "equip_requirements": {
+    "min_level": 1,
+    "classes": []
+  },
+
+  "upgrade_path": "iron_blade"
+}

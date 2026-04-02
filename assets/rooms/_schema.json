@@ -1,0 +1,88 @@
+{
+  "_comment": "ROOM SCHEMA — one file per room in assets/rooms/",
+
+  "id": "forest_clearing",
+  "name": "Forest Clearing",
+  "description": "A sun-dappled clearing surrounded by tall oaks. Wind rustles the canopy above.",
+  "material": "wood",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 10,
+  "ambient": "Leaves rustle softly in the breeze.",
+
+  "exits": {
+    "north": "cave_entrance",
+    "east":  "village_road",
+    "south": "dense_forest"
+  },
+
+  "line_of_sight": [
+    "cave_entrance"
+  ],
+
+  "objects": [
+    {
+      "id": "old_rug",
+      "name": "old rug",
+      "description": "A moth-eaten rug covering part of the floor.",
+      "material": "cloth",
+      "is_moveable": true,
+      "is_container": false,
+      "hidden": false,
+      "reveals": ["trap_door"],
+      "on_interact": {
+        "move":   "You drag the rug aside, revealing a trapdoor beneath.",
+        "look":   "A dusty, frayed rug. It looks like it's hiding something.",
+        "search": "The rug's edges are stiff with age."
+      },
+      "required_commands": {}
+    },
+    {
+      "id": "trap_door",
+      "name": "trapdoor",
+      "description": "A sturdy wooden trapdoor set flush into the earth.",
+      "material": "wood",
+      "hidden": true,
+      "is_locked": false,
+      "key_item_id": null,
+      "reveals": [],
+      "on_interact": {
+        "open":  "The trapdoor creaks open, revealing a dark shaft leading down.",
+        "look":  "Iron hinges, oak planks. Solid construction.",
+        "smash": "The trapdoor splinters under your blow. The shaft is open."
+      },
+      "required_commands": {
+        "smash": { "min_level": 2, "class": "fighter" }
+      }
+    },
+    {
+      "id": "old_chest",
+      "name": "old chest",
+      "description": "A battered wooden chest. The lock looks rusted through.",
+      "material": "wood",
+      "is_container": true,
+      "is_locked": true,
+      "key_item_id": "rusty_key",
+      "is_moveable": false,
+      "hidden": false,
+      "reveals": [],
+      "items_inside": ["leather_cap", "copper_coin"],
+      "on_interact": {
+        "open":   "The chest is locked.",
+        "unlock": "You insert the key — the lock gives way with a clunk.",
+        "smash":  "You smash the chest open. Splinters everywhere.",
+        "look":   "An old chest, bound with iron straps."
+      },
+      "required_commands": {
+        "smash": { "min_level": 1, "class": null }
+      }
+    }
+  ],
+
+  "items_on_ground": [],
+
+  "enemy_spawns": [
+    { "template_id": "goblin_scout", "count": 2 },
+    { "template_id": "goblin_guard", "count": 1 }
+  ]
+}

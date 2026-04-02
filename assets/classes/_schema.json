@@ -1,0 +1,41 @@
+{
+  "_comment": "CLASS SCHEMA — one file per class in assets/classes/",
+
+  "id": "fighter",
+  "name": "Fighter",
+  "description": "A frontline warrior who scales with weapons and armour. Simple, reliable, brutal.",
+
+  "base_stats": {
+    "hp":      40,
+    "attack":   6,
+    "defense":  2,
+    "ap":      24
+  },
+
+  "starting_items": ["bronze_blade"],
+
+  "passive_traits": [
+    {
+      "id": "iron_skin",
+      "name": "Iron Skin",
+      "description": "Reduce all incoming damage by 1 (after block).",
+      "stat_bonuses": { "defense": 1 }
+    }
+  ],
+
+  "level_unlocks": {
+    "1": ["attack", "block", "equip", "unequip", "flee"],
+    "2": ["smash", "heavy"],
+    "3": ["rally", "shield_bash"],
+    "5": ["whirlwind"]
+  },
+
+  "choice_unlocks": {
+    "4": [
+      ["focused_strike", "reckless_swing"]
+    ],
+    "6": [
+      ["war_cry", "iron_stance"]
+    ]
+  }
+}
