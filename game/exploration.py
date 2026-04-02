@@ -8,7 +8,7 @@ from game.commands import CommandContext
 
 if TYPE_CHECKING:
     from game.entities import Player, Enemy
-    from game.models import ParsedCommand
+    from game.models import ParsedCommand, EquippableItem
     from game.world import Room, WorldMap, WorldObject
     from game.parser import CommandParser
     from game.commands import CommandRegistry
@@ -32,12 +32,14 @@ class ExplorationResult:
 class ExplorationController:
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
                  player: "Player", world: "WorldMap",
-                 puzzle_flags: dict | None = None) -> None:
+                 puzzle_flags: dict | None = None,
+                 item_catalog: dict[str, "EquippableItem"] | None = None) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
         self.world = world
         self.puzzle_flags = puzzle_flags or {}  # global puzzle state
+        self.item_catalog = item_catalog or {}  # <--- FIX: added item catalog
 
     def player_input(self, raw: str) -> ExplorationResult:
         result = ExplorationResult()
@@ -132,7 +134,7 @@ class ExplorationController:
             result.add(f"Revealed: {new_obj.name}.")
 
     def resolve_take(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        """Fixed: take item from ground and add EquippableItem to inventory."""
+        """Take item from ground and add EquippableItem to inventory."""
         room = self.world.current_room()
         if room is None:
             result.add("No room loaded.")
@@ -153,16 +155,15 @@ class ExplorationController:
             result.add("No such item on the ground.")
             return
 
-        # Retrieve actual EquippableItem from player's catalog? Actually the item catalog is in game.py
-        # We'll pass a catalog reference – but for now, we need to get the item from the world's item registry.
-        # The ExplorationController doesn't have direct catalog access. We'll assume the room stores item objects.
-        # Fix: In WorldMap, we should store item objects, not strings. Let's patch:
-        # For this fix, we'll assume room.items_on_ground holds EquippableItem objects (changed in loader).
-        # But the current loader stores strings. We'll modify loader later.
-        # Temporary workaround: create a dummy item or skip.
-        result.add(f"Picked up {matching_id}.")
+        # Retrieve actual EquippableItem from catalog
+        item_obj = self.item_catalog.get(matching_id)
+        if not item_obj:
+            result.add(f"Unknown item: {matching_id}")
+            return
+
         room.items_on_ground.remove(matching_id)
-        # To fully fix, we need to instantiate EquippableItem from catalog. This will be done in game.py's integration.
+        self.player.pick_up(item_obj)  # <--- FIX: use pick_up method
+        result.add(f"Picked up {item_obj.name}.")
 
     def resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         room = self.world.current_room()
@@ -176,7 +177,7 @@ class ExplorationController:
         result.add(msg)
         if item is not None:
             # Store the actual EquippableItem object on the ground
-            room.items_on_ground.append(item)   # Now storing objects, not strings
+            room.items_on_ground.append(item.id)   # store ID, not object
 
     def resolve_equip(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         item_name = parsed.item_name or parsed.target_name

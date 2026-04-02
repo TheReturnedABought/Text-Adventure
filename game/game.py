@@ -70,9 +70,9 @@ class TextAdventureGame:
                 data[obj_id] = obj
             return data
 
-        self.item_catalog = _load_folder("items")
-        self.enemy_templates = _load_folder("enemies")
-        self.class_catalog = _load_folder("classes")
+        self.item_catalog = self.loader.load_all_items()
+        self.enemy_templates = self.loader.load_all_enemy_templates()
+        self.class_catalog = self.loader.load_all_classes()
         self._rooms_raw = _load_folder("rooms")
 
         # best-effort registry load; ignore while commands module is scaffolded
@@ -94,9 +94,14 @@ class TextAdventureGame:
         except Exception:
             self.parser = None
 
-        # world/controller classes are still scaffolded; retain None when unavailable
-        self.world = None
+        # Build full world map using enemy templates
+        if self.enemy_templates and self.parser:
+            self.world = self.loader.build_world_map(self.enemy_templates)
+        else:
+            self.world = None
+
         self.exploration = None
+        self.combat = None
 
     def select_class(self) -> None:
         classes = list(self.class_catalog.values())
@@ -131,16 +136,35 @@ class TextAdventureGame:
         defense = int(base.get("defense", 1))
         ap = int(base.get("ap", 20))
 
-        # Player methods are scaffolded, but raw fields are usable.
+        from game.models import CharacterClass
+
+        # Build proper CharacterClass object
+        char_class = CharacterClass(
+            id=class_data.get("id", class_id),
+            name=class_data.get("name", class_id),
+            description=class_data.get("description", ""),
+            base_stats=dict(base),
+            starting_items=[],
+            level_unlocks={int(k): list(v) for k, v in (class_data.get("level_unlocks", {}) or {}).items()},
+            choice_unlocks={int(k): [list(g) for g in v] for k, v in (class_data.get("choice_unlocks", {}) or {}).items()},
+        )
+
         player = Player(name="Hero", max_hp=hp, attack=atk, defense=defense, total_ap=ap)
         player.current_hp = hp
         player.current_ap = ap
+        player.char_class = char_class
         player.unlocked_commands = set(class_data.get("level_unlocks", {}).get("1", []))
         setattr(player, "char_class_name", class_data.get("name", class_id))
         setattr(player, "max_mana", int(base.get("mana", 0)))
         setattr(player, "mana", int(base.get("mana", 0)))
         setattr(player, "gold", 0)
         setattr(player, "relics", [])
+
+        # Add starting items
+        for item_id in class_data.get("starting_items", []):
+            if item_id in self.item_catalog:
+                player.inventory.append(self.item_catalog[item_id])
+
         return player
 
     def run(self) -> None:
@@ -150,7 +174,22 @@ class TextAdventureGame:
     def _run_loop(self) -> None:
         self.initialise()
         self.select_class()
-        self._print_room()
+
+        # Set up exploration controller if world and parser are ready
+        if self.world and self.parser:
+            self.exploration = ExplorationController(
+                self.parser, self.registry, self.player, self.world,
+                puzzle_flags={}, item_catalog=self.item_catalog
+            )
+            # Set initial room
+            start_room = self.world.current_room()
+            if start_room:
+                start_room.visited = True
+                window.set_explore(self.player, start_room)
+                print(start_room.get_description(verbose=True))
+        else:
+            # Fallback to minimal world
+            self._print_room()
 
         while self.state not in (GameState.GAME_OVER, GameState.WIN):
             try:
@@ -159,26 +198,41 @@ class TextAdventureGame:
                 break
 
             if self.state == GameState.EXPLORING:
-                self._handle_exploration(raw)
+                if not self.exploration:
+                    self._handle_exploration_fallback(raw)
+                else:
+                    result = self.exploration.player_input(raw)
+                    for line in result.lines:
+                        print(line)
+                    if result.combat_triggered:
+                        self._enter_combat(result.aggressors)
             elif self.state == GameState.COMBAT:
-                self._handle_combat(raw)
+                if not self.combat:
+                    # Fallback combat handling
+                    if raw.strip().lower() in {"flee", "run"}:
+                        self._on_combat_fled()
+                    else:
+                        print("Combat scaffolding is not yet implemented; type 'flee' to leave combat.")
+                else:
+                    result = self.combat.player_input(raw)
+                    for line in result.lines:
+                        print(line)
+                    if result.outcome == CombatOutcome.PLAYER_WON:
+                        self._on_combat_won()
+                    elif result.outcome == CombatOutcome.PLAYER_FLED:
+                        self._on_combat_fled()
+                    elif result.outcome == CombatOutcome.PLAYER_DEFEATED:
+                        self.state = GameState.GAME_OVER
             elif self.state == GameState.LEVEL_UP:
                 self._handle_level_up_choice(raw)
 
         self._print_end_screen()
 
-    def _prompt(self) -> str:
-        if self.state == GameState.COMBAT:
-            return "combat> "
-        if self.state == GameState.LEVEL_UP:
-            return "level-up> "
-        return "explore> "
-
-    def _handle_exploration(self, raw: str) -> None:
+    def _handle_exploration_fallback(self, raw: str) -> None:
+        """Minimal fallback when exploration controller isn't available."""
         cmd = raw.strip().lower()
         if not cmd:
             return
-
         if cmd in {"quit", "exit"}:
             self.state = GameState.GAME_OVER
             return
@@ -194,7 +248,6 @@ class TextAdventureGame:
         if cmd in {"win", "victory"}:
             self.state = GameState.WIN
             return
-
         if cmd.startswith("go "):
             direction = cmd[3:].strip()
             room = self._rooms_raw.get(self._room_id or "", {})
@@ -207,14 +260,47 @@ class TextAdventureGame:
             self._room_id = next_room
             self._print_room()
             return
-
         print("Unknown command. Type 'help'.")
 
-    def _handle_combat(self, raw: str) -> None:
-        if raw.strip().lower() in {"flee", "run"}:
-            self._on_combat_fled()
+    def _enter_combat(self, aggressors: list[Enemy]) -> None:
+        if not self.world or not self.parser:
+            print("Combat system not available.")
             return
-        print("Combat scaffolding is not yet implemented; type 'flee' to leave combat.")
+        # Keep enemies in their current rooms
+        for enemy in aggressors:
+            room_id = getattr(enemy, "combat_room_id", self.world.current_room_id)
+            room = self.world.get_room(room_id)
+            if room and enemy not in room.enemies:
+                room.add_enemy(enemy)
+
+        self.combat = CombatController(
+            self.parser, self.registry, self.player, aggressors,
+            self.world, self.world.current_room_id, self.exploration.puzzle_flags if self.exploration else {}
+        )
+        print(self.combat.start_encounter())
+        self.state = GameState.COMBAT
+
+    def _on_combat_won(self) -> None:
+        print("You won the encounter.")
+        self.combat = None
+        self.state = GameState.EXPLORING
+        # Refresh world state
+        if self.world and self.exploration:
+            self.exploration.world = self.world
+
+    def _on_combat_fled(self) -> None:
+        if self._prev_room_id:
+            self._room_id, self._prev_room_id = self._prev_room_id, self._room_id
+        print("You fled combat.")
+        self.combat = None
+        self.state = GameState.EXPLORING
+
+    def _prompt(self) -> str:
+        if self.state == GameState.COMBAT:
+            return "combat> "
+        if self.state == GameState.LEVEL_UP:
+            return "level-up> "
+        return "explore> "
 
     def _handle_level_up_choice(self, raw: str) -> None:
         if not self._pending_level_up_choices:
@@ -233,31 +319,6 @@ class TextAdventureGame:
             print("Choose by number.")
         if not self._pending_level_up_choices:
             self.state = GameState.EXPLORING
-
-    def _enter_combat(self, aggressors: list[Enemy]) -> None:
-        self.state = GameState.COMBAT
-        names = ", ".join(getattr(a, "name", "enemy") for a in aggressors) or "enemies"
-        print(f"Combat started against {names}.")
-
-    def _exit_combat(self) -> None:
-        self.combat = None
-        self.state = GameState.EXPLORING
-
-    def _on_combat_won(self) -> None:
-        print("You won the encounter.")
-        self._exit_combat()
-
-    def _on_combat_fled(self) -> None:
-        if self._prev_room_id:
-            self._room_id, self._prev_room_id = self._prev_room_id, self._room_id
-        print("You fled combat.")
-        self._exit_combat()
-
-    def _on_level_up(self, new_level: int) -> None:
-        class_id = (self.class_catalog.get(getattr(self.player, "char_class_name", ""), {})
-                    .get("id", ""))
-        _ = class_id, new_level
-        self.state = GameState.LEVEL_UP if self._pending_level_up_choices else self.state
 
     def _print_room(self) -> None:
         room = self._rooms_raw.get(self._room_id or "")
@@ -293,8 +354,9 @@ class TextAdventureGame:
             "player": self._serialise_player(),
             "room_id": self._room_id,
             "state": self.state.name,
-            "moves": self.world.moves
         }
+        if self.world:
+            payload["world"] = self.world.snapshot()
         (save_dir / f"slot_{slot}.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         print(f"Saved to slot {slot}.")
 
@@ -304,7 +366,11 @@ class TextAdventureGame:
         self.player = self._deserialise_player(data.get("player", {}))
         self._room_id = data.get("room_id", self._room_id)
         self.state = GameState[data.get("state", "EXPLORING")]
-        self.world.moves = data.get("moves", self.world.moves)
+        if self.world and "world" in data:
+            self.world.restore_snapshot(data["world"])
+        if self.exploration:
+            self.exploration.player = self.player
+            self.exploration.world = self.world
 
     def _serialise_player(self) -> dict:
         if self.player is None:
@@ -321,6 +387,8 @@ class TextAdventureGame:
             "xp": self.player.xp,
             "unlocked_commands": sorted(self.player.unlocked_commands),
             "char_class_name": getattr(self.player, "char_class_name", "Adventurer"),
+            "inventory": [item.id for item in self.player.inventory],
+            "equipped": {slot: item.id for slot, item in self.player.equipped.items()},
         }
 
     def _deserialise_player(self, data: dict) -> Player:
@@ -337,4 +405,15 @@ class TextAdventureGame:
         p.xp = int(data.get("xp", 0))
         p.unlocked_commands = set(data.get("unlocked_commands", []))
         setattr(p, "char_class_name", data.get("char_class_name", "Adventurer"))
+
+        # Restore inventory
+        for item_id in data.get("inventory", []):
+            if item_id in self.item_catalog:
+                p.inventory.append(self.item_catalog[item_id])
+
+        # Restore equipped
+        for slot, item_id in data.get("equipped", {}).items():
+            if item_id in self.item_catalog:
+                p.equipped[slot] = self.item_catalog[item_id]
+
         return p

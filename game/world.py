@@ -200,6 +200,7 @@ class Room:
     ambient: str = ""
     is_start: bool = False
     visited: bool = False
+    enemy_spawns: list[dict] = field(default_factory=list)  # <--- FIX: added enemy_spawns field
 
     def get_description(self, verbose: bool = False) -> str:
         lines = [self.name]

@@ -177,7 +177,7 @@ class Player(Entity):
         return 0
 
     # ── Inventory ─────────────────────────────────────────────────────────
-    def pick_up(self, item: EquippableItem) -> str:
+    def pick_up(self, item: EquippableItem) -> str:  # <--- FIX: added pick_up method
         self.inventory.append(item)
         return f"Picked up {item.name}."
 
@@ -217,6 +217,7 @@ class Player(Entity):
         self.total_ap += 1
         self.current_ap = self.total_ap
         unlocked = []
+        # <--- FIX: use self.char_class instead of self.char_class_name
         if self.char_class:
             unlocked = self.char_class.level_unlocks.get(self.level, [])
             for cmd in unlocked:

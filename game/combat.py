@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
 from game.dice import DiceExpression
-from game.effects import EffectTrigger
+from game.effects import EffectTrigger, EffectCategory  # <--- FIX: added EffectCategory
 from game.models import ParsedCommand, ArticleType
 from game.world import DamageType, coerce_damage_type, resolve_material_interaction
 
@@ -212,11 +212,15 @@ class CombatController:
         if cmd and cmd.tags:
             effect_id = self._get_effect_from_damage_type(damage_type)
             if effect_id:
-                from game.effects import StatusEffect  # local import to avoid circular
-                # Create effect stub (concrete effects would be registered)
-                effect = StatusEffect(id=effect_id, name=effect_id.capitalize(),
-                                      description="", trigger=EffectTrigger.ON_TURN_END,
-                                      category=None, duration=2)
+                from game.effects import StatusEffect, EffectCategory
+                effect = StatusEffect(
+                    id=effect_id,
+                    name=effect_id.capitalize(),
+                    description="",
+                    trigger=EffectTrigger.ON_TURN_END,
+                    category=EffectCategory.DEBUFF,  # <--- FIX: added proper category
+                    duration=2
+                )
                 result.add(target.apply_effect(effect))
 
         # Environmental reaction (e.g., lightning in metal room)
@@ -268,7 +272,6 @@ class CombatController:
         room = self.world.get_room(self.player_room_id)
         if not room:
             return lines
-        # Use the room's apply_elemental_effect method
         lines.extend(room.apply_elemental_effect(damage_type.value, player))
         return lines
 
@@ -353,10 +356,15 @@ class CombatController:
             result.add(f"{enemy.name} {intent.description} for {dealt} damage.")
             # Apply effect on hit
             if intent.effect_on_hit:
-                from game.effects import StatusEffect
-                effect = StatusEffect(id=intent.effect_on_hit, name=intent.effect_on_hit.capitalize(),
-                                      description="", trigger=EffectTrigger.ON_TURN_END,
-                                      category=None, duration=intent.effect_duration)
+                from game.effects import StatusEffect, EffectCategory
+                effect = StatusEffect(
+                    id=intent.effect_on_hit,
+                    name=intent.effect_on_hit.capitalize(),
+                    description="",
+                    trigger=EffectTrigger.ON_TURN_END,
+                    category=EffectCategory.DEBUFF,  # <--- FIX: added proper category
+                    duration=intent.effect_duration
+                )
                 result.add(self.player.apply_effect(effect))
         elif kind == "BLOCK":
             dice = DiceExpression.parse(intent.dice_expression) if intent.dice_expression else DiceExpression.flat(enemy.defense)
@@ -503,7 +511,8 @@ class CombatController:
         enemy_room = getattr(enemy, "combat_room_id", self.player_room_id)
         if enemy_room == self.player_room_id:
             return True
-        tags = [str(t).lower() for t in getattr(intent, "tags", [])]
+        # Use intent.tags if available, fallback to empty list
+        tags = getattr(intent, "tags", [])
         if "ranged" in tags:
             return bool(self.player_room_id in self._zone_from_anchor(enemy_room))
         return False

@@ -145,6 +145,7 @@ class EnemyIntent:
                           ('hp_below_half', 'player_has_buff:shield', …)
         effect_on_hit   – status effect ID applied to target on success
         effect_duration – turns the effect lasts
+        tags            – list of tags for ranged/melee detection, etc.
     """
 
     id: str
@@ -156,6 +157,7 @@ class EnemyIntent:
     condition: str | None = None
     effect_on_hit: str | None = None
     effect_duration: int = 1
+    tags: list[str] = field(default_factory=list)  # <--- FIX: added tags field
 
 
 # ══════════════════════════════════════════════════════════════════════════════
