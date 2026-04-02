@@ -1,52 +1,36 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
+"""Status effect framework.
+
+Concrete effect subclasses can override hook methods; the registry/manager keep
+creation and lifecycle behavior centralized and predictable.
+"""
 if TYPE_CHECKING:
     from game.entities import Entity
 
 
-# ── Trigger / Target enums ────────────────────────────────────────────────────
-
 class EffectTrigger(Enum):
-    ON_TURN_START = auto()       # fires at start of the affected entity's turn
-    ON_TURN_END = auto()         # fires at end of the affected entity's turn
-    ON_DAMAGE_RECEIVED = auto()  # fires whenever the entity takes damage
-    ON_DAMAGE_DEALT = auto()     # fires whenever the entity deals damage
-    ON_ACTION = auto()           # fires whenever the entity takes any action
-    ON_APPLY = auto()            # fires only when the effect is first applied
-    PASSIVE = auto()             # permanent stat modification, no per-turn tick
+    ON_TURN_START = auto()
+    ON_TURN_END = auto()
+    ON_DAMAGE_RECEIVED = auto()
+    ON_DAMAGE_DEALT = auto()
+    ON_ACTION = auto()
+    ON_APPLY = auto()
+    PASSIVE = auto()
 
 
 class EffectCategory(Enum):
-    BUFF = auto()       # positive effect (block, strength, regen)
-    DEBUFF = auto()     # negative effect (poison, weak, vulnerable)
-    NEUTRAL = auto()    # informational or conditional
+    BUFF = auto()
+    DEBUFF = auto()
+    NEUTRAL = auto()
 
-
-# ── Core status effect ────────────────────────────────────────────────────────
 
 @dataclass
 class StatusEffect:
-    """A stackable or non-stackable effect applied to an Entity.
-
-    Subclass this to implement concrete effects (Poison, Block, Shocked, etc.).
-    All mutating logic goes in the hook methods below.
-
-    Attributes:
-        id            – unique string id used by the registry (e.g. 'poison')
-        name          – display name shown to the player
-        description   – short flavour / rules text
-        trigger       – when the effect's tick logic fires
-        category      – buff / debuff / neutral for UI colouring
-        duration      – turns remaining; -1 means permanent until removed
-        stacks        – current stack count
-        max_stacks    – cap on stacks; 1 = non-stackable
-        source_ability – which ability or item applied this (for log messages)
-    """
-
     id: str
     name: str
     description: str
@@ -57,111 +41,124 @@ class StatusEffect:
     max_stacks: int = 1
     source_ability: str | None = None
 
-    # ── Hooks (override in subclasses) ────────────────────────────────────
-
     def on_apply(self, target: "Entity") -> str:
-        """Called once when first applied. Return narration string."""
-        ...
+        return f"{target.name} gains {self.name}."
 
     def on_tick(self, target: "Entity") -> str:
-        """Called each trigger event. Mutate target stats here. Return narration."""
-        ...
+        return ""
 
     def on_expire(self, target: "Entity") -> str:
-        """Called when duration reaches 0. Reverse any permanent changes. Return narration."""
-        ...
+        return f"{self.name} fades from {target.name}."
 
     def on_stack_added(self, target: "Entity", added: int) -> str:
-        """Called when stacks are added to an existing application. Return narration."""
-        ...
-
-    # ── Stack helpers ─────────────────────────────────────────────────────
+        return f"{self.name} on {target.name} increases by {added}."
 
     def add_stacks(self, amount: int, target: "Entity") -> str:
-        """Clamp stacks to max_stacks, call on_stack_added, return narration."""
-        ...
+        before = self.stacks
+        self.stacks = min(self.max_stacks, self.stacks + max(0, amount))
+        added = self.stacks - before
+        return self.on_stack_added(target, added) if added > 0 else ""
 
     def is_expired(self) -> bool:
-        """Return True if duration has reached 0 (ignores -1 permanent)."""
-        ...
+        return self.duration == 0
 
     def tick_duration(self) -> None:
-        """Decrement duration by 1 (no-op if duration is -1)."""
-        ...
+        if self.duration > 0:
+            self.duration -= 1
 
-
-# ── Effect registry ───────────────────────────────────────────────────────────
 
 class EffectRegistry:
-    """Central registry that maps effect IDs to their classes.
-
-    Register all effect subclasses here at startup so the rest of the
-    engine can instantiate effects by string ID (e.g. from JSON data).
-    """
-
     def __init__(self) -> None:
         self._classes: dict[str, type[StatusEffect]] = {}
 
     def register(self, effect_class: type[StatusEffect]) -> None:
-        """Register an effect class. Keyed by its `id` class attribute."""
-        ...
+        effect_id = getattr(effect_class, "id", None)
+        if not effect_id:
+            raise ValueError("Effect class must define class-level 'id'.")
+        self._classes[str(effect_id)] = effect_class
 
     def create(self, effect_id: str, stacks: int = 1, duration: int = 1,
                source_ability: str | None = None) -> StatusEffect:
-        """Instantiate a registered effect by ID. Raises KeyError if unknown."""
-        ...
+        if effect_id not in self._classes:
+            raise KeyError(f"Unknown effect: {effect_id}")
+        cls = self._classes[effect_id]
+        return cls(stacks=stacks, duration=duration, source_ability=source_ability)
 
     def is_known(self, effect_id: str) -> bool:
-        ...
+        return effect_id in self._classes
 
     def all_ids(self) -> list[str]:
-        ...
+        return sorted(self._classes.keys())
 
-
-# ── Effect manager (per entity) ───────────────────────────────────────────────
 
 class EffectManager:
-    """Manages the live status effects on a single Entity.
-
-    Attach one of these to every Entity instance.
-    """
-
     def __init__(self) -> None:
-        self._active: dict[str, StatusEffect] = {}  # effect_id -> instance
+        self._active: dict[str, StatusEffect] = {}
 
     def apply(self, effect: StatusEffect, target: "Entity") -> str:
-        """Apply an effect. Stack if already present, otherwise add fresh. Return narration."""
-        ...
+        existing = self._active.get(effect.id)
+        if existing is not None:
+            line = existing.add_stacks(effect.stacks, target)
+            if effect.duration > existing.duration:
+                existing.duration = effect.duration
+            return line or f"{target.name} is still affected by {existing.name}."
+        self._active[effect.id] = effect
+        return effect.on_apply(target)
 
     def remove(self, effect_id: str, target: "Entity") -> str:
-        """Forcibly remove an effect by ID. Calls on_expire. Return narration."""
-        ...
+        effect = self._active.pop(effect_id, None)
+        if effect is None:
+            return ""
+        return effect.on_expire(target)
 
     def has(self, effect_id: str) -> bool:
-        ...
+        return effect_id in self._active
 
     def get(self, effect_id: str) -> StatusEffect | None:
-        ...
+        return self._active.get(effect_id)
 
     def get_all(self) -> list[StatusEffect]:
-        ...
+        return list(self._active.values())
 
     def get_by_category(self, category: EffectCategory) -> list[StatusEffect]:
-        ...
+        return [e for e in self._active.values() if e.category == category]
 
     def tick_all(self, trigger: EffectTrigger, target: "Entity") -> list[str]:
-        """Fire all effects matching trigger, decrement durations, remove expired.
-        Returns list of narration strings."""
-        ...
+        lines: list[str] = []
+        to_remove: list[str] = []
+        for effect in list(self._active.values()):
+            if effect.trigger == trigger:
+                text = effect.on_tick(target)
+                if text:
+                    lines.append(text)
+            if trigger in {EffectTrigger.ON_TURN_START, EffectTrigger.ON_TURN_END}:
+                effect.tick_duration()
+            if effect.is_expired():
+                expire = effect.on_expire(target)
+                if expire:
+                    lines.append(expire)
+                to_remove.append(effect.id)
+        for eid in to_remove:
+            self._active.pop(eid, None)
+        return lines
 
     def clear_all(self, target: "Entity") -> None:
-        """Remove every effect without calling on_expire (e.g. combat end)."""
-        ...
+        self._active.clear()
 
     def stat_bonus(self, stat_name: str) -> int:
-        """Sum passive stat bonuses provided by all active PASSIVE effects."""
-        ...
+        total = 0
+        for effect in self._active.values():
+            if effect.trigger != EffectTrigger.PASSIVE:
+                continue
+            bonuses = getattr(effect, "stat_bonuses", {})
+            total += int(bonuses.get(stat_name, 0))
+        return total
 
     def summary(self) -> str:
-        """One-line summary of active effects for combat display."""
-        ...
+        if not self._active:
+            return "none"
+        parts = []
+        for e in self._active.values():
+            dur = "∞" if e.duration < 0 else str(e.duration)
+            parts.append(f"{e.name} x{e.stacks}({dur})")
+        return ", ".join(parts)

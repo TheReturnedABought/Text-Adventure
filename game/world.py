@@ -1,16 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from game.entities import Enemy, Player
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Material system
-# ══════════════════════════════════════════════════════════════════════════════
 
 class Material(Enum):
     WOOD = "wood"
@@ -25,7 +21,6 @@ class Material(Enum):
 
 
 class DamageType(Enum):
-    """Canonical damage taxonomy used by combat + world interaction rules."""
     BLUDGEONING = "bludgeoning"
     PIERCING = "piercing"
     SLASHING = "slashing"
@@ -45,7 +40,6 @@ class DamageType(Enum):
 
 @dataclass(frozen=True)
 class MaterialInteraction:
-    """Result of applying one damage type against one material."""
     summary: str
     damage_multiplier: float = 1.0
     applies_status: str | None = None
@@ -54,20 +48,6 @@ class MaterialInteraction:
 
 @dataclass
 class MaterialProperties:
-    """Mechanical properties of a material relevant to world interactions.
-
-    These are read by room/object interaction logic and combat effects.
-
-    Attributes:
-        name                – display name
-        burns               – catches fire; fire in a wood room deals AoE damage
-        conducts_electricity – lightning hits spread to nearby entities in this material room
-        floats              – object floats on water rather than sinking
-        blocks_sight        – opaque to line-of-sight (e.g. stone walls)
-        breaks_on_smash     – can be destroyed by smash / heavy commands
-        conducts_cold       – cold effects spread
-    """
-
     name: str
     burns: bool = False
     conducts_electricity: bool = False
@@ -78,7 +58,6 @@ class MaterialProperties:
 
     @classmethod
     def for_material(cls, material: Material) -> "MaterialProperties":
-        """Return the standard property set for a given material enum value."""
         lookup: dict[Material, MaterialProperties] = {
             Material.WOOD: cls("wood", burns=True, breaks_on_smash=True, blocks_sight=True),
             Material.STONE: cls("stone", blocks_sight=True),
@@ -104,96 +83,21 @@ MATERIAL_INTERACTIONS: dict[DamageType, dict[Material, MaterialInteraction]] = {
         Material.CLOTH: MaterialInteraction("ignites quickly", damage_multiplier=1.3, applies_status="burning"),
         Material.EARTH: MaterialInteraction("scorches", damage_multiplier=0.9),
     },
-    DamageType.LIGHTNING: {
-        Material.METAL: MaterialInteraction("conducts and arcs", damage_multiplier=1.35, applies_status="shocked", spreads=True),
-        Material.WATER: MaterialInteraction("conducts through liquid", damage_multiplier=1.35, applies_status="shocked", spreads=True),
-        Material.FLESH: MaterialInteraction("shocks", damage_multiplier=1.2, applies_status="shocked"),
-        Material.WOOD: MaterialInteraction("chars", damage_multiplier=0.9),
-        Material.STONE: MaterialInteraction("dissipates", damage_multiplier=0.8),
-        Material.GLASS: MaterialInteraction("fizzles", damage_multiplier=0.95),
-        Material.ICE: MaterialInteraction("discharges weakly", damage_multiplier=0.9),
-        Material.CLOTH: MaterialInteraction("sparks", damage_multiplier=0.95),
-        Material.EARTH: MaterialInteraction("grounds out", damage_multiplier=0.75),
-    },
-    DamageType.COLD: {
-        Material.WOOD: MaterialInteraction("becomes brittle", damage_multiplier=1.05),
-        Material.METAL: MaterialInteraction("becomes brittle", damage_multiplier=1.1),
-        Material.WATER: MaterialInteraction("freezes", damage_multiplier=1.3, applies_status="frozen"),
-        Material.GLASS: MaterialInteraction("becomes brittle", damage_multiplier=1.1),
-        Material.ICE: MaterialInteraction("reinforces", damage_multiplier=0.6),
-        Material.FLESH: MaterialInteraction("slows", damage_multiplier=1.15, applies_status="chilled"),
-        Material.CLOTH: MaterialInteraction("stiffens", damage_multiplier=1.0),
-        Material.EARTH: MaterialInteraction("compacts", damage_multiplier=0.95),
-        Material.STONE: MaterialInteraction("holds temperature", damage_multiplier=0.9),
-    },
-    DamageType.FLOOD: {
-        Material.WOOD: MaterialInteraction("floats", damage_multiplier=0.75),
-        Material.METAL: MaterialInteraction("sinks", damage_multiplier=1.0),
-        Material.STONE: MaterialInteraction("sinks", damage_multiplier=1.0),
-        Material.WATER: MaterialInteraction("blends into surrounding water", damage_multiplier=0.5),
-        Material.GLASS: MaterialInteraction("sinks", damage_multiplier=1.0),
-        Material.ICE: MaterialInteraction("floats", damage_multiplier=0.8),
-        Material.FLESH: MaterialInteraction("is pushed by current", damage_multiplier=1.05, applies_status="soaked"),
-        Material.CLOTH: MaterialInteraction("soaks through", damage_multiplier=1.1, applies_status="soaked"),
-        Material.EARTH: MaterialInteraction("saturates", damage_multiplier=1.0),
-    },
-    DamageType.ACID: {
-        Material.WOOD: MaterialInteraction("corrodes", damage_multiplier=1.15),
-        Material.METAL: MaterialInteraction("corrodes rapidly", damage_multiplier=1.35, applies_status="corroded"),
-        Material.STONE: MaterialInteraction("erodes", damage_multiplier=1.2),
-        Material.WATER: MaterialInteraction("dilutes", damage_multiplier=0.75),
-        Material.GLASS: MaterialInteraction("etches", damage_multiplier=1.1),
-        Material.ICE: MaterialInteraction("melts", damage_multiplier=1.2),
-        Material.FLESH: MaterialInteraction("dissolves tissue", damage_multiplier=1.4, applies_status="corroded"),
-        Material.CLOTH: MaterialInteraction("dissolves fibers", damage_multiplier=1.25),
-        Material.EARTH: MaterialInteraction("neutralizes", damage_multiplier=0.85),
-    },
 }
 
 
 def resolve_material_interaction(damage_type: DamageType, material: Material) -> MaterialInteraction:
-    """Resolve matrix entry with sane defaults for unsupported combinations."""
     table = MATERIAL_INTERACTIONS.get(damage_type, {})
     return table.get(material, MaterialInteraction("has little effect", damage_multiplier=1.0))
 
 
 def coerce_damage_type(raw: str) -> DamageType | None:
-    """Convert free-text damage type names into DamageType enum members."""
     text = str(raw or "").strip().lower()
-    if not text:
-        return None
-    for dt in DamageType:
-        if dt.value == text:
-            return dt
-    return None
+    return next((dt for dt in DamageType if dt.value == text), None)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# World objects
-# ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class WorldObject:
-    """An interactive environmental object inside a room.
-
-    Attributes:
-        id                – unique ID within its room (e.g. 'old_rug')
-        name              – player-facing name ('old rug')
-        description       – examine text
-        material          – physical material
-        is_container      – can hold other objects
-        is_moveable       – can be moved with 'move' / 'push' etc.
-        is_locked         – requires a key or command unlock
-        key_item_id       – item ID that unlocks this object (or None)
-        hidden            – not listed in room description until revealed
-        reveals           – object IDs added to the room when this is moved/opened
-        on_interact       – {command_name: narration_string} for simple text responses
-        required_commands – {command_name: {'min_level': int, 'class': str}}
-                            restricts which commands can interact with this object
-        contents          – child objects if is_container
-        items_inside      – item IDs stored inside (if container)
-    """
-
     id: str
     name: str
     description: str
@@ -209,79 +113,79 @@ class WorldObject:
     contents: list["WorldObject"] = field(default_factory=list)
     items_inside: list[str] = field(default_factory=list)
 
-    # ── Interaction ───────────────────────────────────────────────────────
-
     def can_interact_with(self, command_name: str, player: "Player") -> tuple[bool, str]:
-        """Check if `player` may use `command_name` on this object.
-
-        Returns (allowed, reason_if_denied).
-        Checks hidden status, lock state, and required_commands level/class gates.
-        """
-        ...
+        if self.hidden:
+            return False, "You don't see that here."
+        if self.is_locked and command_name not in {"unlock", "open"}:
+            return False, f"The {self.name} is locked."
+        req = self.required_commands.get(command_name, {})
+        min_level = int(req.get("min_level", 0))
+        if getattr(player, "level", 1) < min_level:
+            return False, f"You need level {min_level} to do that."
+        cls = req.get("class")
+        class_id = getattr(getattr(player, "char_class", None), "id", None)
+        if cls and class_id != cls:
+            return False, "Your class cannot do that."
+        return True, ""
 
     def interact(self, command_name: str, player: "Player",
                  room: "Room") -> tuple[str, list["WorldObject"]]:
-        """Execute an interaction.
-
-        Returns (narration_string, list_of_newly_revealed_objects).
-        Caller is responsible for adding revealed objects to the room.
-        """
-        ...
-
-    # ── Container ops ─────────────────────────────────────────────────────
+        if command_name == "open" and self.is_locked:
+            return f"The {self.name} is locked.", []
+        if command_name == "unlock":
+            if not self.is_locked:
+                return f"The {self.name} is already unlocked.", []
+            if self.key_item_id and not player.find_in_inventory(self.key_item_id):
+                return f"You need {self.key_item_id} to unlock the {self.name}.", []
+            self.is_locked = False
+            return f"You unlock the {self.name}.", []
+        narration = self.on_interact.get(command_name, f"You {command_name} the {self.name}.")
+        revealed: list[WorldObject] = []
+        for obj_id in self.reveals:
+            if obj_id in room.objects:
+                room.objects[obj_id].hidden = False
+                revealed.append(room.objects[obj_id])
+        return narration, revealed
 
     def put_object(self, obj: "WorldObject") -> str:
-        """Place another WorldObject inside this container. Returns narration."""
-        ...
+        if not self.is_container:
+            return f"{self.name} is not a container."
+        self.contents.append(obj)
+        return f"Placed {obj.name} in {self.name}."
 
     def take_object(self, obj_id: str) -> tuple["WorldObject | None", str]:
-        """Remove a child WorldObject by ID. Returns (object, narration)."""
-        ...
+        for i, obj in enumerate(self.contents):
+            if obj.id == obj_id:
+                return self.contents.pop(i), f"Took {obj.name} from {self.name}."
+        return None, f"{obj_id} is not inside {self.name}."
 
     def put_item(self, item_id: str) -> str:
-        """Store an item ID in this container."""
-        ...
+        if not self.is_container:
+            return f"{self.name} is not a container."
+        self.items_inside.append(item_id)
+        return f"Placed {item_id} in {self.name}."
 
     def take_item(self, item_id: str) -> tuple[str | None, str]:
-        """Remove an item ID from this container. Returns (item_id, narration)."""
-        ...
+        if item_id in self.items_inside:
+            self.items_inside.remove(item_id)
+            return item_id, f"Took {item_id} from {self.name}."
+        return None, f"{item_id} is not in {self.name}."
 
     def list_contents(self) -> str:
-        """Describe contents for examine/look inside."""
-        ...
-
-    # ── Display ───────────────────────────────────────────────────────────
+        parts = [obj.name for obj in self.contents] + self.items_inside
+        return "Empty." if not parts else "Contains: " + ", ".join(parts)
 
     def examine(self) -> str:
-        """Full examine text including lock/container state."""
-        ...
+        bits = [self.description]
+        if self.is_locked:
+            bits.append("It is locked.")
+        if self.is_container:
+            bits.append(self.list_contents())
+        return " ".join(bits)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Room
-# ══════════════════════════════════════════════════════════════════════════════
 
 @dataclass
 class Room:
-    """A single location node in the world graph.
-
-    Attributes:
-        id              – unique room ID (matches JSON file 'id' field)
-        name            – display name
-        description     – base description (shown on first entry or 'look')
-        material        – room's primary material (affects elemental interactions)
-        is_outdoor      – outdoor rooms ignore material conduction rules
-        light_level     – 0 = pitch dark, 10 = full daylight; affects visibility
-        exits           – {direction: room_id} map
-        line_of_sight   – room_ids visible from this room before entering
-        enemies         – live Enemy instances currently in this room
-        objects         – {object_id: WorldObject} in this room
-        items_on_ground – item IDs lying on the floor (can be picked up)
-        ambient         – ambient description appended when standing here
-        is_start        – marks the player's starting room
-        visited         – set True after first entry (toggles short description)
-    """
-
     id: str
     name: str
     description: str
@@ -297,194 +201,262 @@ class Room:
     is_start: bool = False
     visited: bool = False
 
-    # ── Description ───────────────────────────────────────────────────────
-
     def get_description(self, verbose: bool = False) -> str:
-        """Return room description.
-
-        verbose=True → full text + object list + visible exits.
-        verbose=False (revisit) → short name + exits + living enemies only.
-        """
-        ...
+        lines = [self.name]
+        if verbose or not self.visited:
+            lines.append(self.description)
+            if self.ambient:
+                lines.append(self.ambient)
+            obj = self.objects_summary()
+            if obj:
+                lines.append(obj)
+        living = self.living_enemies()
+        if living:
+            lines.append("Enemies: " + ", ".join(e.name for e in living))
+        lines.append(self.exits_summary())
+        return "\n".join([l for l in lines if l])
 
     def exits_summary(self) -> str:
-        """'Exits: north, east' style string."""
-        ...
+        return "Exits: " + ", ".join(sorted(self.exits.keys())) if self.exits else "No obvious exits."
 
     def objects_summary(self) -> str:
-        """List visible (non-hidden) objects in the room."""
-        ...
-
-    # ── Enemy management ──────────────────────────────────────────────────
+        visible = [o.name for o in self.objects.values() if not o.hidden]
+        return "Objects: " + ", ".join(visible) if visible else ""
 
     def add_enemy(self, enemy: "Enemy") -> None:
-        ...
+        setattr(enemy, "current_zone", self.id)
+        setattr(enemy, "combat_room_id", self.id)
+        self.enemies.append(enemy)
 
     def remove_enemy(self, enemy: "Enemy") -> None:
-        ...
+        self.enemies = [e for e in self.enemies if e is not enemy]
 
     def living_enemies(self) -> list["Enemy"]:
-        ...
+        return [e for e in self.enemies if e.is_alive]
 
     def get_enemy_by_name(self, name: str) -> list["Enemy"]:
-        """Return all living enemies whose names contain `name` (case-insensitive)."""
-        ...
+        needle = name.lower()
+        return [e for e in self.living_enemies() if needle in e.name.lower()]
 
     def get_enemy_by_index(self, index: int) -> "Enemy | None":
-        """1-based index into living_enemies()."""
-        ...
-
-    # ── Object management ─────────────────────────────────────────────────
+        living = self.living_enemies()
+        return living[index - 1] if 1 <= index <= len(living) else None
 
     def add_object(self, obj: WorldObject) -> None:
-        ...
+        self.objects[obj.id] = obj
 
     def remove_object(self, obj_id: str) -> WorldObject | None:
-        ...
+        return self.objects.pop(obj_id, None)
 
     def find_object(self, name: str) -> WorldObject | None:
-        """Case-insensitive partial match against non-hidden objects."""
-        ...
+        needle = name.lower()
+        for obj in self.objects.values():
+            if not obj.hidden and needle in obj.name.lower():
+                return obj
+        return None
 
     def reveal_object(self, obj_id: str) -> None:
-        """Mark a hidden object as visible (called after trigger interaction)."""
-        ...
-
-    # ── Item management ───────────────────────────────────────────────────
+        if obj_id in self.objects:
+            self.objects[obj_id].hidden = False
 
     def drop_item(self, item_id: str) -> None:
-        ...
+        self.items_on_ground.append(item_id)
 
     def pick_up_item(self, item_id: str) -> bool:
-        """Remove item from floor. Returns False if not present."""
-        ...
-
-    # ── Material / elemental interactions ─────────────────────────────────
+        if item_id in self.items_on_ground:
+            self.items_on_ground.remove(item_id)
+            return True
+        return False
 
     def apply_elemental_effect(self, effect_type: str,
                                source: "Enemy | Player") -> list[str]:
-        """Spread an elemental effect based on room material.
-
-        Examples:
-            'fire'   + wood room  → all entities take ongoing burn damage
-            'lightning' + metal room → all entities receive shock
-            'water'  in room      → extinguishes fire; stone/metal objects sink
-
-        Returns list of narration strings, one per entity affected.
-        """
         damage_type = coerce_damage_type(effect_type)
         if damage_type is None:
             return [f"The {effect_type} energy dissipates without a clear material reaction."]
-
         interaction = resolve_material_interaction(damage_type, self.material)
         source_name = getattr(source, "name", "Something")
         lines = [f"{source_name}'s {damage_type.value} effect {interaction.summary} in {self.name}."]
-
-        # Higher-level systems can consume this narration and apply exact stat effects.
         if interaction.spreads:
             lines.append("The effect spreads through the environment.")
         if interaction.applies_status:
             lines.append(f"Nearby entities risk becoming {interaction.applies_status}.")
-
-        # Optional simple room-object narration pass.
         if self.objects:
             sample = ", ".join(obj.name for obj in list(self.objects.values())[:3])
             lines.append(f"Objects react: {sample}.")
         return lines
 
     def material_properties(self) -> MaterialProperties:
-        """Shorthand to get the MaterialProperties for this room's material."""
         return MaterialProperties.for_material(self.material)
 
-    # ── Line of sight ─────────────────────────────────────────────────────
-
     def peek_description(self, from_room: "Room") -> str:
-        """Short description of what is visible from an adjacent room.
-
-        Called when player opens a door without stepping through.
-        Does NOT include room objects or items.
-        """
-        ...
+        _ = from_room
+        living = self.living_enemies()
+        enemy_text = f" You spot {', '.join(e.name for e in living)}." if living else ""
+        return f"You glimpse {self.name}. {self.description}{enemy_text}".strip()
 
     def enemies_visible_from(self, from_room: "Room") -> list["Enemy"]:
-        """Return living enemies in this room visible from `from_room`."""
-        ...
+        if self.light_level <= 1:
+            return []
+        if from_room.id not in self.line_of_sight and self.id not in from_room.line_of_sight:
+            return []
+        return self.living_enemies()
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# World map
-# ══════════════════════════════════════════════════════════════════════════════
 
 class WorldMap:
-    """The navigable graph of all rooms.
-
-    Attributes:
-        rooms           – {room_id: Room}
-        current_room_id – player's current location
-        start_room_id   – entry point (set by loader)
-    """
-
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
         self.current_room_id: str | None = None
         self.start_room_id: str | None = None
 
-    # ── Room management ───────────────────────────────────────────────────
-
     def add_room(self, room: Room) -> None:
-        ...
+        self.rooms[room.id] = room
+        if room.is_start and self.start_room_id is None:
+            self.start_room_id = room.id
+        if self.current_room_id is None:
+            self.current_room_id = room.id
 
     def get_room(self, room_id: str) -> Room | None:
-        ...
+        return self.rooms.get(room_id)
 
     def current_room(self) -> Room | None:
-        ...
+        return self.rooms.get(self.current_room_id) if self.current_room_id else None
 
     def validate_exits(self) -> list[str]:
-        """Return list of errors where exits point to non-existent room IDs."""
-        ...
-
-    # ── Navigation ────────────────────────────────────────────────────────
+        errors: list[str] = []
+        for room in self.rooms.values():
+            for direction, target in room.exits.items():
+                if target not in self.rooms:
+                    errors.append(f"{room.id}.{direction} -> unknown room '{target}'")
+        return errors
 
     def move_player(self, direction: str) -> tuple[bool, str]:
-        """Attempt to move the player in `direction`.
-
-        Returns (success, narration).
-        Fails if exit doesn't exist or is blocked.
-        On success updates current_room_id and marks room visited.
-        """
-        ...
+        ok, reason = self.can_move(direction)
+        if not ok:
+            return False, reason
+        room = self.current_room()
+        assert room is not None
+        self.current_room_id = room.exits[direction]
+        new_room = self.current_room()
+        if new_room is not None:
+            new_room.visited = True
+            return True, new_room.get_description(verbose=not new_room.visited)
+        return False, "Movement failed."
 
     def can_move(self, direction: str) -> tuple[bool, str]:
-        """Check if movement is possible without executing it."""
-        ...
-
-    # ── Line of sight ─────────────────────────────────────────────────────
+        room = self.current_room()
+        if room is None:
+            return False, "No current room."
+        if direction not in room.exits:
+            return False, "You cannot go that way."
+        target = room.exits[direction]
+        if target not in self.rooms:
+            return False, "That exit leads nowhere."
+        return True, ""
 
     def check_line_of_sight(self, from_id: str, to_id: str) -> bool:
-        """Return True if to_id is in from_id's line_of_sight list."""
-        ...
+        room = self.rooms.get(from_id)
+        return bool(room and to_id in room.line_of_sight)
 
     def rooms_visible_from_current(self) -> list[Room]:
-        """All rooms the player can see from their current position."""
-        ...
+        room = self.current_room()
+        if room is None:
+            return []
+        return [self.rooms[rid] for rid in room.line_of_sight if rid in self.rooms]
 
     def enemies_visible_from_current(self) -> list["Enemy"]:
-        """All living enemies in line-of-sight rooms (triggers combat)."""
-        ...
-
-    # ── Object / item helpers ─────────────────────────────────────────────
+        room = self.current_room()
+        if room is None:
+            return []
+        visible: list[Enemy] = []
+        for enemy in room.living_enemies():
+            setattr(enemy, "combat_room_id", room.id)
+            visible.append(enemy)
+        for other in self.rooms_visible_from_current():
+            for enemy in other.enemies_visible_from(room):
+                setattr(enemy, "combat_room_id", other.id)
+                visible.append(enemy)
+        return visible
 
     def find_item_in_world(self, item_id: str) -> tuple[Room | None, str]:
-        """Search all rooms for an item on the ground. Returns (room, location_desc)."""
-        ...
+        for room in self.rooms.values():
+            if item_id in room.items_on_ground:
+                return room, f"on the ground in {room.name}"
+        return None, "not found"
 
-    # ── Serialisation ─────────────────────────────────────────────────────
+    def neighbor_rooms(self, room_id: str) -> list[str]:
+        room = self.get_room(room_id)
+        if room is None:
+            return []
+        return [rid for rid in room.exits.values() if rid in self.rooms]
+
+    def shortest_path(self, start_id: str, goal_id: str,
+                      blocked: set[str] | None = None) -> list[str]:
+        if start_id == goal_id:
+            return [start_id]
+        blocked = blocked or set()
+        if start_id in blocked or goal_id in blocked:
+            return []
+        frontier: list[str] = [start_id]
+        prev: dict[str, str | None] = {start_id: None}
+        while frontier:
+            current = frontier.pop(0)
+            for nxt in self.neighbor_rooms(current):
+                if nxt in blocked or nxt in prev:
+                    continue
+                prev[nxt] = current
+                if nxt == goal_id:
+                    path = [goal_id]
+                    node = goal_id
+                    while prev[node] is not None:
+                        node = prev[node]  # type: ignore[index]
+                        path.append(node)
+                    return list(reversed(path))
+                frontier.append(nxt)
+        return []
+
+    def distance_between(self, start_id: str, goal_id: str) -> int:
+        path = self.shortest_path(start_id, goal_id)
+        return max(0, len(path) - 1) if path else 999999
+
+    def step_enemy_outside_combat(self, player_room_id: str | None) -> list[str]:
+        """Advance one world-AI step for enemies not in active combat."""
+        lines: list[str] = []
+        for room in self.rooms.values():
+            for enemy in list(room.living_enemies()):
+                enemy.current_zone = room.id
+                next_zone = enemy.choose_world_move(self, player_room_id)
+                if not next_zone or next_zone == room.id:
+                    continue
+                if next_zone not in self.rooms:
+                    continue
+                room.remove_enemy(enemy)
+                self.rooms[next_zone].add_enemy(enemy)
+                lines.append(f"{enemy.name} moves from {room.name} to {self.rooms[next_zone].name}.")
+        return lines
 
     def snapshot(self) -> dict:
-        """Serialise world state to a dict for save/load."""
-        ...
+        return {
+            "current_room_id": self.current_room_id,
+            "start_room_id": self.start_room_id,
+            "rooms": {
+                rid: {
+                    "visited": room.visited,
+                    "items_on_ground": list(room.items_on_ground),
+                    "objects_hidden": {oid: obj.hidden for oid, obj in room.objects.items()},
+                }
+                for rid, room in self.rooms.items()
+            },
+        }
 
     def restore_snapshot(self, data: dict) -> None:
-        """Restore world state from a saved snapshot dict."""
-        ...
+        self.current_room_id = data.get("current_room_id", self.current_room_id)
+        self.start_room_id = data.get("start_room_id", self.start_room_id)
+        for rid, state in data.get("rooms", {}).items():
+            room = self.rooms.get(rid)
+            if room is None:
+                continue
+            room.visited = bool(state.get("visited", room.visited))
+            room.items_on_ground = list(state.get("items_on_ground", room.items_on_ground))
+            for oid, hidden in state.get("objects_hidden", {}).items():
+                if oid in room.objects:
+                    room.objects[oid].hidden = bool(hidden)
