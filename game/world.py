@@ -24,6 +24,34 @@ class Material(Enum):
     EARTH = "earth"
 
 
+class DamageType(Enum):
+    """Canonical damage taxonomy used by combat + world interaction rules."""
+    BLUDGEONING = "bludgeoning"
+    PIERCING = "piercing"
+    SLASHING = "slashing"
+    TEARING = "tearing"
+    FIRE = "fire"
+    LIGHTNING = "lightning"
+    COLD = "cold"
+    FLOOD = "flood"
+    FORCE = "force"
+    ACID = "acid"
+    POISON = "poison"
+    NECROTIC = "necrotic"
+    RADIANT = "radiant"
+    PSYCHIC = "psychic"
+    SONIC = "sonic"
+
+
+@dataclass(frozen=True)
+class MaterialInteraction:
+    """Result of applying one damage type against one material."""
+    summary: str
+    damage_multiplier: float = 1.0
+    applies_status: str | None = None
+    spreads: bool = False
+
+
 @dataclass
 class MaterialProperties:
     """Mechanical properties of a material relevant to world interactions.
@@ -51,7 +79,93 @@ class MaterialProperties:
     @classmethod
     def for_material(cls, material: Material) -> "MaterialProperties":
         """Return the standard property set for a given material enum value."""
-        ...
+        lookup: dict[Material, MaterialProperties] = {
+            Material.WOOD: cls("wood", burns=True, breaks_on_smash=True, blocks_sight=True),
+            Material.STONE: cls("stone", blocks_sight=True),
+            Material.METAL: cls("metal", conducts_electricity=True, conducts_cold=True, blocks_sight=True),
+            Material.WATER: cls("water", conducts_electricity=True, floats=False, blocks_sight=False),
+            Material.GLASS: cls("glass", breaks_on_smash=True, blocks_sight=False),
+            Material.FLESH: cls("flesh", burns=True, blocks_sight=False),
+            Material.CLOTH: cls("cloth", burns=True, breaks_on_smash=True, blocks_sight=False),
+            Material.ICE: cls("ice", conducts_cold=True, breaks_on_smash=True, blocks_sight=False),
+            Material.EARTH: cls("earth", blocks_sight=False, breaks_on_smash=True),
+        }
+        return lookup.get(material, cls(material.value))
+
+
+MATERIAL_INTERACTIONS: dict[DamageType, dict[Material, MaterialInteraction]] = {
+    DamageType.FIRE: {
+        Material.WOOD: MaterialInteraction("ignites", damage_multiplier=1.25, applies_status="burning"),
+        Material.METAL: MaterialInteraction("heats", damage_multiplier=1.0),
+        Material.WATER: MaterialInteraction("is extinguished", damage_multiplier=0.2),
+        Material.GLASS: MaterialInteraction("cracks from thermal stress", damage_multiplier=1.15),
+        Material.ICE: MaterialInteraction("melts rapidly", damage_multiplier=1.5),
+        Material.FLESH: MaterialInteraction("burns", damage_multiplier=1.2, applies_status="burning"),
+        Material.CLOTH: MaterialInteraction("ignites quickly", damage_multiplier=1.3, applies_status="burning"),
+        Material.EARTH: MaterialInteraction("scorches", damage_multiplier=0.9),
+    },
+    DamageType.LIGHTNING: {
+        Material.METAL: MaterialInteraction("conducts and arcs", damage_multiplier=1.35, applies_status="shocked", spreads=True),
+        Material.WATER: MaterialInteraction("conducts through liquid", damage_multiplier=1.35, applies_status="shocked", spreads=True),
+        Material.FLESH: MaterialInteraction("shocks", damage_multiplier=1.2, applies_status="shocked"),
+        Material.WOOD: MaterialInteraction("chars", damage_multiplier=0.9),
+        Material.STONE: MaterialInteraction("dissipates", damage_multiplier=0.8),
+        Material.GLASS: MaterialInteraction("fizzles", damage_multiplier=0.95),
+        Material.ICE: MaterialInteraction("discharges weakly", damage_multiplier=0.9),
+        Material.CLOTH: MaterialInteraction("sparks", damage_multiplier=0.95),
+        Material.EARTH: MaterialInteraction("grounds out", damage_multiplier=0.75),
+    },
+    DamageType.COLD: {
+        Material.WOOD: MaterialInteraction("becomes brittle", damage_multiplier=1.05),
+        Material.METAL: MaterialInteraction("becomes brittle", damage_multiplier=1.1),
+        Material.WATER: MaterialInteraction("freezes", damage_multiplier=1.3, applies_status="frozen"),
+        Material.GLASS: MaterialInteraction("becomes brittle", damage_multiplier=1.1),
+        Material.ICE: MaterialInteraction("reinforces", damage_multiplier=0.6),
+        Material.FLESH: MaterialInteraction("slows", damage_multiplier=1.15, applies_status="chilled"),
+        Material.CLOTH: MaterialInteraction("stiffens", damage_multiplier=1.0),
+        Material.EARTH: MaterialInteraction("compacts", damage_multiplier=0.95),
+        Material.STONE: MaterialInteraction("holds temperature", damage_multiplier=0.9),
+    },
+    DamageType.FLOOD: {
+        Material.WOOD: MaterialInteraction("floats", damage_multiplier=0.75),
+        Material.METAL: MaterialInteraction("sinks", damage_multiplier=1.0),
+        Material.STONE: MaterialInteraction("sinks", damage_multiplier=1.0),
+        Material.WATER: MaterialInteraction("blends into surrounding water", damage_multiplier=0.5),
+        Material.GLASS: MaterialInteraction("sinks", damage_multiplier=1.0),
+        Material.ICE: MaterialInteraction("floats", damage_multiplier=0.8),
+        Material.FLESH: MaterialInteraction("is pushed by current", damage_multiplier=1.05, applies_status="soaked"),
+        Material.CLOTH: MaterialInteraction("soaks through", damage_multiplier=1.1, applies_status="soaked"),
+        Material.EARTH: MaterialInteraction("saturates", damage_multiplier=1.0),
+    },
+    DamageType.ACID: {
+        Material.WOOD: MaterialInteraction("corrodes", damage_multiplier=1.15),
+        Material.METAL: MaterialInteraction("corrodes rapidly", damage_multiplier=1.35, applies_status="corroded"),
+        Material.STONE: MaterialInteraction("erodes", damage_multiplier=1.2),
+        Material.WATER: MaterialInteraction("dilutes", damage_multiplier=0.75),
+        Material.GLASS: MaterialInteraction("etches", damage_multiplier=1.1),
+        Material.ICE: MaterialInteraction("melts", damage_multiplier=1.2),
+        Material.FLESH: MaterialInteraction("dissolves tissue", damage_multiplier=1.4, applies_status="corroded"),
+        Material.CLOTH: MaterialInteraction("dissolves fibers", damage_multiplier=1.25),
+        Material.EARTH: MaterialInteraction("neutralizes", damage_multiplier=0.85),
+    },
+}
+
+
+def resolve_material_interaction(damage_type: DamageType, material: Material) -> MaterialInteraction:
+    """Resolve matrix entry with sane defaults for unsupported combinations."""
+    table = MATERIAL_INTERACTIONS.get(damage_type, {})
+    return table.get(material, MaterialInteraction("has little effect", damage_multiplier=1.0))
+
+
+def coerce_damage_type(raw: str) -> DamageType | None:
+    """Convert free-text damage type names into DamageType enum members."""
+    text = str(raw or "").strip().lower()
+    if not text:
+        return None
+    for dt in DamageType:
+        if dt.value == text:
+            return dt
+    return None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -258,11 +372,29 @@ class Room:
 
         Returns list of narration strings, one per entity affected.
         """
-        ...
+        damage_type = coerce_damage_type(effect_type)
+        if damage_type is None:
+            return [f"The {effect_type} energy dissipates without a clear material reaction."]
+
+        interaction = resolve_material_interaction(damage_type, self.material)
+        source_name = getattr(source, "name", "Something")
+        lines = [f"{source_name}'s {damage_type.value} effect {interaction.summary} in {self.name}."]
+
+        # Higher-level systems can consume this narration and apply exact stat effects.
+        if interaction.spreads:
+            lines.append("The effect spreads through the environment.")
+        if interaction.applies_status:
+            lines.append(f"Nearby entities risk becoming {interaction.applies_status}.")
+
+        # Optional simple room-object narration pass.
+        if self.objects:
+            sample = ", ".join(obj.name for obj in list(self.objects.values())[:3])
+            lines.append(f"Objects react: {sample}.")
+        return lines
 
     def material_properties(self) -> MaterialProperties:
         """Shorthand to get the MaterialProperties for this room's material."""
-        ...
+        return MaterialProperties.for_material(self.material)
 
     # ── Line of sight ─────────────────────────────────────────────────────
 
