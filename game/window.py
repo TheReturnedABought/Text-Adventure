@@ -2,16 +2,16 @@
 """
 GameWindow — standalone Tkinter window, 4 panels.
 
-┌─ ART ────────────────────────────────────────────┐
-│  Combat: enemies SIDE-BY-SIDE in monospace cols  │
-│  Explore: room art + live summary                │
+┌─ ART ─────────────────────────────────────────────┐
+│  Combat: enemies SIDE-BY-SIDE in monospace cols   │
+│  Explore: room art + live summary                 │
 ├─ STATUS ──────────────────────────────────────────┤
-│  HP / AP / MP bars  ·  relics  ·  commands       │
+│  HP / AP / MP bars  ·  xp level ·  commands       │
 ├─ LOG ─────────────────────────────────────────────┤
-│  Scrolling story / combat output                 │
+│  Scrolling story / combat output                  │
 ├─ INPUT ───────────────────────────────────────────┤
-│  > _                                             │
-└──────────────────────────────────────────────────┘
+│  > _                                              │
+└───────────────────────────────────────────────────┘
 
 Side-by-side enemy layout
 ──────────────────────────
@@ -82,24 +82,13 @@ class UIState:
 
 class GameWindow:
     # ── Palette ───────────────────────────────────────────────────────────────
-    C_BG = '#0d0d1a'
-    C_PANEL = '#11111f'
-    C_BORDER = '#2a2a50'
-    C_SEP = '#1e1e38'
-    C_TEXT = '#d0d0e8'
-    C_DIM = '#505068'
-    C_HP = '#e05555'
-    C_AP = '#5588ee'
-    C_MP = '#9955ee'
-    C_GOLD = '#ddaa33'
-    C_RED = '#e05555'
-    C_GREEN = '#55cc88'
-    C_YELLOW = '#ddcc44'
-    C_BLUE = '#5588ee'
-    C_CYAN = '#44cccc'
-    C_MAGENTA = '#cc55cc'
-    C_GRAY = '#505068'
-    C_WHITE = '#d0d0e8'
+    C_BG      = '#0d0d1a';  C_PANEL   = '#11111f';  C_BORDER  = '#2a2a50'
+    C_SEP     = '#1e1e38';  C_TEXT    = '#d0d0e8';  C_DIM     = '#505068'
+    C_HP      = '#e05555';  C_AP      = '#5588ee';  C_MP      = '#9955ee'
+    C_GOLD    = '#ddaa33'
+    C_RED     = '#e05555';  C_GREEN   = '#55cc88';  C_YELLOW  = '#ddcc44'
+    C_BLUE    = '#5588ee';  C_CYAN    = '#44cccc';  C_MAGENTA = '#cc55cc'
+    C_GRAY    = '#505068';  C_WHITE   = '#d0d0e8'
 
     FONT    = ('Courier New', 10)
     FONT_B  = ('Courier New', 10, 'bold')
@@ -429,6 +418,12 @@ class GameWindow:
         if not room:
             return
 
+        desc = str(getattr(room, "description", "")).strip()
+        if desc:
+            for ln in desc.splitlines()[:3]:
+                t.insert('end', f'  {ln}\n', 'white')
+            t.insert('end', '\n')
+
         art_str = ROOM_ART.get(room.name, '')
         if art_str:
             for ln in art_str.strip('\n').splitlines()[:5]:
@@ -442,11 +437,9 @@ class GameWindow:
         if room.relics:
             t.insert('end', '  Relics:   ', 'bold')
             t.insert('end', ', '.join(r.name for r in room.relics) + '\n', 'cyan')
-        visible_objects = [o.name for o in room.env_objects if o.visible and o._uses_left > 0]
-        room_objects = _stacked_items(room.items) + visible_objects
-        if room_objects:
-            t.insert('end', '  Objects:  ', 'bold')
-            t.insert('end', ', '.join(room_objects) + '\n', 'white')
+        if room.items:
+            t.insert('end', '  Items:    ', 'bold')
+            t.insert('end', ', '.join(_stacked_items(room.items)) + '\n', 'white')
         ev = getattr(room, 'event', None)
         if ev and not getattr(ev, 'resolved', True):
             t.insert('end', '  Event:    ', 'bold')
@@ -456,6 +449,11 @@ class GameWindow:
             t.insert('end', '  Puzzle:   ', 'bold')
             t.insert('end', pz.name + '  (examine / solve)\n', 'magenta')
 
+        exits  = list(room.connections.keys())
+        locked = room.locked_connections
+        exs    = [f'{d}🔒' if d in locked else d for d in exits]
+        t.insert('end', '  Exits:    ', 'bold')
+        t.insert('end', ', '.join(exs) + '\n', 'green')
 
     # ── STATUS / HUD ──────────────────────────────────────────────────────────
 
@@ -467,7 +465,8 @@ class GameWindow:
             return
 
         try:
-            from utils.constants import MAX_AP, BASE_COMMANDS, HEAL_MP_COST
+            from utils.helpers import make_bar
+            from utils.constants import MAX_AP, MAX_MANA, BASE_COMMANDS, HEAL_MP_COST
             from utils.status_effects import format_statuses
             from entities.class_data import get_command_def, cmd_ap_cost as _apc
         except ImportError:
@@ -611,8 +610,8 @@ class GameWindow:
             game_fn()
         except SystemExit:
             pass
-        except Exception as exc:
-            self._schedule(lambda err=exc: self._append_log(f'\n  [Error: {err}]'))
+        except Exception as e:
+            self._schedule(lambda: self._append_log(f'\n  [Error: {e}]'))
         finally:
             self._input_result = ''
             self._input_event.set()

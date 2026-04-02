@@ -1,0 +1,61 @@
+{
+  "_comment": "ENEMY SCHEMA — one file per enemy template in assets/enemies/",
+
+  "id": "goblin_scout",
+  "name": "Goblin Scout",
+  "description": "A scrawny goblin clutching a rusty knife. Quick and cowardly.",
+  "material": "flesh",
+
+  "max_hp":   12,
+  "attack":    3,
+  "defense":   0,
+  "total_ap": 18,
+
+  "ai_profile": "aggressive",
+
+  "intent_pool": [
+    {
+      "id": "scratch",
+      "intent_type": "attack",
+      "description": "scratches wildly with its knife",
+      "dice_expression": "1d4+1",
+      "ap_cost": 6,
+      "weight": 3,
+      "condition": null,
+      "effect_on_hit": null,
+      "effect_duration": 1
+    },
+    {
+      "id": "stab",
+      "intent_type": "attack",
+      "description": "stabs at a vulnerable spot",
+      "dice_expression": "1d6+0",
+      "ap_cost": 8,
+      "weight": 2,
+      "condition": null,
+      "effect_on_hit": "bleeding",
+      "effect_duration": 2
+    },
+    {
+      "id": "cower",
+      "intent_type": "block",
+      "description": "cowers behind its arms",
+      "dice_expression": "1d6+0",
+      "ap_cost": 5,
+      "weight": 2,
+      "condition": "hp_below_half",
+      "effect_on_hit": null,
+      "effect_duration": 1
+    }
+  ],
+
+  "status_immunities": [],
+
+  "loot_table": [
+    { "item_id": "rusty_knife",  "chance": 0.40, "count_expression": "1"  },
+    { "item_id": "copper_coin",  "chance": 0.80, "count_expression": "1d3" },
+    { "item_id": "ragged_cloth", "chance": 0.20, "count_expression": "1"  }
+  ],
+
+  "xp_reward": 10
+}
