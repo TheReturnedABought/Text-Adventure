@@ -59,7 +59,7 @@ class EquippableItem:
         rarity               – 'common', 'uncommon', 'rare', 'legendary'
         tier                 – numeric tier for scaling (1 = starter)
         stat_modifiers       – {stat_name: flat_bonus}
-        ability_cost_reductions – {command_name: ap_reduction} (e.g. block: 1)
+        ability_cost_reductions – {command_name: ap_reduction} (e.g. b: 1)
         abilities            – active/passive abilities granted while equipped
         equip_requirements   – {'min_level': int, 'classes': [str]}
         upgrade_path         – item_id of the next tier upgrade (or None)

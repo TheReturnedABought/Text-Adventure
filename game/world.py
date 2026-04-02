@@ -431,7 +431,6 @@ class WorldMap:
                     continue
                 room.remove_enemy(enemy)
                 self.rooms[next_zone].add_enemy(enemy)
-                lines.append(f"{enemy.name} moves from {room.name} to {self.rooms[next_zone].name}.")
         return lines
 
     def snapshot(self) -> dict:

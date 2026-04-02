@@ -4,7 +4,7 @@ GameWindow — standalone Tkinter window, 4 panels.
 
 ┌─ ART ─────────────────────────────────────────────┐
 │  Combat: enemies SIDE-BY-SIDE in monospace cols   │
-│  Explore: room art + live summary                 │
+│  Explore: room art                                │
 ├─ STATUS ──────────────────────────────────────────┤
 │  HP / AP / MP bars  ·  xp level ·  commands       │
 ├─ LOG ─────────────────────────────────────────────┤
