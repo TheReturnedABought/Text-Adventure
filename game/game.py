@@ -81,8 +81,8 @@ class TextAdventureGame:
         if cmd_file.exists():
             try:
                 self.registry.load_from_dict(json.loads(cmd_file.read_text(encoding="utf-8")))
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"ERROR loading commands: {e}")
 
         # determine start room from raw rooms (fallback, but world map will override later)
         starts = [rid for rid, r in self._rooms_raw.items() if r.get("is_start")]
