@@ -154,7 +154,7 @@ def do_examine(player, room, args):
 
 def do_solve(player, room, args):
     if not args:
-        print_slow("  Usage: solve <puzzle answer>")
+        print_slow("  Type an answer to attempt the puzzle.")
         return
 
     answer = " ".join(args).lower()

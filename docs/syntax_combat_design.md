@@ -6,6 +6,10 @@
 - Longer, more structured sentences are more efficient and more targeted.
 - Short commands are general and lower-resolution.
 
+> Current implementation note: the syntax engine is implemented and available via
+> `parse_syntax_command(...)`, while the active gameplay loop still uses the
+> legacy `parse_command(...)` router for command dispatch.
+
 ## Semantic Layers
 1. Verb
 2. Determiner
@@ -20,9 +24,11 @@
 
 ## Unlock Schedule (all classes)
 - Determiners: unlocked from start.
+- Adverbs: unlocked from start.
 - Prepositions tier 1: level 3.
 - Prepositions tier 2: level 6.
 - Prepositions tier 3: level 7.
+- Semantic roles (instrument/location): level 3.
 
 ## Multi-target Grammar
 Examples:

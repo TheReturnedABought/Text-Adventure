@@ -58,11 +58,13 @@ class SyntaxCombatParser:
         for canonical, variants in CANONICAL_VERBS.items():
             if token in variants:
                 return canonical
-        return token if token in NOUN_LIKE_COMMANDS else token
+        # Unknown verbs and noun-like commands both pass through as typed.
+        return token
 
     @staticmethod
     def _ap_from_tokens(tokens: list[str]) -> int:
-        return sum(len(t) for t in tokens)
+        # Letter-only AP accounting (spaces/punctuation excluded).
+        return sum(sum(1 for ch in token if ch.isalpha()) for token in tokens)
 
     @staticmethod
     def _extract_locked_target_phrases(tokens: list[str]) -> list[str]:

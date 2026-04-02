@@ -106,7 +106,7 @@ def show_help(player=None):
         "    interact <>             - Interact with an event or NPC",
         "    listen                 - Hear clues about nearby rooms",
         "    examine <obj>          - Examine a puzzle or object",
-        "    solve <answer>         - Attempt a puzzle solution",
+        "    <answer text>          - In puzzle rooms, typed text is treated as an answer",
         "    look                   - Describe the room again",
         "    map                    - Show ASCII map of explored rooms",
         "    journal                - Open codex: lore and enemy records",
@@ -151,9 +151,12 @@ def show_class_selection():
         print()
     while True:
         choice = input("  Enter class (1/2/3) or name: ").lower().strip()
-        if choice in ["1", "soldier"]:  return "soldier"
-        if choice in ["2", "rogue"]:    return "rogue"
-        if choice in ["3", "mage"]:     return "mage"
+        if choice in ["1", "soldier"]:
+            return "soldier"
+        if choice in ["2", "rogue"]:
+            return "rogue"
+        if choice in ["3", "mage"]:
+            return "mage"
         print("  Please enter 1, 2, or 3.")
 
 
@@ -320,8 +323,10 @@ def show_map(start_room, current_room):
                 dy = 1 if y1 > y0 else -1
                 xi, yi = x0, y0
                 while xi != x1 or yi != y1:
-                    if xi != x1: xi += dx
-                    if yi != y1: yi += dy
+                    if xi != x1:
+                        xi += dx
+                    if yi != y1:
+                        yi += dy
                     put_text(xi, yi, "/")
 
     # Print canvas

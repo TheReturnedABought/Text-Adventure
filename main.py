@@ -2,42 +2,52 @@
 import os
 import sys
 
+from entities.player import Player
+from entities.class_data import CLASS_RELIC_NAMES
+from rooms.map_data import setup_rooms
+from rooms.room import Room
+from game_engine.engine import GameEngine
+from game_engine.parser import parse_command, parse_puzzle_answer
+from game_engine.game_state import GameState
+from game_engine.save_manager import SaveManager
+from utils.helpers import print_slow, RARITY_COLORS, RESET
+from utils.display import (
+    show_intro,
+    show_room,
+    show_help,
+    show_combat_enter,
+    show_class_selection,
+    show_relics,
+    show_map,
+    show_journal,
+)
+from utils.actions import (
+    do_move,
+    do_take_relic,
+    do_drop,
+    do_inventory,
+    do_listen,
+    do_examine,
+    do_interact,
+    use_item,
+)
+from utils.combat import combat_loop
+from utils.relics import get_relic
+from utils.window import window
+
 BASE_PATH = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 
 
 def _enable_history():
     try:
         import readline
+
         readline.set_history_length(20)
     except ImportError:
         try:
             import pyreadline3  # noqa: F401
         except ImportError:
             pass
-
-_enable_history()
-
-from entities.player        import Player
-from entities.class_data    import CLASS_RELIC_NAMES
-from rooms.map_data         import setup_rooms
-from rooms.room             import Room
-from game_engine.engine     import GameEngine
-from game_engine.parser     import parse_command
-from game_engine.game_state import GameState
-from game_engine.save_manager import SaveManager
-from utils.helpers  import print_slow, RARITY_COLORS, RESET
-from utils.display  import (
-    show_intro, show_room, show_help, show_combat_enter,
-    show_class_selection, show_relics, show_map, show_journal,
-)
-from utils.actions  import (
-    do_move, do_take_relic, do_drop, do_inventory,
-    do_listen, do_examine, do_solve,
-    do_interact, use_item,
-)
-from utils.combat   import combat_loop
-from utils.relics   import get_relic
-from utils.window   import window
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -67,7 +77,6 @@ class CommandRouter:
         t["listen"]   = t["hear"]     = lambda g, a: do_listen(g.player, g.room)
         t["interact"] = t["talk"]     = lambda g, a: do_interact(g.player, g.room, a)
         t["examine"]  = t["inspect"]  = lambda g, a: do_examine(g.player, g.room, a)
-        t["solve"]                    = lambda g, a: do_solve(g.player, g.room, a)
         t["look"]     = t["l"]        = lambda g, a: show_room(g.room)
         t["help"]     = t["?"]        = lambda g, a: (
             show_help(g.player), input("  Press Enter to continue...")
@@ -82,11 +91,7 @@ class CommandRouter:
             if isinstance(result, Room):
                 self._game.state.room = result
             return True
-        else:
-            print_slow(
-                f"  Unknown command '{command}'. Type 'help' for a list of commands."
-            )
-            return False
+        return False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -118,6 +123,7 @@ class Game:
         return self.state.start_room
 
     def main(self):
+        _enable_history()
         self.setup()
         if self.state and self.state.player:
             self.run()
@@ -249,9 +255,19 @@ class Game:
             return
 
         command, args = parse_command(raw)
-        handled = self.router.dispatch(command, args)
-        if not handled:
+        if self.router.dispatch(command, args):
             return
+
+        answer_tokens = parse_puzzle_answer(raw)
+        active_puzzle = getattr(self.room, "puzzle", None)
+        if active_puzzle and not active_puzzle.solved and answer_tokens:
+            from utils.actions import do_solve
+            do_solve(self.player, self.room, answer_tokens)
+            return
+
+        print_slow(
+            f"  Unknown command '{command}'. Type 'help' for a list of commands."
+        )
 
     def _handle_death(self):
         print_slow("\n  You have died. Game over.")

@@ -1,158 +1,93 @@
 # Text Adventure
 
-A terminal-first Python RPG focused on tactical, word-command combat.
-You explore connected rooms, solve puzzles, collect relics, and fight in AP/MP-based encounters with visible enemy intents.
+A terminal-first Python RPG with room exploration, puzzle interactions, relic-driven build variety, and AP/MP tactical combat.
 
-## Quick Start
+## Running the game
+
+From the repository root:
 
 ```bash
-git clone https://github.com/yourusername/text-adventure.git
-cd text-adventure
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
 python main.py
 ```
 
----
+No packaging step is required for local play.
 
-## Gameplay Overview
+## Core gameplay systems
 
 ### Exploration
-- Move with: `north`, `south`, `east`, `west`
-- Inspect environment: `look`, `listen`, `examine <object>`, `interact <object>`
-- Solve puzzles: `solve <answer>`
-- Inventory and relics: `inventory`, `relics`
-- Lore and enemy memory: `journal`
+- Traverse connected rooms (`north`, `south`, `east`, `west`).
+- Inspect and manipulate environment objects (`look`, `listen`, `examine`, `interact`).
+- Puzzle rooms accept direct answer text (no `solve` prefix required).
+- Manage inventory, relics, map, and journal.
 
-### Combat Loop
-- AP resets each turn (base 12 AP).
-- Use commands until AP is exhausted, then `end` turn.
-- Enemies telegraph planned actions in the HUD before they act.
-- Core commands:
-  - `attack`
-  - `block`
-  - `heal`
-  - class commands (unlock by level)
+### Combat
+- Turn-based AP economy with optional MP costs for spell/class commands.
+- Enemy intents are shown before enemy actions.
+- Typed damage system (e.g., slashing, lightning, force) with effectiveness modifiers.
+- Status effects and relic passives can heavily alter turn flow.
 
----
+### Progression
+- Class-specific command unlock trees (`soldier`, `rogue`, `mage`).
+- XP leveling with stat scaling and new command unlocks/choices.
+- Persistent saves include player state, room graph state, enemies, inventory/relics, and journal.
 
-## Damage Types, Weaknesses, and Resistances
+## Parser model
 
-The combat system now supports typed damage with effectiveness hints.
+The project currently ships two parser layers:
 
-Example feedback:
-- “you dealt 12 bludgeoning damage. It’s very effective!”
-- “you dealt 20 piercing damage. It’s not very effective.”
+1. **Legacy command parser** (`game_engine/parser.py`)
+   - Active in the current game loop.
+   - Normalizes aliases and supports Zork-like phrasing:
+     - direction aliases: `n`, `s`, `e`, `w`
+     - noun/verb shorthand: `x statue`, `inv`, `?`
+     - phrasal verbs: `pick up relic`, `look at altar`, `talk to hermit`
+     - movement normalization: `go north`, `walk to east`
 
-### Supported Types (extensible)
-- slashing
-- piercing
-- bludgeoning
-- force
-- lightning
-- fire
-- physical (fallback)
+2. **Syntax engine parser** (`game_engine/syntax_engine/*`)
+   - Exposed via `parse_syntax_command(...)`.
+   - Supports richer grammar metadata (determiners, prepositions, adverbs, semantic roles, target resolution).
+   - Designed for progressive unlock-based language-combat extensions.
 
-### Base `attack` damage type by class
-- Soldier: **piercing**
-- Rogue: **slashing**
-- Mage/Wizard: **force**
-
----
-
-## Enemy Encounter Scripting (Area 2 Prep)
-
-Enemy definitions now support higher-drama scripting hooks:
-
-- **Phase triggers**: trigger behaviors at HP thresholds (e.g. 66%, 50%, 33%).
-- **Reactive counters**: fire in response to events like taking damage.
-- **Combo scripts**: detect move sequences and trigger bonuses/effects.
-
-This enables more memorable fights and smoother boss design for upcoming areas.
-
----
-
-## Relics
-
-### New relics
-- **Mana Infused Bone**
-  - Gain 1 Dexterity for each MP spent.
-- **The Static Hunger**
-  - Repeating the same action grants +1 Strength.
-
----
-
-## Area 1 Tutorial Flow Update
-
-Area 1 opening has been reworked to teach core systems more cleanly:
-
-- Entrance now provides tutorial guidance.
-- New room: **Entrance Corridor** between Entrance Hall and Riddle Hall.
-- Corridor encounter includes a **Guard** and **Crossbowman** to demonstrate:
-  - enemy intent reading,
-  - typed damage effectiveness,
-  - basic command economy.
-
----
-
-## Progression & Leveling
-
-### Starting HP
-- Soldier: 50
-- Rogue: 40
-- Mage: 35
-
-### HP growth per level
-- Applied in `Player._apply_level_growth`.
-- Soldier/Rogue: ~10% of base HP per level.
-- Mage: alternates +3 / +4 by level.
-
-### Important fix
-- The level-up UI no longer adds an unintended extra flat +10 HP.
-- HP growth is now only applied via `Player._apply_level_growth`.
-
----
-
-## Project Structure
+## Project layout
 
 ```text
 main.py
 entities/
-  player.py          # player stats, growth, unlock tracking
-  class_data.py      # command metadata (costs/unlocks)
-  class_commands.py  # command effect implementations
-  enemy.py           # enemy AI + phase/reactive/combo hooks
-  enemy_moves.py     # move behaviors and factory
+  player.py
+  class_data.py
+  class_commands.py
+  enemy.py
+  enemy_moves.py
+  relic.py
 game_engine/
-  parser.py          # legacy parser facade + syntax parser entrypoint
-  syntax_engine/     # OO syntax-combat parsing engine
+  engine.py
+  game_state.py
+  parser.py
+  journal.py
+  save_manager.py
+  syntax_engine/
     parser.py
     resolver.py
-    unlocks.py
     lexicon.py
     models.py
-  save_manager.py    # save/load system
+    unlocks.py
 utils/
-  combat.py          # combat session + AP/MP loop
-  damage.py          # damage typing/effectiveness resolver
-  relics.py          # relic definitions and registry
-  status_effects.py  # status logic
+  actions.py
+  combat.py
+  damage.py
+  status_effects.py
+  display.py
+  window.py
 rooms/
-  area1.py           # area map + tutorial flow + encounters
-  enemy_data.py      # enemy factories
+  area1.py
+  room.py
+  map_data.py
+  enemy_data.py
+docs/
+  syntax_combat_design.md
 ```
-
----
-
-## Save / Load
-
-- Save file: `save_data/save.json`
-- Save includes player progression, commands, room states, enemies, relics, and journal data.
-
----
 
 ## Notes
 
-- Recommended terminal size: **80x26** or larger.
-- Built for terminal/text-mode play.
+- Recommended terminal size: at least **80x26**.
+- A Tk window HUD adapter exists (`utils/window.py`) and mirrors terminal output/input when enabled.

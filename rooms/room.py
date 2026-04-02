@@ -233,7 +233,7 @@ class Puzzle(EnvObject):
         for clue in self.clues:
             print_slow(f"  {clue}")
 
-        print_slow("\n  Type 'solve <your answer>' to attempt a solution.")
+        print_slow("\n  Type your answer directly to attempt a solution.")
 
     def attempt(self, player, room, raw_answer: str):
         if self.solved:
