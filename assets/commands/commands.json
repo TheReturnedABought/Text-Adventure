@@ -48,7 +48,7 @@
       "valid_contexts": ["combat"],
       "modifiers_allowed": ["heavy", "quick"],
       "tags": ["melee", "single-target"],
-      "world_use_hint": null
+      "world_use_hint": null,
     },
     {
       "name": "block",
@@ -68,7 +68,7 @@
       "aliases": ["break", "bash"],
       "description": "A powerful blow. Deals heavy damage and can break world objects.",
       "ap_cost_override": null,
-      "base_dice": "5d4+3",
+      "base_dice": "3d4+3",
       "unlock_class": "fighter",
       "unlock_level": 2,
       "valid_contexts": ["combat", "world"],

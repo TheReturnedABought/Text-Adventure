@@ -66,21 +66,33 @@ CombatController(parser, registry, player, enemies)   ← created per encounter
 ```
 ap_cost = len(raw_command.strip())
         - player.ap_cost_reduction_for(intent)   # from equipped items
-        - (cmd.ap_cost_override if set)           # replaces letter count entirely
-minimum cost = 1
+minimum cost of command = 1 
 ```
 
 **Example**
 
-| Typed | Letters | Item reduction      | Final AP |
-|-------|---------|---------------------|----------|
-| `attack the goblin` | 18 | 0                   | 18 |
-| `block` | 5 | bronze blade: b -=1 | 4 |
-| `heavy attack a goblin` | 22 | 0                   | 22 |
-| `smash the door` | 15 | 0                   | 15 |
+| Typed | Letters | Item reduction                      | Final AP |
+|-------|---------|-------------------------------------|----------|
+| `attack the goblin` | 18 | 0                                   | 18 |
+| `block` | 5 | bronze blade: cost of letter b -= 1 | 4 |
+| `heavy attack a goblin` | 22 | 0                                   | 22 |
+| `smash the door` | 15 | 0                                   | 15 |
 
 ---
+## mp cost rule (special word count system)
 
+```
+
+```
+
+**Example**
+
+| Typed             | Letters | Item reduction                      | Final MP | Final AP |
+|-------------------|---------|-------------------------------------|----------|----------|
+| `heal the goblin` | 16      | 0                                   | 1        | 16       |
+| `heal me`         | 6       | 0                                   | 1        | 6        |
+
+---
 ## Combat turn order
 
 ```
