@@ -277,6 +277,8 @@ class CommandParser:
       6. Extract target name, target index (disambiguation), and item name.
       7. Validate the resolved command against the current context and player.
       8. Calculate AP / MP cost from the *raw* (pre-expansion) string.
+         AP cost = len(raw) - reductions, min 1.
+         MP cost = fixed value from command definition (mp_cost_override) if costs_mp, else 0.
       9. Return a fully populated ParsedCommand.
 
     The parser does NOT look up enemies or objects by name — that is the
@@ -314,7 +316,7 @@ class CommandParser:
         8.  Split rest on item preposition ("with", "using") to isolate item_name.
         9.  extract_target() — target name or numeric disambiguation index.
         10. validate_command() — context check + unlock check.
-        11. calculate_ap_cost() from raw; _calculate_mp_cost() from raw.
+        11. calculate_ap_cost() from raw; _calculate_mp_cost() from command definition.
         12. Return ParsedCommand.
         """
         # 1. Normalise
@@ -379,11 +381,11 @@ class CommandParser:
         if not valid:
             return self._make_error(raw, error_msg, article)
 
-        # 11. Costs — always from *raw*, not from the expanded string.
-        #     Familiarity reward: "attack it" (9 chars) costs less than
-        #     "attack goblin scout" (19 chars) even though they resolve identically.
+        # 11. Costs — always from *raw* for AP, from command definition for MP.
+        #     AP cost: len(raw) - reductions, min 1.
+        #     MP cost: fixed value from cmd_def.mp_cost_override (or 0 if not costs_mp)
         ap_cost = self.calculate_ap_cost(raw, cmd_def.intent, player)
-        mp_cost = self._calculate_mp_cost(raw, cmd_def.intent, player)
+        mp_cost = self._calculate_mp_cost(cmd_def, player)
 
         # 12. Return
         return ParsedCommand(
@@ -522,28 +524,30 @@ class CommandParser:
         reduction = player.ap_cost_reduction_for(intent)
         return max(1, base - reduction)
 
-    def _calculate_mp_cost(self, raw: str, intent: str,
+    def _calculate_mp_cost(self, cmd_def: "CommandDefinition",
                            player: "Player") -> int:
-        """Calculate the MP cost of a typed command (word-count system).
+        """Calculate the MP cost of a command.
 
-        Rules (in priority order):
-        1. If the command has no MP cost (costs_mp is False) → 0.
-        2. If CommandDefinition.mp_cost_override is set → use that value.
-        3. Use value from costs_mp_amounrt
-        4. Subtract player.ap_cost_reduction_for(intent) from equipped items.
-        minimum cost is always 0.
+        Rules:
+        1. If the command does not have `costs_mp` set to True → cost 0.
+        2. Otherwise, base MP cost = cmd_def.mp_cost_override (if provided) or 1.
+        3. Subtract player.mp_cost_reduction_for(cmd_def.intent) from equipped items.
+        4. Minimum cost is 0.
         """
-        cmd_def = self.registry.get_command(intent)
         if not getattr(cmd_def, "costs_mp", False):
             return 0
-        override: int | None = getattr(cmd_def, "mp_cost_override", None)
-        base = override if override is not None else len(raw.strip().split())
+
+        base = cmd_def.mp_cost_override
+        if base is None:
+            # default MP cost for a command that costs MP but no override given
+            base = 1
+
         reduction = (
-            player.mp_cost_reduction_for(intent)
+            player.mp_cost_reduction_for(cmd_def.intent)
             if hasattr(player, "mp_cost_reduction_for")
             else 0
         )
-        return max(1, base - reduction)
+        return max(0, base - reduction)
 
     # ── Feedback ──────────────────────────────────────────────────────────────
 

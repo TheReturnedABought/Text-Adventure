@@ -87,11 +87,13 @@ minimum cost of command = 1
 
 **Example**
 
-| Typed             | Letters | Item reduction                      | Final MP | Final AP |
-|-------------------|---------|-------------------------------------|----------|----------|
-| `heal the goblin` | 16      | 0                                   | 1        | 16       |
-| `heal me`         | 6       | 0                                   | 1        | 6        |
-
+| Typed             | Letters | Item reduction | Final MP | Final AP |
+|-------------------|---------|----------------|----------|----------|
+| `heal the goblin` | 16      | 0              | 1        | 16       |
+| `heal me`         | 6       | 0              | 1        | 6        |
+| `heal`            | 4       | 1              | 4        | 4        |
+| `fireball`        | 9       | 2              | 8        | 9        |
+| `summon`          | 5       | 3              | 6        | 5        |
 ---
 ## Combat turn order
 

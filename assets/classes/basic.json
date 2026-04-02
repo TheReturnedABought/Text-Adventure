@@ -1,0 +1,22 @@
+{
+  "_comment": "Test class with no abilities or unlocks – used for basic testing.",
+
+  "id": "basic",
+  "name": "Basic",
+  "description": "A test class with no special abilities, unlocks, or starting items.",
+
+  "base_stats": {
+    "hp": 30,
+    "attack": 5,
+    "defense": 1,
+    "ap": 20
+  },
+
+  "starting_items": [],
+
+  "passive_traits": [],
+
+  "level_unlocks": {},
+
+  "choice_unlocks": {}
+}

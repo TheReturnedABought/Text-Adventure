@@ -110,6 +110,25 @@ class TextAdventureGame:
 
         print("Choose a class:")
         for i, c in enumerate(classes, start=1):
+            print(f"  {i}. {c.name}")
+            if c.description:
+                print(f"     {c.description}")
+
+        selected = classes[0]
+        while True:
+            raw = input("Class number > ").strip()
+            if not raw:
+                break
+            if raw.isdigit() and 1 <= int(raw) <= len(classes):
+                selected = classes[int(raw) - 1]
+                break
+            print("Invalid choice. Enter a number from the list.")
+
+        self.player = self._build_player(selected.id)
+        print(f"You are now a {self.player.char_class_name}.")
+
+        print("Choose a class:")
+        for i, c in enumerate(classes, start=1):
             print(f"  {i}. {c.get('name', c.get('id', f'class-{i}'))}")
             desc = c.get("description")
             if desc:
@@ -129,37 +148,27 @@ class TextAdventureGame:
         print(f"You are now a {getattr(self.player, 'char_class_name', 'Adventurer')}.")
 
     def _build_player(self, class_id: str) -> Player:
-        class_data = self.class_catalog.get(class_id, {})
-        base = class_data.get("base_stats", {})
+        char_class = self.class_catalog.get(class_id)
+        if char_class is None:
+            raise ValueError(f"Unknown class: {class_id}")
+
+        base = char_class.base_stats
         hp = int(base.get("hp", 30))
         atk = int(base.get("attack", 5))
         defense = int(base.get("defense", 1))
         ap = int(base.get("ap", 20))
         mana = int(base.get("mana", 0))
 
-        from game.models import CharacterClass
-
-        char_class = CharacterClass(
-            id=class_data.get("id", class_id),
-            name=class_data.get("name", class_id),
-            description=class_data.get("description", ""),
-            base_stats=dict(base),
-            starting_items=[],
-            level_unlocks={int(k): list(v) for k, v in (class_data.get("level_unlocks", {}) or {}).items()},
-            choice_unlocks={int(k): [list(g) for g in v] for k, v in (class_data.get("choice_unlocks", {}) or {}).items()},
-        )
-
         player = Player(name="Hero", max_hp=hp, attack=atk, defense=defense, total_ap=ap, max_mana=mana, mana=mana)
         player.current_hp = hp
         player.current_ap = ap
         player.char_class = char_class
-        player.unlocked_commands = set(class_data.get("level_unlocks", {}).get("1", []))
-        setattr(player, "char_class_name", class_data.get("name", class_id))
+        player.unlocked_commands = set(char_class.level_unlocks.get(1, []))
+        setattr(player, "char_class_name", char_class.name)
         setattr(player, "gold", 0)
         setattr(player, "relics", [])
 
-        # Add starting items
-        for item_id in class_data.get("starting_items", []):
+        for item_id in char_class.starting_items:
             if item_id in self.item_catalog:
                 player.inventory.append(self.item_catalog[item_id])
 
