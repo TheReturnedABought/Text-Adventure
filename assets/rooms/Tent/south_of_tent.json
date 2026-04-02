@@ -1,0 +1,18 @@
+{
+  "id": "south_of_tent",
+  "name": "South of Tent",
+  "description": "An open field south of the tent. Tall grass sways gently. The tent's back wall is visible but has no entrance.",
+  "material": "earth",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 12,
+  "ambient": ["Insects buzz in the grass."],
+  "exits": {
+    "east": "east_of_tent",
+    "west": "west_of_tent"
+  },
+  "line_of_sight": ["east_of_tent", "west_of_tent"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

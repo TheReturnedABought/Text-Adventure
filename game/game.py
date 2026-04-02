@@ -18,7 +18,7 @@ from game.window import window
 class GameState(Enum):
     EXPLORING = auto()
     COMBAT = auto()
-    LEVEL_UP = auto()    # paused waiting for player to choose unlock
+    LEVEL_UP = auto()
     GAME_OVER = auto()
     WIN = auto()
 
@@ -56,13 +56,14 @@ class TextAdventureGame:
         self._build_subsystems()
 
     def _load_assets(self) -> None:
-        """Load JSON assets directly as a robust fallback."""
-        def _load_folder(folder: str) -> dict[str, dict]:
+        """Load JSON assets recursively from subfolders."""
+
+        def _load_folder(folder_name: str) -> dict[str, dict]:
             data: dict[str, dict] = {}
-            base = self.ASSETS_ROOT / folder
+            base = self.ASSETS_ROOT / folder_name
             if not base.exists():
                 return data
-            for path in sorted(base.glob("*.json")):
+            for path in sorted(base.rglob("*.json")):
                 if path.name.startswith("_"):
                     continue
                 obj = json.loads(path.read_text(encoding="utf-8"))
@@ -75,7 +76,7 @@ class TextAdventureGame:
         self.class_catalog = self.loader.load_all_classes()
         self._rooms_raw = _load_folder("rooms")
 
-        # best-effort registry load; ignore while commands module is scaffolded
+        # best-effort registry load
         cmd_file = self.ASSETS_ROOT / "commands" / "commands.json"
         if cmd_file.exists():
             try:
@@ -83,22 +84,50 @@ class TextAdventureGame:
             except Exception:
                 pass
 
-        # determine start room
+        # determine start room from raw rooms (fallback, but world map will override later)
         starts = [rid for rid, r in self._rooms_raw.items() if r.get("is_start")]
         self._room_id = starts[0] if starts else (next(iter(self._rooms_raw), None))
 
     def _build_subsystems(self) -> None:
-        """Construct parser/controller objects when possible."""
+        """Construct parser and world map from loaded assets."""
         try:
             self.parser = CommandParser(self.registry)
-        except Exception:
+        except Exception as e:
+            print(f"Warning: Could not create parser: {e}")
             self.parser = None
 
-        # Build full world map using enemy templates
+        # Build world map using enemy templates if available
         if self.enemy_templates and self.parser:
-            self.world = self.loader.build_world_map(self.enemy_templates)
-        else:
-            self.world = None
+            try:
+                self.world = self.loader.build_world_map(self.enemy_templates)
+            except Exception as e:
+                print(f"Warning: Could not build world map from templates: {e}")
+                self.world = None
+
+        # Fallback: create a world from raw rooms if the above failed
+        if self.world is None and self._rooms_raw:
+            from game.world import WorldMap, Room, Material
+            self.world = WorldMap()
+            for room_id, room_data in self._rooms_raw.items():
+                material = Material(room_data.get("material", "stone"))
+                room = Room(
+                    id=room_id,
+                    name=room_data.get("name", room_id),
+                    description=room_data.get("description", ""),
+                    material=material,
+                    is_outdoor=room_data.get("is_outdoor", False),
+                    light_level=room_data.get("light_level", 10),
+                    exits=room_data.get("exits", {}),
+                    line_of_sight=room_data.get("line_of_sight", []),
+                    ambient=room_data.get("ambient", ""),
+                    is_start=room_data.get("is_start", False),
+                )
+                self.world.add_room(room)
+            if self.world.start_room_id:
+                self.world.current_room_id = self.world.start_room_id
+            else:
+                # fallback to first room
+                self.world.current_room_id = next(iter(self._rooms_raw.keys()), None)
 
         self.exploration = None
         self.combat = None
@@ -110,6 +139,7 @@ class TextAdventureGame:
 
         print("Choose a class:")
         for i, c in enumerate(classes, start=1):
+            # FIX: c is a CharacterClass object, not a dict
             print(f"  {i}. {c.name}")
             if c.description:
                 print(f"     {c.description}")
@@ -126,26 +156,6 @@ class TextAdventureGame:
 
         self.player = self._build_player(selected.id)
         print(f"You are now a {self.player.char_class_name}.")
-
-        print("Choose a class:")
-        for i, c in enumerate(classes, start=1):
-            print(f"  {i}. {c.get('name', c.get('id', f'class-{i}'))}")
-            desc = c.get("description")
-            if desc:
-                print(f"     {desc}")
-
-        selected = classes[0]
-        while True:
-            raw = input("Class number > ").strip()
-            if not raw:
-                break
-            if raw.isdigit() and 1 <= int(raw) <= len(classes):
-                selected = classes[int(raw) - 1]
-                break
-            print("Invalid choice. Enter a number from the list.")
-
-        self.player = self._build_player(selected.get("id", "adventurer"))
-        print(f"You are now a {getattr(self.player, 'char_class_name', 'Adventurer')}.")
 
     def _build_player(self, class_id: str) -> Player:
         char_class = self.class_catalog.get(class_id)

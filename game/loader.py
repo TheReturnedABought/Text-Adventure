@@ -4,6 +4,13 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+# FIX: add optional jsonschema validation (if installed)
+try:
+    import jsonschema
+    HAS_JSONSCHEMA = True
+except ImportError:
+    HAS_JSONSCHEMA = False
+
 from game.commands import CommandRegistry
 from game.entities import Enemy
 from game.models import Ability, CharacterClass, EnemyIntent, EquippableItem, IntentType, LootEntry
@@ -16,9 +23,34 @@ if TYPE_CHECKING:
 class AssetLoader:
     def __init__(self, assets_root: str | Path) -> None:
         self.assets_root = Path(assets_root)
+        # FIX: asset cache
+        self._item_cache: dict[str, EquippableItem] = {}
+        self._enemy_template_cache: dict[str, dict] = {}
+        self._class_cache: dict[str, CharacterClass] = {}
+        self._room_cache: dict[str, Room] = {}
 
+    # ── Validation helpers (using jsonschema) ─────────────────────────────────
+    def _validate_against_schema(self, data: dict, schema_path: Path) -> list[str]:
+        if not HAS_JSONSCHEMA:
+            return []  # skip validation if not installed
+        if not schema_path.exists():
+            return []
+        try:
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            jsonschema.validate(data, schema)
+            return []
+        except jsonschema.ValidationError as e:
+            return [str(e)]
+
+    # ── Room loading (with enemy_spawns fix) ─────────────────────────────────
     def load_room(self, path: Path) -> "Room":
         data = self._read_json(path)
+        # Validate against schema if available
+        schema_path = self.assets_root / "rooms" / "_schema.json"
+        errors = self._validate_against_schema(data, schema_path)
+        if errors:
+            print(f"Warning: Room {path} validation errors: {errors}")
+
         material = Material(data.get("material", "stone")) if str(data.get("material", "stone")) in {m.value for m in Material} else Material.STONE
         room = Room(
             id=data.get("id", path.stem),
@@ -31,21 +63,25 @@ class AssetLoader:
             line_of_sight=list(data.get("line_of_sight", [])),
             ambient=data.get("ambient", ""),
             is_start=bool(data.get("is_start", False)),
+            # FIX: store enemy_spawns
+            enemy_spawns=list(data.get("enemy_spawns", [])),
         )
         for obj_data in data.get("objects", []):
             obj = self.load_world_object(obj_data)
             room.objects[obj.id] = obj
         room.items_on_ground = list(data.get("items_on_ground", []))
-        room.enemy_spawns = list(data.get("enemy_spawns", []))
         return room
 
     def load_all_rooms(self) -> dict[str, "Room"]:
+        if self._room_cache:
+            return self._room_cache
         rooms = {}
         for path in self._glob_json("rooms"):
             if path.name.startswith("_"):
                 continue
             room = self.load_room(path)
             rooms[room.id] = room
+        self._room_cache = rooms
         return rooms
 
     def load_world_object(self, data: dict) -> "WorldObject":
@@ -69,8 +105,14 @@ class AssetLoader:
         obj.items_inside = list(data.get("items_inside", []))
         return obj
 
+    # ── Item loading with cache ──────────────────────────────────────────────
     def load_item(self, path: Path) -> "EquippableItem":
         data = self._read_json(path)
+        schema_path = self.assets_root / "items" / "_schema.json"
+        errors = self._validate_against_schema(data, schema_path)
+        if errors:
+            print(f"Warning: Item {path} validation errors: {errors}")
+
         abilities = [self.load_ability(a) for a in data.get("abilities", [])]
         return EquippableItem(
             id=data.get("id", path.stem),
@@ -88,7 +130,16 @@ class AssetLoader:
         )
 
     def load_all_items(self) -> dict[str, "EquippableItem"]:
-        return {item.id: item for item in (self.load_item(p) for p in self._glob_json("items") if not p.name.startswith("_"))}
+        if self._item_cache:
+            return self._item_cache
+        items = {}
+        for path in self._glob_json("items"):
+            if path.name.startswith("_"):
+                continue
+            item = self.load_item(path)
+            items[item.id] = item
+        self._item_cache = items
+        return items
 
     def load_ability(self, data: dict) -> "Ability":
         return Ability(
@@ -113,23 +164,30 @@ class AssetLoader:
             entries = [data]
         return {entry.get("id", entry.get("name", "ability")): entry for entry in entries}
 
+    # ── Enemy loading ────────────────────────────────────────────────────────
     def load_enemy_template(self, path: Path) -> dict:
-        return self._read_json(path)
+        data = self._read_json(path)
+        schema_path = self.assets_root / "enemies" / "_schema.json"
+        errors = self._validate_against_schema(data, schema_path)
+        if errors:
+            print(f"Warning: Enemy {path} validation errors: {errors}")
+        return data
 
     def load_all_enemy_templates(self) -> dict[str, dict]:
+        if self._enemy_template_cache:
+            return self._enemy_template_cache
         out = {}
         for p in self._glob_json("enemies"):
             if p.name.startswith("_"):
                 continue
             d = self.load_enemy_template(p)
             out[d.get("id", p.stem)] = d
+        self._enemy_template_cache = out
         return out
 
-    def instantiate_enemy(self, template_id: str,
-                          templates: dict[str, dict]) -> "Enemy":
+    def instantiate_enemy(self, template_id: str, templates: dict[str, dict]) -> "Enemy":
         t = templates[template_id]
         intents = []
-        # FIX: use "intent_pool" instead of "intents"
         for i in t.get("intent_pool", []):
             intent_type = IntentType[str(i.get("intent_type", "ATTACK")).upper()] if str(i.get("intent_type", "ATTACK")).upper() in IntentType.__members__ else IntentType.ATTACK
             intents.append(EnemyIntent(
@@ -163,8 +221,7 @@ class AssetLoader:
             fear_zones=set(t.get("fear_zones", [])),
         )
 
-    def instantiate_enemies_for_room(self, spawn_list: list[dict],
-                                     templates: dict[str, dict]) -> list["Enemy"]:
+    def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict]) -> list["Enemy"]:
         enemies: list[Enemy] = []
         for spawn in spawn_list:
             tid = spawn.get("template_id")
@@ -176,8 +233,14 @@ class AssetLoader:
                 enemies.append(enemy)
         return enemies
 
+    # ── Class loading ────────────────────────────────────────────────────────
     def load_class(self, path: Path) -> "CharacterClass":
         data = self._read_json(path)
+        schema_path = self.assets_root / "classes" / "_schema.json"
+        errors = self._validate_against_schema(data, schema_path)
+        if errors:
+            print(f"Warning: Class {path} validation errors: {errors}")
+
         level_unlocks = {int(k): list(v) for k, v in (data.get("level_unlocks", {}) or {}).items()}
         choice_unlocks = {int(k): [list(g) for g in v] for k, v in (data.get("choice_unlocks", {}) or {}).items()}
         return CharacterClass(
@@ -191,24 +254,37 @@ class AssetLoader:
         )
 
     def load_all_classes(self) -> dict[str, "CharacterClass"]:
-        return {c.id: c for c in (self.load_class(p) for p in self._glob_json("classes") if not p.name.startswith("_"))}
+        if self._class_cache:
+            return self._class_cache
+        classes = {}
+        for p in self._glob_json("classes"):
+            if p.name.startswith("_"):
+                continue
+            c = self.load_class(p)
+            classes[c.id] = c
+        self._class_cache = classes
+        return classes
 
+    # ── Commands ─────────────────────────────────────────────────────────────
     def load_commands_into(self, registry: "CommandRegistry") -> None:
         path = self.assets_root / "commands" / "commands.json"
         if path.exists():
             registry.load_from_dict(self._read_json(path))
 
+    # ── World building (FIX: use enemy_spawns) ───────────────────────────────
     def build_world_map(self, enemy_templates: dict[str, dict]) -> "WorldMap":
         rooms = self.load_all_rooms()
         world = WorldMap()
         for room in rooms.values():
-            for enemy in self.instantiate_enemies_for_room(getattr(room, "enemy_spawns", []), enemy_templates):
+            # FIX: use room.enemy_spawns to add enemies
+            for enemy in self.instantiate_enemies_for_room(room.enemy_spawns, enemy_templates):
                 room.add_enemy(enemy)
             world.add_room(room)
         if world.start_room_id:
             world.current_room_id = world.start_room_id
         return world
 
+    # ── Validation methods (kept for compatibility) ──────────────────────────
     def validate_room(self, data: dict) -> list[str]:
         errs = []
         for key in ("id", "name", "description"):
@@ -254,6 +330,7 @@ class AssetLoader:
                     out[str(p)] = errs
         return out
 
+    # ── Internal helpers ─────────────────────────────────────────────────────
     def _read_json(self, path: Path) -> dict:
         try:
             return json.loads(path.read_text(encoding="utf-8"))
@@ -261,10 +338,25 @@ class AssetLoader:
             raise ValueError(f"Failed to parse JSON at {path}: {exc}") from exc
 
     def _glob_json(self, subfolder: str) -> list[Path]:
-        return sorted((self.assets_root / subfolder).glob("*.json"))
+        """Recursively find all .json files under assets/subfolder."""
+        base = self.assets_root / subfolder
+        if not base.exists():
+            return []
+        return list(base.rglob("*.json"))
 
-    def _resolve_item_refs(self, item_ids: list[str],
-                           item_catalog: dict[str, "EquippableItem"]) -> list["EquippableItem"]:
+    def load_all_rooms(self) -> dict[str, "Room"]:
+        if self._room_cache:
+            return self._room_cache
+        rooms = {}
+        for path in self._glob_json("rooms"):
+            if path.name.startswith("_"):
+                continue
+            room = self.load_room(path)
+            rooms[room.id] = room
+        self._room_cache = rooms
+        return rooms
+
+    def _resolve_item_refs(self, item_ids: list[str], item_catalog: dict[str, "EquippableItem"]) -> list["EquippableItem"]:
         items = []
         for iid in item_ids:
             if iid not in item_catalog:

@@ -1,0 +1,18 @@
+{
+  "id": "west_of_tent",
+  "name": "West of Tent",
+  "description": "A rocky patch west of the tent. A few large stones lie scattered around.",
+  "material": "stone",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 11,
+  "ambient": ["The stones are cool to the touch."],
+  "exits": {
+    "north": "north_of_tent",
+    "south": "south_of_tent"
+  },
+  "line_of_sight": ["north_of_tent", "south_of_tent"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

@@ -36,6 +36,8 @@ def test_registry():
             valid_contexts=[CommandContext.COMBAT],
             modifiers_allowed=[],
             tags=["melee", "single-target"],
+            base_ap_cost=6,          # FIXED: added base AP cost
+            base_mp_cost=0,
         )
     )
     registry.register_command(
@@ -45,6 +47,8 @@ def test_registry():
             description="Gain block",
             base_dice="1d6+2",
             valid_contexts=[CommandContext.COMBAT],
+            base_ap_cost=5,          # FIXED
+            base_mp_cost=0,
         )
     )
     registry.register_command(
@@ -53,6 +57,8 @@ def test_registry():
             aliases=["run"],
             description="Attempt to flee",
             valid_contexts=[CommandContext.COMBAT],
+            base_ap_cost=8,          # FIXED
+            base_mp_cost=0,
         )
     )
     return registry
@@ -159,7 +165,6 @@ def run_simulation(player, enemies, registry, iterations=100, verbose=False, max
         damage_dealt = 0
         ap_used = 0
         outcome = CombatOutcome.ONGOING
-        force_draw = False
 
         while outcome == CombatOutcome.ONGOING and round_count < max_rounds:
             round_count += 1
@@ -177,6 +182,10 @@ def run_simulation(player, enemies, registry, iterations=100, verbose=False, max
                 target_name = random.choice([e.name for e in alive])
                 raw = f"attack {target_name}"
             result = combat.player_input(raw)
+            # Safety check – should never be None, but guard against it
+            if result is None:
+                outcome = CombatOutcome.PLAYER_FLED
+                break
             outcome = result.outcome
             ap_used += result.ap_spent
             if "hit" in " ".join(result.lines).lower():
@@ -230,14 +239,14 @@ def test_combat_vs_two_goblins(test_player, goblin, test_registry):
 
 
 def test_combat_ap_cost_calculation(test_player, test_registry):
-    """Verify that AP cost is based on raw command length."""
+    """Verify that AP cost is based on command's base_ap_cost minus reductions."""
     parser = CommandParser(test_registry)
-    # "attack" has 6 letters → AP cost 6
+    # "attack" has base_ap_cost=6, no reductions → AP cost 6
     parsed = parser.parse("attack", test_player, CommandContext.COMBAT)
     assert parsed.ap_cost == 6, f"Expected 6 AP, got {parsed.ap_cost}"
-    # "attack goblin" has 13 letters → AP cost 13
+    # "attack goblin" – same base cost, modifiers? none, still 6
     parsed = parser.parse("attack goblin", test_player, CommandContext.COMBAT)
-    assert parsed.ap_cost == 13, f"Expected 13 AP, got {parsed.ap_cost}"
+    assert parsed.ap_cost == 6, f"Expected 6 AP, got {parsed.ap_cost}"
 
 
 def test_mp_cost_calculation(test_player, test_registry):
@@ -249,7 +258,8 @@ def test_mp_cost_calculation(test_player, test_registry):
             aliases=[],
             description="Magic spell",
             costs_mp=True,
-            mp_cost_override=3,      # fixed cost = 3 MP
+            mp_cost_override=3,
+            base_mp_cost=3,
             valid_contexts=[CommandContext.COMBAT],
         )
     )
@@ -334,15 +344,15 @@ if __name__ == "__main__":
         print("Loaded commands from assets.")
     except Exception:
         print("Using minimal command registry.")
-        # Register minimal commands
+        # Register minimal commands with base AP costs
         registry.register_command(
-            CommandDefinition(name="attack", aliases=["hit"], description="Attack", base_dice="1d6+2", valid_contexts=[CommandContext.COMBAT])
+            CommandDefinition(name="attack", aliases=["hit"], description="Attack", base_dice="1d6+2", valid_contexts=[CommandContext.COMBAT], base_ap_cost=6)
         )
         registry.register_command(
-            CommandDefinition(name="block", aliases=[], description="Block", base_dice="1d6+2", valid_contexts=[CommandContext.COMBAT])
+            CommandDefinition(name="block", aliases=[], description="Block", base_dice="1d6+2", valid_contexts=[CommandContext.COMBAT], base_ap_cost=5)
         )
         registry.register_command(
-            CommandDefinition(name="flee", aliases=[], description="Flee", valid_contexts=[CommandContext.COMBAT])
+            CommandDefinition(name="flee", aliases=[], description="Flee", valid_contexts=[CommandContext.COMBAT], base_ap_cost=8)
         )
 
     player = Player(name="Hero", max_hp=50, attack=8, defense=3, total_ap=24, max_mana=10, mana=10)

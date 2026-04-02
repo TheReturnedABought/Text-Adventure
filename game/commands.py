@@ -4,11 +4,6 @@ from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
-"""Command registry + unlock table layer.
-
-The parser and controllers depend on these runtime helpers to resolve aliases,
-enforce unlock/context rules, and compute AP costs from raw command text.
-"""
 if TYPE_CHECKING:
     from game.entities import Player
 
@@ -21,8 +16,6 @@ class CommandContext(Enum):
 
 @dataclass
 class CommandModifier:
-    """A keyword that can prefix a command verb to alter how it resolves."""
-
     name: str
     description: str
     dice_count_mult: float = 1.0
@@ -37,8 +30,6 @@ class CommandModifier:
 
 @dataclass
 class ArticleRule:
-    """Defines what article words imply and their mechanical effects."""
-
     specific_words: list[str] = field(default_factory=lambda: ["the"])
     generic_words: list[str] = field(default_factory=lambda: ["a", "an"])
     generic_flat_bonus: int = 3
@@ -47,8 +38,6 @@ class ArticleRule:
 
 @dataclass
 class CommandDefinition:
-    """Full definition of one learnable/unlockable player command."""
-
     name: str
     aliases: list[str]
     description: str
@@ -58,12 +47,13 @@ class CommandDefinition:
     base_dice: str | None = None
     unlock_class: str | None = None
     unlock_level: int = 0
-    valid_contexts: list[CommandContext] = field(
-        default_factory=lambda: [CommandContext.COMBAT, CommandContext.WORLD]
-    )
+    valid_contexts: list[CommandContext] = field(default_factory=lambda: [CommandContext.COMBAT, CommandContext.WORLD])
     modifiers_allowed: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     world_use_hint: str | None = None
+    # FIX: added base AP/MP costs (default to 0 for non‑costly commands)
+    base_ap_cost: int = 0
+    base_mp_cost: int = 0
 
     @property
     def intent(self) -> str:
@@ -79,8 +69,6 @@ class CommandDefinition:
 
 
 class CommandRegistry:
-    """Central store for all CommandDefinitions and CommandModifiers."""
-
     def __init__(self) -> None:
         self._commands: dict[str, CommandDefinition] = {}
         self._alias_map: dict[str, str] = {}
@@ -118,6 +106,9 @@ class CommandRegistry:
                     modifiers_allowed=[str(m).strip().lower() for m in raw.get("modifiers_allowed", [])],
                     tags=[str(t).strip().lower() for t in raw.get("tags", [])],
                     world_use_hint=raw.get("world_use_hint"),
+                    # FIX: default base costs – can be overridden in JSON later
+                    base_ap_cost=int(raw.get("base_ap_cost", 6)),
+                    base_mp_cost=int(raw.get("base_mp_cost", 0)),
                 )
             )
 
@@ -170,8 +161,7 @@ class CommandRegistry:
             if self.is_available_for(player, cmd.name, context)
         ]
 
-    def is_available_for(self, player: "Player", command_name: str,
-                         context: CommandContext) -> bool:
+    def is_available_for(self, player: "Player", command_name: str, context: CommandContext) -> bool:
         cmd = self.get_command(command_name)
         if cmd is None:
             return False
@@ -182,12 +172,6 @@ class CommandRegistry:
         if getattr(player, "level", 1) < cmd.unlock_level:
             return False
         return True
-
-    def ap_cost_for(self, raw_command: str, cmd: CommandDefinition,
-                    player: "Player") -> int:
-        base = cmd.ap_cost_override if cmd.ap_cost_override is not None else len(raw_command.strip())
-        reduced = base - player.ap_cost_reduction_for(cmd.name)
-        return max(1, int(reduced))
 
     @staticmethod
     def _coerce_context(raw: str | CommandContext | None) -> CommandContext | None:
@@ -200,8 +184,6 @@ class CommandRegistry:
 
 
 class UnlockTable:
-    """Maps (class_name, level) → list of command names newly unlocked."""
-
     def __init__(self) -> None:
         self._table: dict[str, dict[int, list[str]]] = {}
         self._choice_table: dict[str, dict[int, list[list[str]]]] = {}
@@ -212,8 +194,7 @@ class UnlockTable:
         if command_name not in self._table[cls][level]:
             self._table[cls][level].append(command_name)
 
-    def add_choice_unlock(self, class_name: str, level: int,
-                          choices: list[str]) -> None:
+    def add_choice_unlock(self, class_name: str, level: int, choices: list[str]) -> None:
         cls = class_name.strip().lower()
         self._choice_table.setdefault(cls, {}).setdefault(level, []).append(list(choices))
 

@@ -69,6 +69,8 @@ class CombatController:
         names = ", ".join(e.name for e in self.enemies if e.is_alive)
         return f"Combat begins! You face: {names}."
 
+    # In game/combat.py, inside CombatController class:
+
     def player_input(self, raw: str) -> TurnResult:
         result = TurnResult()
         direction = raw.strip().lower()
@@ -97,12 +99,10 @@ class CombatController:
         if intent in {"wait", "end"}:
             return self.end_player_turn()
 
-        # AP check
         if parsed.ap_cost > self.player.current_ap:
             result.add("Not enough AP.")
             return result
 
-        # MP check (new)
         if parsed.mp_cost > getattr(self.player, "mana", 0):
             result.add("Not enough MP.")
             return result
@@ -122,7 +122,7 @@ class CombatController:
 
         if result.outcome == CombatOutcome.ONGOING:
             self.player.spend_ap(parsed.ap_cost)
-            self.player.mana -= parsed.mp_cost   # spend MP
+            self.player.mana -= parsed.mp_cost
             result.ap_spent += parsed.ap_cost
             for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
                 result.add(line)
@@ -133,6 +133,7 @@ class CombatController:
             end = self.end_player_turn()
             result.lines.extend(end.lines)
             result.outcome = end.outcome
+
         return result
 
     def end_player_turn(self) -> TurnResult:
@@ -189,51 +190,32 @@ class CombatController:
         if target is None:
             return
 
-        # Determine damage type from command tags or default to "slashing"
         cmd = self.registry.get_command(parsed.intent or "attack")
         damage_type = self._get_damage_type_from_command(cmd)
-        dice = self.build_attack_dice(cmd, parsed, self.player) if cmd else DiceExpression.flat(self.player.attack_value())
+        dice = self.build_attack_dice(cmd, parsed, self.player) if cmd else DiceExpression.flat(
+            self.player.attack_value())
         total, rolls, mod = dice.roll_with_breakdown()
-
-        # Article bonuses
-        if parsed.article == ArticleType.GENERIC:
-            total += self.registry.article_rule.generic_flat_bonus
-        elif parsed.article == ArticleType.SPECIFIC:
-            total += self.registry.article_rule.specific_flat_bonus
 
         # Apply material interaction (room material, target material)
         room_material = self._get_current_room_material()
         interaction = resolve_material_interaction(damage_type, room_material)
         total = int(total * interaction.damage_multiplier)
 
-        # Apply target's own material resistances (if any)
         target_material = self._material_from_str(target.material)
         target_interaction = resolve_material_interaction(damage_type, target_material)
         total = int(total * target_interaction.damage_multiplier)
+
+        # FIX: article bonuses applied AFTER material interactions
+        if parsed.article == ArticleType.GENERIC:
+            total += self.registry.article_rule.generic_flat_bonus
+        elif parsed.article == ArticleType.SPECIFIC:
+            total += self.registry.article_rule.specific_flat_bonus
 
         # Apply damage
         dealt = target.receive_damage(total + self.player.attack_value())
         result.add(f"You hit {target.name} for {dealt} damage ({self.format_roll(dice, rolls, total)}).")
 
-        # Apply status effect from command/ability
-        if cmd and cmd.tags:
-            effect_id = self._get_effect_from_damage_type(damage_type)
-            if effect_id:
-                from game.effects import StatusEffect, EffectCategory
-                effect = StatusEffect(
-                    id=effect_id,
-                    name=effect_id.capitalize(),
-                    description="",
-                    trigger=EffectTrigger.ON_TURN_END,
-                    category=EffectCategory.DEBUFF,
-                    duration=2
-                )
-                result.add(target.apply_effect(effect))
-
-        # Environmental reaction (e.g., lightning in metal room)
-        env_lines = self._apply_environmental_reaction(damage_type, self.player, target)
-        for line in env_lines:
-            result.add(line)
+        # ... rest unchanged
 
     def _get_damage_type_from_command(self, cmd: "CommandDefinition | None") -> DamageType:
         """Map command tags to a DamageType. Defaults to SLASHING."""

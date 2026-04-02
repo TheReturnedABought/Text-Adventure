@@ -1,0 +1,17 @@
+{
+  "id": "tent_interieur",
+  "name": "Tent Interior",
+  "description": "The inside of a worn canvas tent. A single lantern flickers on a small wooden crate. The walls are patched in several places.",
+  "material": "cloth",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 6,
+  "ambient": ["The canvas rustles softly in the wind."],
+  "exits": {
+    "north": "north_of_tent"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

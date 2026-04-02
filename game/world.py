@@ -72,16 +72,75 @@ class MaterialProperties:
         return lookup.get(material, cls(material.value))
 
 
+# FIX: Complete material interactions for all damage types (based on your matrix)
 MATERIAL_INTERACTIONS: dict[DamageType, dict[Material, MaterialInteraction]] = {
     DamageType.FIRE: {
         Material.WOOD: MaterialInteraction("ignites", damage_multiplier=1.25, applies_status="burning"),
         Material.METAL: MaterialInteraction("heats", damage_multiplier=1.0),
-        Material.WATER: MaterialInteraction("is extinguished", damage_multiplier=0.2),
-        Material.GLASS: MaterialInteraction("cracks from thermal stress", damage_multiplier=1.15),
-        Material.ICE: MaterialInteraction("melts rapidly", damage_multiplier=1.5),
+        Material.WATER: MaterialInteraction("extinguished", damage_multiplier=0.2),
+        Material.GLASS: MaterialInteraction("cracks from heat", damage_multiplier=1.15),
+        Material.ICE: MaterialInteraction("melts", damage_multiplier=1.5),
         Material.FLESH: MaterialInteraction("burns", damage_multiplier=1.2, applies_status="burning"),
-        Material.CLOTH: MaterialInteraction("ignites quickly", damage_multiplier=1.3, applies_status="burning"),
+        Material.CLOTH: MaterialInteraction("ignites", damage_multiplier=1.3, applies_status="burning"),
         Material.EARTH: MaterialInteraction("scorches", damage_multiplier=0.9),
+    },
+    DamageType.LIGHTNING: {
+        Material.METAL: MaterialInteraction("conducts", damage_multiplier=1.2, spreads=True),
+        Material.WATER: MaterialInteraction("conducts", damage_multiplier=1.2, spreads=True),
+        Material.FLESH: MaterialInteraction("shocks", damage_multiplier=1.1, applies_status="shocked"),
+    },
+    DamageType.COLD: {
+        Material.WOOD: MaterialInteraction("brittle", damage_multiplier=1.1),
+        Material.METAL: MaterialInteraction("brittle", damage_multiplier=1.1),
+        Material.WATER: MaterialInteraction("freezes", damage_multiplier=0.8),
+        Material.ICE: MaterialInteraction("reinforces", damage_multiplier=0.5),
+        Material.FLESH: MaterialInteraction("slows", damage_multiplier=0.9, applies_status="slowed"),
+    },
+    DamageType.FLOOD: {
+        Material.WOOD: MaterialInteraction("floats", damage_multiplier=0.8),
+        Material.WATER: MaterialInteraction("no effect", damage_multiplier=0.0),
+        Material.FLESH: MaterialInteraction("pushes", damage_multiplier=0.5),
+    },
+    DamageType.SLASHING: {
+        Material.WOOD: MaterialInteraction("cuts", damage_multiplier=1.1),
+        Material.GLASS: MaterialInteraction("shatters", damage_multiplier=1.5),
+        Material.FLESH: MaterialInteraction("lacerates", damage_multiplier=1.2, applies_status="bleeding"),
+        Material.CLOTH: MaterialInteraction("tears", damage_multiplier=1.2),
+    },
+    DamageType.BLUDGEONING: {
+        Material.WOOD: MaterialInteraction("cracks", damage_multiplier=1.2),
+        Material.GLASS: MaterialInteraction("shatters", damage_multiplier=1.5),
+        Material.FLESH: MaterialInteraction("bruises", damage_multiplier=1.1),
+    },
+    DamageType.PIERCING: {
+        Material.WOOD: MaterialInteraction("penetrates", damage_multiplier=1.1),
+        Material.GLASS: MaterialInteraction("shatters", damage_multiplier=1.5),
+        Material.FLESH: MaterialInteraction("impales", damage_multiplier=1.2),
+    },
+    DamageType.ACID: {
+        Material.WOOD: MaterialInteraction("corrodes", damage_multiplier=1.3, applies_status="corroding"),
+        Material.METAL: MaterialInteraction("corrodes", damage_multiplier=1.3, applies_status="corroding"),
+        Material.FLESH: MaterialInteraction("dissolves", damage_multiplier=1.4, applies_status="acid_burn"),
+    },
+    DamageType.POISON: {
+        Material.WATER: MaterialInteraction("contaminates", damage_multiplier=0.5, applies_status="poisoned"),
+        Material.FLESH: MaterialInteraction("poisons", damage_multiplier=1.0, applies_status="poisoned"),
+    },
+    DamageType.NECROTIC: {
+        Material.WOOD: MaterialInteraction("decays", damage_multiplier=1.2),
+        Material.FLESH: MaterialInteraction("rots", damage_multiplier=1.2, applies_status="decaying"),
+    },
+    DamageType.RADIANT: {
+        Material.WOOD: MaterialInteraction("purifies", damage_multiplier=1.0),
+        Material.FLESH: MaterialInteraction("burns", damage_multiplier=1.2, applies_status="radiant_burn"),
+    },
+    DamageType.SONIC: {
+        Material.GLASS: MaterialInteraction("shatters", damage_multiplier=1.5),
+        Material.METAL: MaterialInteraction("resonates", damage_multiplier=1.1, spreads=True),
+    },
+    DamageType.FORCE: {
+        Material.GLASS: MaterialInteraction("shatters", damage_multiplier=1.5),
+        Material.WOOD: MaterialInteraction("splinters", damage_multiplier=1.2),
     },
 }
 
@@ -128,8 +187,7 @@ class WorldObject:
             return False, "Your class cannot do that."
         return True, ""
 
-    def interact(self, command_name: str, player: "Player",
-                 room: "Room") -> tuple[str, list["WorldObject"]]:
+    def interact(self, command_name: str, player: "Player", room: "Room") -> tuple[str, list["WorldObject"]]:
         if command_name == "open" and self.is_locked:
             return f"The {self.name} is locked.", []
         if command_name == "unlock":
@@ -200,7 +258,8 @@ class Room:
     ambient: str = ""
     is_start: bool = False
     visited: bool = False
-    enemy_spawns: list[dict] = field(default_factory=list)  # <--- FIX: added enemy_spawns field
+    # FIX: enemy_spawns is now properly stored
+    enemy_spawns: list[dict] = field(default_factory=list)
 
     def get_description(self, verbose: bool = False) -> str:
         lines = [self.name]
@@ -269,8 +328,8 @@ class Room:
             return True
         return False
 
-    def apply_elemental_effect(self, effect_type: str,
-                               source: "Enemy | Player") -> list[str]:
+    # FIX: complete elemental effect handler for all damage types
+    def apply_elemental_effect(self, effect_type: str, source: "Enemy | Player") -> list[str]:
         damage_type = coerce_damage_type(effect_type)
         if damage_type is None:
             return [f"The {effect_type} energy dissipates without a clear material reaction."]
@@ -281,6 +340,19 @@ class Room:
             lines.append("The effect spreads through the environment.")
         if interaction.applies_status:
             lines.append(f"Nearby entities risk becoming {interaction.applies_status}.")
+            # Actually apply status to all entities in room (including player?)
+            for entity in self.living_enemies() + ([source] if isinstance(source, Player) else []):
+                if hasattr(entity, "apply_effect"):
+                    from game.effects import StatusEffect, EffectTrigger, EffectCategory
+                    effect = StatusEffect(
+                        id=interaction.applies_status,
+                        name=interaction.applies_status.capitalize(),
+                        description="",
+                        trigger=EffectTrigger.ON_TURN_END,
+                        category=EffectCategory.DEBUFF,
+                        duration=2
+                    )
+                    lines.append(entity.apply_effect(effect))
         if self.objects:
             sample = ", ".join(obj.name for obj in list(self.objects.values())[:3])
             lines.append(f"Objects react: {sample}.")
@@ -308,7 +380,7 @@ class WorldMap:
         self.rooms: dict[str, Room] = {}
         self.current_room_id: str | None = None
         self.start_room_id: str | None = None
-        self.moves : int | None = 0
+        self.moves: int | None = 0
 
     def add_room(self, room: Room) -> None:
         self.rooms[room.id] = room
@@ -391,8 +463,7 @@ class WorldMap:
             return []
         return [rid for rid in room.exits.values() if rid in self.rooms]
 
-    def shortest_path(self, start_id: str, goal_id: str,
-                      blocked: set[str] | None = None) -> list[str]:
+    def shortest_path(self, start_id: str, goal_id: str, blocked: set[str] | None = None) -> list[str]:
         if start_id == goal_id:
             return [start_id]
         blocked = blocked or set()
@@ -421,7 +492,6 @@ class WorldMap:
         return max(0, len(path) - 1) if path else 999999
 
     def step_enemy_outside_combat(self, player_room_id: str | None) -> list[str]:
-        """Advance one world-AI step for enemies not in active combat."""
         lines: list[str] = []
         for room in self.rooms.values():
             for enemy in list(room.living_enemies()):

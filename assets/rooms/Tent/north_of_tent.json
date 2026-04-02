@@ -1,0 +1,19 @@
+{
+  "id": "north_of_tent",
+  "name": "North of Tent",
+  "description": "A patch of grass directly north of the tent. The ground is slightly muddy, with boot prints leading to the tent flap.",
+  "material": "earth",
+  "is_outdoor": true,
+  "is_start": true,
+  "light_level": 12,
+  "ambient": ["A cool breeze blows from the north."],
+  "exits": {
+    "south": "tent_interieur",
+    "east": "east_of_tent",
+    "west": "west_of_tent"
+  },
+  "line_of_sight": ["east_of_tent", "west_of_tent"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

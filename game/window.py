@@ -22,7 +22,7 @@ import builtins
 from collections import deque
 
 # ---------- ANSI helpers ----------
-_ANSI_RE = re.compile(r'\x1b\[[0-9;]*[mABCDEFGHJKSThlsurp]')
+_ANSI_RE = re.compile(r'\x1b\[([0-9;]*)m')
 _ANSI_SPLIT = re.compile(r'(\x1b\[[0-9;]*m)')
 
 def _strip(s: str) -> str:
@@ -530,6 +530,12 @@ class GameWindow:
                     elif code == '2':
                         if 'dim' not in active:
                             active.append('dim')
+                    elif code == '3':
+                        if 'italic' not in active:
+                            active.append('italic')
+                    elif code == '4':
+                        if 'underline' not in active:
+                            active.append('underline')
                     elif code in _CODE_TAG:
                         active = [t for t in active if t not in _CODE_TAG.values()]
                         active.append(_CODE_TAG[code])
