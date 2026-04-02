@@ -255,10 +255,10 @@ class Room:
     enemies: list["Enemy"] = field(default_factory=list)
     objects: dict[str, WorldObject] = field(default_factory=dict)
     items_on_ground: list[str] = field(default_factory=list)
-    ambient: str = ""
+    ambient: list = field(default_factory=list)
     is_start: bool = False
     visited: bool = False
-    # FIX: enemy_spawns is now properly stored
+
     enemy_spawns: list[dict] = field(default_factory=list)
 
     def get_description(self, verbose: bool = False) -> str:
@@ -266,7 +266,7 @@ class Room:
         if verbose or not self.visited:
             lines.append(self.description)
             if self.ambient:
-                lines.append(self.ambient)
+                lines.extend(self.ambient)
             obj = self.objects_summary()
             if obj:
                 lines.append(obj)
