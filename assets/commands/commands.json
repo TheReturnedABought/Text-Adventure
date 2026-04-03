@@ -6,7 +6,7 @@
     "specific_words":   ["the"],
     "generic_words":    ["a", "an"],
     "generic_flat_bonus":   3,
-    "specific_flat_bonus":  0
+    "specific_flat_bonus":  3
   },
 
   "modifiers": [
@@ -28,7 +28,7 @@
       "dice_count_mult": 0.5,
       "dice_sides_mult": 1.0,
       "flat_bonus": 0,
-      "ap_cost_flat": -3,
+      "ap_cost_flat": 0,
       "unlock_class": null,
       "unlock_level": 3,
       "valid_contexts": ["combat"],
@@ -49,6 +49,8 @@
       "modifiers_allowed": ["heavy", "quick"],
       "tags": ["melee", "single-target"],
       "world_use_hint": null,
+      "base_ap_cost": 6,
+      "unlocked_by_default": false
     },
     {
       "name": "block",
@@ -61,7 +63,9 @@
       "valid_contexts": ["combat"],
       "modifiers_allowed": ["heavy"],
       "tags": ["defense", "block"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 5,
+      "unlocked_by_default": false
     },
     {
       "name": "smash",
@@ -74,7 +78,9 @@
       "valid_contexts": ["combat", "world"],
       "modifiers_allowed": ["heavy"],
       "tags": ["melee", "single-target", "destructive"],
-      "world_use_hint": "You smash the __."
+      "world_use_hint": "You smash the __.",
+      "base_ap_cost": 5,
+      "unlocked_by_default": false
     },
     {
       "name": "equip",
@@ -87,7 +93,9 @@
       "valid_contexts": ["combat", "world"],
       "modifiers_allowed": [],
       "tags": ["inventory"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 5,
+      "unlocked_by_default": true
     },
     {
       "name": "unequip",
@@ -100,7 +108,9 @@
       "valid_contexts": ["combat", "world"],
       "modifiers_allowed": [],
       "tags": ["inventory"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 7,
+      "unlocked_by_default": true
     },
     {
       "name": "ability",
@@ -113,7 +123,9 @@
       "valid_contexts": ["combat"],
       "modifiers_allowed": [],
       "tags": ["ability"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 7,
+      "unlocked_by_default": false
     },
     {
       "name": "flee",
@@ -126,7 +138,9 @@
       "valid_contexts": ["combat"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "go",
@@ -139,7 +153,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["movement"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 2,
+      "unlocked_by_default": true
     },
     {
       "name": "look",
@@ -152,7 +168,9 @@
       "valid_contexts": ["world", "combat"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "open",
@@ -165,7 +183,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["interaction"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "close",
@@ -178,7 +198,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["interaction"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "move",
@@ -191,7 +213,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["interaction"],
-      "world_use_hint": "You move the __."
+      "world_use_hint": "You move the __.",
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "take",
@@ -204,7 +228,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["inventory"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "drop",
@@ -217,7 +243,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["inventory"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
     },
     {
       "name": "put",
@@ -230,7 +258,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["inventory"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 3,
+      "unlocked_by_default": true
     },
     {
       "name": "unlock",
@@ -243,7 +273,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["interaction"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 5,
+      "unlocked_by_default": true
     },
     {
       "name": "inventory",
@@ -256,20 +288,9 @@
       "valid_contexts": ["world", "combat"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
-    },
-    {
-      "name": "status",
-      "aliases": ["stats", "hp", "ap"],
-      "description": "Display your current HP, AP, block, and active effects.",
-      "ap_cost_override": 0,
-      "base_dice": null,
-      "unlock_class": null,
-      "unlock_level": 0,
-      "valid_contexts": ["world", "combat"],
-      "modifiers_allowed": [],
-      "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 0,
+      "unlocked_by_default": true
     },
     {
       "name": "help",
@@ -282,7 +303,9 @@
       "valid_contexts": ["world", "combat"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 0,
+      "unlocked_by_default": true
     },
     {
       "name": "save",
@@ -295,7 +318,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 0,
+      "unlocked_by_default": true
     },
     {
       "name": "load",
@@ -308,7 +333,9 @@
       "valid_contexts": ["world"],
       "modifiers_allowed": [],
       "tags": ["meta"],
-      "world_use_hint": null
+      "world_use_hint": null,
+      "base_ap_cost": 0,
+      "unlocked_by_default": true
     }
   ]
 }
