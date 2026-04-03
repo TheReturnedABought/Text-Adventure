@@ -1,3 +1,8 @@
+"""Dice expression parser and roller.
+
+Supports expressions like '3d6+2', '1d4-1', flat numbers.
+"""
+
 from __future__ import annotations
 
 import math
@@ -5,21 +10,12 @@ import random
 import re
 from dataclasses import dataclass
 
-"""Dice utilities used by combat and world resolution.
-
-This implementation keeps the scaffold contract:
-- parse() accepts canonical dice strings and flat integers
-- roll helpers return both totals and roll breakdowns
-- scaling helpers return new immutable DiceExpression values
-"""
-
 _DICE_RE = re.compile(r"^\s*(\d+)d(\d+)([+-]\d+)?\s*$", re.I)
 
 
 @dataclass
 class DiceExpression:
-    """Represents a parsed dice expression like '3d6+2' or '1d4-1'."""
-
+    """Represents a parsed dice expression."""
     count: int
     sides: int
     modifier: int = 0
@@ -34,15 +30,11 @@ class DiceExpression:
         if not m:
             raise ValueError(f"Malformed dice expression: {expression!r}")
         count, sides, mod = m.groups()
-        c = int(count)
-        s = int(sides)
-        if c < 0 or s <= 0:
-            raise ValueError(f"Invalid dice values in expression: {expression!r}")
-        return cls(count=c, sides=s, modifier=int(mod or 0), raw=text)
+        return cls(count=int(count), sides=int(sides), modifier=int(mod or 0), raw=text)
 
     @classmethod
     def flat(cls, value: int) -> "DiceExpression":
-        return cls(count=0, sides=1, modifier=int(value), raw=str(value))
+        return cls(count=0, sides=1, modifier=value, raw=str(value))
 
     def roll(self) -> int:
         total, _, _ = self.roll_with_breakdown()
@@ -74,9 +66,6 @@ class DiceExpression:
 
     def add_modifier(self, bonus: int) -> "DiceExpression":
         return DiceExpression(self.count, self.sides, self.modifier + int(bonus), self.raw)
-
-    def with_extra_die(self, count: int = 1) -> "DiceExpression":
-        return DiceExpression(self.count + max(0, int(count)), self.sides, self.modifier, self.raw)
 
     def __str__(self) -> str:
         if self.count <= 0:

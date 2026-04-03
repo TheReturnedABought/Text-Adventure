@@ -1,14 +1,11 @@
+"""Status effect system – buffs, debuffs, and timed effects."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING
 
-"""Status effect framework.
-
-Concrete effect subclasses can override hook methods; the registry/manager keep
-creation and lifecycle behavior centralized and predictable.
-"""
 if TYPE_CHECKING:
     from game.entities import Entity
 
@@ -31,6 +28,7 @@ class EffectCategory(Enum):
 
 @dataclass
 class StatusEffect:
+    """A temporary effect attached to an entity."""
     id: str
     name: str
     description: str
@@ -68,7 +66,8 @@ class StatusEffect:
 
 
 class EffectRegistry:
-    def __init__(self) -> None:
+    """Factory for creating status effects by ID."""
+    def __init__(self):
         self._classes: dict[str, type[StatusEffect]] = {}
 
     def register(self, effect_class: type[StatusEffect]) -> None:
@@ -81,8 +80,7 @@ class EffectRegistry:
                source_ability: str | None = None) -> StatusEffect:
         if effect_id not in self._classes:
             raise KeyError(f"Unknown effect: {effect_id}")
-        cls = self._classes[effect_id]
-        return cls(stacks=stacks, duration=duration, source_ability=source_ability)
+        return self._classes[effect_id](stacks=stacks, duration=duration, source_ability=source_ability)
 
     def is_known(self, effect_id: str) -> bool:
         return effect_id in self._classes
@@ -92,12 +90,13 @@ class EffectRegistry:
 
 
 class EffectManager:
-    def __init__(self) -> None:
+    """Manages active effects on an entity."""
+    def __init__(self):
         self._active: dict[str, StatusEffect] = {}
 
     def apply(self, effect: StatusEffect, target: "Entity") -> str:
         existing = self._active.get(effect.id)
-        if existing is not None:
+        if existing:
             line = existing.add_stacks(effect.stacks, target)
             if effect.duration > existing.duration:
                 existing.duration = effect.duration
@@ -107,9 +106,7 @@ class EffectManager:
 
     def remove(self, effect_id: str, target: "Entity") -> str:
         effect = self._active.pop(effect_id, None)
-        if effect is None:
-            return ""
-        return effect.on_expire(target)
+        return effect.on_expire(target) if effect else ""
 
     def has(self, effect_id: str) -> bool:
         return effect_id in self._active
@@ -124,8 +121,8 @@ class EffectManager:
         return [e for e in self._active.values() if e.category == category]
 
     def tick_all(self, trigger: EffectTrigger, target: "Entity") -> list[str]:
-        lines: list[str] = []
-        to_remove: list[str] = []
+        lines = []
+        to_remove = []
         for effect in list(self._active.values()):
             if effect.trigger == trigger:
                 text = effect.on_tick(target)
@@ -157,8 +154,5 @@ class EffectManager:
     def summary(self) -> str:
         if not self._active:
             return "none"
-        parts = []
-        for e in self._active.values():
-            dur = "∞" if e.duration < 0 else str(e.duration)
-            parts.append(f"{e.name} x{e.stacks}({dur})")
+        parts = [f"{e.name} x{e.stacks}({e.duration})" for e in self._active.values()]
         return ", ".join(parts)
