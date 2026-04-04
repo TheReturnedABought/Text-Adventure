@@ -18,8 +18,7 @@ import re
 import sys
 import threading
 import tkinter as tk
-import builtins
-from collections import deque
+from collections import deque, Counter
 
 # ---------- ANSI helpers ----------
 _ANSI_RE = re.compile(r'\x1b\[([0-9;]*)m')
@@ -29,7 +28,6 @@ def _strip(s: str) -> str:
     return _ANSI_RE.sub('', str(s))
 
 def _stacked_items(items):
-    from collections import Counter
     counts = Counter(items)
     return [f"{count} x {name}" if count > 1 else name for name, count in counts.items()]
 
@@ -90,47 +88,48 @@ class UIState:
 
 # ---------- GameWindow ----------
 class GameWindow:
-    # Palette
-    C_BG      = '#0d0d1a'
-    C_PANEL   = '#11111f'
-    C_BORDER  = '#2a2a50'
-    C_SEP     = '#1e1e38'
-    C_TEXT    = '#d0d0e8'
-    C_DIM     = '#505068'
-    C_HP      = '#e05555'
-    C_AP      = '#5588ee'
-    C_MP      = '#9955ee'
-    C_GOLD    = '#ddaa33'
-    C_RED     = '#e05555'
-    C_GREEN   = '#55cc88'
-    C_YELLOW  = '#ddcc44'
-    C_BLUE    = '#5588ee'
-    C_CYAN    = '#44cccc'
-    C_MAGENTA = '#cc55cc'
-    C_GRAY    = '#505068'
-    C_WHITE   = '#d0d0e8'
+    # Black palette
+    C_BG      = '#000000'
+    C_PANEL   = '#111111'
+    C_BORDER  = '#222222'
+    C_SEP     = '#1a1a1a'
+    C_TEXT    = '#cccccc'
+    C_DIM     = '#666666'
+    C_HP      = '#ff4444'
+    C_AP      = '#4488ff'
+    C_MP      = '#aa44ff'
+    C_GOLD    = '#ffcc44'
+    C_RED     = '#ff4444'
+    C_GREEN   = '#44ff88'
+    C_YELLOW  = '#ffcc44'
+    C_BLUE    = '#4488ff'
+    C_CYAN    = '#44ffcc'
+    C_MAGENTA = '#ff44cc'
+    C_GRAY    = '#666666'
+    C_WHITE   = '#cccccc'
 
-    FONT    = ('Courier New', 10)
-    FONT_B  = ('Courier New', 10, 'bold')
-    FONT_SM = ('Courier New', 9)
+    FONT    = ('Courier New', 9)
+    FONT_B  = ('Courier New', 9, 'bold')
+    FONT_SM = ('Courier New', 8)
+    FONT_XS = ('Courier New', 7)  # Smaller for status
 
     _TAGS = {
-        'bold':    {'font': ('Courier New', 10, 'bold')},
-        'dim':     {'foreground': '#505068'},
-        'red':     {'foreground': '#e05555'},
-        'green':   {'foreground': '#55cc88'},
-        'yellow':  {'foreground': '#ddcc44'},
-        'blue':    {'foreground': '#5588ee'},
-        'magenta': {'foreground': '#cc55cc'},
-        'cyan':    {'foreground': '#44cccc'},
-        'gray':    {'foreground': '#505068'},
-        'white':   {'foreground': '#d0d0e8'},
-        'input':   {'foreground': '#ddcc44'},
-        'ap':      {'foreground': '#5588ee'},
-        'mp':      {'foreground': '#9955ee'},
-        'hp_good': {'foreground': '#55cc88'},
-        'hp_mid':  {'foreground': '#ddcc44'},
-        'hp_low':  {'foreground': '#e05555'},
+        'bold':    {'font': ('Courier New', 9, 'bold')},
+        'dim':     {'foreground': '#666666'},
+        'red':     {'foreground': '#ff4444'},
+        'green':   {'foreground': '#44ff88'},
+        'yellow':  {'foreground': '#ffcc44'},
+        'blue':    {'foreground': '#4488ff'},
+        'magenta': {'foreground': '#ff44cc'},
+        'cyan':    {'foreground': '#44ffcc'},
+        'gray':    {'foreground': '#666666'},
+        'white':   {'foreground': '#cccccc'},
+        'input':   {'foreground': '#ffcc44'},
+        'ap':      {'foreground': '#4488ff'},
+        'mp':      {'foreground': '#aa44ff'},
+        'hp_good': {'foreground': '#44ff88'},
+        'hp_mid':  {'foreground': '#ffcc44'},
+        'hp_low':  {'foreground': '#ff4444'},
     }
 
     def __init__(self):
@@ -140,8 +139,6 @@ class GameWindow:
         self._input_result = ''
         self._active = False
         self._root = None
-        self._orig_print = builtins.print
-        self._orig_input = builtins.input
 
     # Public API ------------------------------------------------------------
     def set_explore(self, player, room):
@@ -158,42 +155,43 @@ class GameWindow:
         self._schedule(self._refresh_art)
         self._schedule(self._refresh_hud)
 
-    def log(self, text: str):
+    # NEW: Three helper functions for each panel
+    def update_art(self, content: str):
+        """Manually replace content in the ART panel."""
+        self._schedule(lambda c=content: self._set_art_text(c))
+
+    def update_status(self):
+        """Refresh current player/room status."""
+        self._schedule(self._refresh_hud)
+
+    def append_log(self, text: str):
+        """Append text to the LOG panel."""
         for line in str(text).splitlines():
             self._log.append(line)
             self._schedule(lambda ln=line: self._append_log(ln))
 
-    def enable(self):
-        if self._active:
-            return
-        self._active = True
-        gw = self
-
-        def _print(*args, sep=' ', end='\n', file=None, flush=False):
-            if file not in (None, sys.stdout):
-                gw._orig_print(*args, sep=sep, end=end, file=file, flush=flush)
-                return
-            text = sep.join(str(a) for a in args)
-            for line in text.splitlines():
-                gw._log.append(line)
-                gw._schedule(lambda ln=line: gw._append_log(ln))
-
-        def _input(prompt=''):
-            return gw._handle_input(str(prompt))
-
-        builtins.print = _print
-        builtins.input = _input
-
-    def disable(self):
-        if not self._active:
-            return
-        self._active = False
-        builtins.print = self._orig_print
-        builtins.input = self._orig_input
+    def get_input(self, prompt: str = '') -> str:
+        """Get input from the INPUT panel."""
+        self._input_event.clear()
+        self._input_result = ''
+        clean = _strip(prompt).strip()
+        self._schedule(lambda: self._prompt_lbl.configure(
+            text=f'  {clean}  ' if clean else '>  '))
+        self._schedule(self._refresh_hud)
+        self._input_event.wait()
+        result = self._input_result
+        if result.strip():
+            self._schedule(lambda r=result: (
+                self._log_txt.configure(state='normal'),
+                self._log_txt.insert('end', f'  › {r}\n', ('input',)),
+                self._log_txt.configure(state='disabled'),
+                self._log_txt.see('end'),
+            ))
+        return result
 
     def run_game(self, game_fn):
+        """Run the game loop."""
         self._build_window()
-        self.enable()
         t = threading.Thread(target=self._game_thread, args=(game_fn,), daemon=True)
         t.start()
         self._root.mainloop()
@@ -250,10 +248,10 @@ class GameWindow:
         frm.grid(row=1, column=0, sticky='nsew', padx=4, pady=(2, 0))
         frm.columnconfigure(0, weight=1)
 
-        self._hdr(frm, 0, 'STATUS', self.C_GREEN)
+        self._status_hdr = self._hdr(frm, 0, 'STATUS', self.C_GREEN)
 
         self._hud_canvas = tk.Canvas(
-            frm, height=68, bg=self.C_PANEL,
+            frm, height=60, bg=self.C_PANEL,  # Slightly shorter
             bd=0, relief='flat', highlightthickness=0,
         )
         self._hud_canvas.grid(row=1, column=0, sticky='ew')
@@ -267,7 +265,7 @@ class GameWindow:
         frm.columnconfigure(0, weight=1)
         frm.rowconfigure(1, weight=1)
 
-        self._hdr(frm, 0, 'LOG', self.C_BLUE)
+        self._log_hdr = self._hdr(frm, 0, 'LOG', self.C_BLUE)
 
         self._log_txt = tk.Text(
             frm, bg=self.C_PANEL, fg=self.C_TEXT,
@@ -288,7 +286,7 @@ class GameWindow:
         frm.grid(row=3, column=0, sticky='nsew', padx=4, pady=(2, 4))
         frm.columnconfigure(1, weight=1)
 
-        self._hdr(frm, 0, 'INPUT', self.C_MAGENTA)
+        self._input_hdr = self._hdr(frm, 0, 'INPUT', self.C_MAGENTA)
 
         self._prompt_lbl = tk.Label(
             frm, text='>  ', bg=self.C_PANEL, fg=self.C_GOLD,
@@ -326,6 +324,14 @@ class GameWindow:
             self._draw_explore(t, s)
         t.configure(state='disabled')
 
+    def _set_art_text(self, content: str):
+        """Internal: Set raw art text."""
+        t = self._art_txt
+        t.configure(state='normal')
+        t.delete('1.0', 'end')
+        t.insert('end', content, 'white')
+        t.configure(state='disabled')
+
     # SIDE-BY-SIDE combat ---------------------------------------------------
     def _draw_combat(self, t, s):
         alive = [e for e in s.enemies if e.is_alive and not getattr(e, 'fled', False)]
@@ -334,19 +340,15 @@ class GameWindow:
             return
 
         n = len(alive)
-
-        # Estimate column width from widget pixel width
         px_w = max(t.winfo_width(), 480)
-        ch_px = 7          # Courier New 9 ≈ 7px/char
+        ch_px = 6  # Courier New 8 ≈ 6px/char
         total = px_w // ch_px - 4
         gap = 2
         col_w = max(26, (total - gap * (n - 1)) // n)
 
-        # Build all cards as equal-height lists of (text, tag) row lists
         cards = [self._enemy_card_rows(e, s.enemies, col_w) for e in alive]
         height = max(len(c) for c in cards)
 
-        # Pad all cards to same height with blank rows
         for card in cards:
             while len(card) < height:
                 card.append([(' ' * col_w, '')])
@@ -359,7 +361,6 @@ class GameWindow:
                 for text, tag in card[ri]:
                     t.insert('end', text, (tag,) if tag else ())
                     used += len(text)
-                # Pad to col_w
                 pad = max(0, col_w - used)
                 if pad:
                     t.insert('end', ' ' * pad)
@@ -368,10 +369,6 @@ class GameWindow:
             t.insert('end', '\n')
 
     def _enemy_card_rows(self, enemy, all_enemies, col_w):
-        """
-        Returns list of rows. Each row = list of (plain_text, tag) pairs.
-        Total visible characters per row <= col_w.
-        """
         idx = all_enemies.index(enemy) + 1 if enemy in all_enemies else '?'
         hpct = enemy.current_hp / max(enemy.max_hp, 1)
         hcol = 'hp_good' if hpct > 0.5 else ('hp_mid' if hpct > 0.25 else 'hp_low')
@@ -403,11 +400,6 @@ class GameWindow:
             row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')),
             row(txt(f'[{st}]' if st else '', 'yellow')),
         ]
-
-        # Optional ascii art (none by default)
-        for art_line in []:   # replace with enemy-specific art if desired
-            rows.append(row(txt(art_line, 'dim')))
-
         return rows
 
     # Explore art -----------------------------------------------------------
@@ -421,10 +413,6 @@ class GameWindow:
             for ln in desc.splitlines()[:3]:
                 t.insert('end', f'  {ln}\n', 'white')
             t.insert('end', '\n')
-
-        # Optional room art (none by default)
-        # art_str = ROOM_ART.get(room.name, '')
-        # if art_str: ...
 
         alive = [e for e in getattr(room, 'enemies', []) if e.is_alive]
         if alive:
@@ -452,32 +440,33 @@ class GameWindow:
             return
 
         W = max(c.winfo_width(), 700)
-        pad = 10
+        pad = 8
+        y1 = 6
 
-        label_w = 26
-        value_w = 46
-        min_bar = 70
+        label_w = 24
+        value_w = 42
+        min_bar = 65
         min_step = label_w + min_bar + value_w
-        available = max(min_step * 3, W - pad * 2 - 16)
+        available = max(min_step * 3, W - pad * 2 - 12)
         step = available // 3
         bar_w = max(min_bar, step - label_w - value_w)
-        bar_h = 14
-        y1 = 8
+        bar_h = 12
+        font_size = self.FONT_XS  # Smaller font for status
 
         def _bar(x, label, cur, mx, fill_col, txt_col=None):
             txt_col = txt_col or fill_col
             c.create_text(x, y1 + bar_h // 2, text=label,
-                          fill=self.C_DIM, font=self.FONT_SM, anchor='w')
-            bx = x + 26
+                          fill=self.C_DIM, font=font_size, anchor='w')
+            bx = x + 24
             c.create_rectangle(bx, y1, bx + bar_w, y1 + bar_h,
                                fill=self.C_SEP, outline='')
             fw = max(0, int((cur / max(mx, 1)) * bar_w))
             if fw:
                 c.create_rectangle(bx, y1, bx + fw, y1 + bar_h,
                                    fill=fill_col, outline='')
-            c.create_text(bx + bar_w + 4, y1 + bar_h // 2,
+            c.create_text(bx + bar_w + 3, y1 + bar_h // 2,
                           text=f'{cur}/{mx}', fill=txt_col,
-                          font=self.FONT_SM, anchor='w')
+                          font=font_size, anchor='w')
 
         hpct = p.current_hp / max(p.max_hp, 1)
         hfil = self.C_GREEN if hpct > 0.5 else (self.C_YELLOW if hpct > 0.25 else self.C_RED)
@@ -488,23 +477,23 @@ class GameWindow:
 
         c.create_text(W - pad, y1 + bar_h // 2,
                       text=f'Lv{p.level}  XP {p.xp}  Gold {getattr(p, "gold", 0)}',
-                      fill=self.C_GOLD, font=self.FONT_SM, anchor='e')
+                      fill=self.C_GOLD, font=font_size, anchor='e')
 
-        y2 = y1 + bar_h + 8
+        y2 = y1 + bar_h + 6
         st = _strip(_format_statuses(p))
         rls = '  ·  '.join(getattr(p, 'relics', []))
         mid = '  '.join(filter(None, [st, rls]))
         if mid:
-            c.create_text(pad, y2 + 6, text=mid[:130],
-                          fill=self.C_DIM, font=self.FONT_SM, anchor='w')
+            c.create_text(pad, y2 + 5, text=mid[:120],
+                          fill=self.C_DIM, font=font_size, anchor='w')
 
-        y3 = y2 + 18
-        base = "attack(?) heal(?) block(?)"
+        y3 = y2 + 14
+        base = "attack heal block"
         if hasattr(p, 'unlocked_commands') and p.unlocked_commands:
-            cmds = sorted(p.unlocked_commands)[:12]
-            base += '  │  ' + ' '.join(f"{c}(?)" for c in cmds)
-        c.create_text(pad, y3 + 6, text=base[:170],
-                      fill=self.C_DIM, font=self.FONT_SM, anchor='w')
+            cmds = sorted(p.unlocked_commands)[:10]
+            base += '  │  ' + ' '.join(cmds[:8])
+        c.create_text(pad, y3 + 5, text=base[:150],
+                      fill=self.C_DIM, font=font_size, anchor='w')
 
     # LOG -------------------------------------------------------------------
     def _append_log(self, line: str):
@@ -530,12 +519,6 @@ class GameWindow:
                     elif code == '2':
                         if 'dim' not in active:
                             active.append('dim')
-                    elif code == '3':
-                        if 'italic' not in active:
-                            active.append('italic')
-                    elif code == '4':
-                        if 'underline' not in active:
-                            active.append('underline')
                     elif code in _CODE_TAG:
                         active = [t for t in active if t not in _CODE_TAG.values()]
                         active.append(_CODE_TAG[code])
@@ -543,31 +526,6 @@ class GameWindow:
                 widget.insert('end', part, tuple(active) if active else ())
 
     # Input -----------------------------------------------------------------
-    def _handle_input(self, prompt: str) -> str:
-        self._input_event.clear()
-        self._input_result = ''
-        clean = _strip(prompt).strip()
-
-        self._schedule(lambda: self._prompt_lbl.configure(
-            text=f'  {clean}  ' if clean else '>  '))
-
-        _cont = ('press enter', 'continue', 'enter to', 'enter...')
-        if clean.lower() and any(kw in clean.lower() for kw in _cont):
-            self._schedule(lambda: self._append_log(f'  ── {clean} ──'))
-
-        self._schedule(self._refresh_hud)
-        self._input_event.wait()
-        result = self._input_result
-
-        if result.strip():
-            self._schedule(lambda r=result: (
-                self._log_txt.configure(state='normal'),
-                self._log_txt.insert('end', f'  › {r}\n', ('input',)),
-                self._log_txt.configure(state='disabled'),
-                self._log_txt.see('end'),
-            ))
-        return result
-
     def _on_enter(self, _event=None):
         val = self._input_var.get()
         self._input_var.set('')
@@ -587,7 +545,6 @@ class GameWindow:
         except SystemExit:
             pass
         except Exception as exc:
-            # Capture error message immediately to avoid late-binding issue
             err_msg = str(exc)
             self._schedule(lambda msg=err_msg: self._append_log(f'\n  [Error: {msg}]'))
         finally:
