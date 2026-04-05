@@ -1,7 +1,7 @@
 {
   "id": "tent_interieur",
   "name": "Tent Interior",
-  "description": "The inside of a worn canvas tent. A single lantern flickers on a small wooden crate. The walls are patched in several places.",
+  "description": "The inside of a worn canvas tent. A single lantern flickers on a small wooden crate. {{letter_desc}} The walls are patched in several places.",
   "material": "cloth",
   "is_outdoor": false,
   "is_start": false,
@@ -11,7 +11,41 @@
     "north": "north_of_tent"
   },
   "line_of_sight": [],
-  "objects": [],
+  "objects": [
+    {
+      "id": "letter",
+      "name": "letter",
+      "description": "A worn piece of parchment, covered in elegant handwriting.",
+      "description_snippet": "A crumpled letter lies on top of the crate.",
+      "material": "cloth",
+      "is_container": false,
+      "is_moveable": true,
+      "is_locked": false,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "read": "You unfold the creased parchment and read:\n\n\"You've without a doubt arrived at the foot of the castle.\nIt is an ancient stronghold full of wonders.\nYou need to find and bring treasures that you find and deposit them in the cabinet in the tent. For every treasure you manage to collect your reward will increase.\n\nBut wonders attract dangers. Words have power here and wicked words have tainted the land.\nBut I trust that your will and wisdom will overcome the trials.\"",
+        "look": "A worn piece of parchment, covered in elegant handwriting."
+      },
+      "required_commands": {}
+    },
+    {
+      "id": "crate",
+      "name": "crate",
+      "description": "A small wooden crate used as a makeshift table.",
+      "description_snippet": "",
+      "material": "wood",
+      "is_container": true,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "look": "The crate is sturdy, with a few splinters."
+      },
+      "required_commands": {}
+    }
+  ],
   "items_on_ground": [],
   "enemy_spawns": []
 }

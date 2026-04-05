@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+import random
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -169,7 +170,7 @@ class WorldObject:
 class Room:
     id: str
     name: str
-    description: str
+    description: str          # template string with {{object_id_desc}} placeholders
     material: Material = Material.STONE
     is_outdoor: bool = False
     light_level: int = 10
@@ -182,15 +183,21 @@ class Room:
     is_start: bool = False
     visited: bool = False
     enemy_spawns: list[dict] = field(default_factory=list)
+    description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
 
     def get_description(self, verbose: bool = False) -> str:
+        # Substitute all {{object_id_desc}} placeholders
+        desc = self.description
+        for obj_id, snippet in self.description_snippets.items():
+            placeholder = f"{{{{{obj_id}_desc}}}}"   # e.g. {{letter_desc}}
+            desc = desc.replace(placeholder, snippet)
         lines = [self.name]
         if verbose or not self.visited:
-            lines.append(self.description)
-            lines.extend(self.ambient)
-            visible_objects = [o.name for o in self.objects.values() if not o.hidden]
-            if visible_objects:
-                lines.append("Objects: " + ", ".join(visible_objects))
+            lines.append(desc)
+            # Fixed: use random.random() and random.choice() correctly
+            if random.random() > 0.3:
+                chosen = random.choice(self.ambient)  # pick one random string
+                lines.append(chosen)
         living = self.living_enemies()
         if living:
             lines.append("Enemies: " + ", ".join(e.name for e in living))
@@ -209,9 +216,13 @@ class Room:
 
     def find_object(self, name: str) -> WorldObject | None:
         needle = name.lower()
-        for obj in self.objects.values():
+        print(f"[DEBUG] find_object: searching for '{needle}' in {list(self.objects.keys())}")
+        for obj_id, obj in self.objects.items():
+            print(f"[DEBUG]   checking {obj_id}: name='{obj.name}', hidden={obj.hidden}")
             if not obj.hidden and needle in obj.name.lower():
+                print(f"[DEBUG]   MATCH found: {obj_id}")
                 return obj
+        print(f"[DEBUG]   No match found")
         return None
 
     def enemies_visible_from(self, from_room: "Room") -> list["Enemy"]:
@@ -333,7 +344,8 @@ class WorldMap:
                 rid: {
                     "visited": r.visited,
                     "items_on_ground": list(r.items_on_ground),
-                    "objects_hidden": {oid: obj.hidden for oid, obj in r.objects.items()}
+                    "objects_hidden": {oid: obj.hidden for oid, obj in r.objects.items()},
+                    "description_snippets": dict(r.description_snippets)  # persist snippets
                 } for rid, r in self.rooms.items()
             }
         }
@@ -348,3 +360,4 @@ class WorldMap:
                 for oid, hidden in state.get("objects_hidden", {}).items():
                     if oid in room.objects:
                         room.objects[oid].hidden = hidden
+                room.description_snippets.update(state.get("description_snippets", {}))

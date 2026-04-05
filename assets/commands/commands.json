@@ -173,6 +173,21 @@
       "unlocked_by_default": true
     },
     {
+      "name": "read",
+      "aliases": [],
+      "description": "Read a readable object like a letter or sign.",
+      "ap_cost_override": null,
+      "base_dice": null,
+      "unlock_class": null,
+      "unlock_level": 0,
+      "valid_contexts": ["world", "combat"],
+      "modifiers_allowed": [],
+      "tags": ["meta"],
+      "world_use_hint": null,
+      "base_ap_cost": 2,
+      "unlocked_by_default": true
+    },
+    {
       "name": "open",
       "aliases": [],
       "description": "Open a door, chest, or container.",

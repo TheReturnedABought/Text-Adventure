@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
 from game.window import window
-
+from game.models import EquippableItem
 if TYPE_CHECKING:
     from game.entities import Player, Enemy
     from game.models import ParsedCommand, EquippableItem
@@ -77,6 +77,8 @@ class ExplorationController:
             self._resolve_inventory(result)
         elif intent == "help":
             self._resolve_help(result)
+        elif intent == "read":
+            self._resolve_read(parsed, result)
         else:
             result.add("Nothing happens.")
 
@@ -153,21 +155,55 @@ class ExplorationController:
         if not target:
             result.add("Take what?")
             return
+
+        print(f"[DEBUG] _resolve_take: target='{target}'")
+        print(f"[DEBUG] Items on ground: {room.items_on_ground}")
+        print(f"[DEBUG] Objects in room: {list(room.objects.keys())}")
+        for obj_id, obj in room.objects.items():
+            print(f"[DEBUG]   {obj_id}: hidden={obj.hidden}, is_moveable={obj.is_moveable}, name='{obj.name}'")
+
+        # First check items on ground
         matching_id = None
         for item_id in room.items_on_ground:
             if target in item_id.lower():
                 matching_id = item_id
                 break
-        if not matching_id:
-            result.add("No such item on the ground.")
+        if matching_id:
+            item_obj = self.item_catalog.get(matching_id)
+            if not item_obj:
+                result.add(f"Unknown item: {matching_id}")
+                return
+            room.items_on_ground.remove(matching_id)
+            self.player.pick_up(item_obj)
+            result.add(f"Picked up {item_obj.name}.")
             return
-        item_obj = self.item_catalog.get(matching_id)
-        if not item_obj:
-            result.add(f"Unknown item: {matching_id}")
+
+        # Then check moveable objects
+        obj = room.find_object(target)
+        if obj and obj.is_moveable:
+            print(f"[DEBUG] Found moveable object: {obj.id}")
+            # Convert object to a simple misc item
+            item = EquippableItem(
+                id=obj.id,
+                name=obj.name,
+                slot="misc",
+                description=obj.description,
+                material=obj.material.value,
+            )
+            # Remove object from room
+            del room.objects[obj.id]
+            # Add to player inventory
+            self.player.inventory.append(item)
+            result.add(f"Picked up {obj.name}.")
+
+            # Remove the description snippet so the placeholder becomes empty
+            if obj.id in room.description_snippets:
+                room.description_snippets[obj.id] = ""
+                print(f"[DEBUG] Cleared snippet for {obj.id}")
             return
-        room.items_on_ground.remove(matching_id)
-        self.player.pick_up(item_obj)
-        result.add(f"Picked up {item_obj.name}.")
+
+        print(f"[DEBUG] No matching item or moveable object found")
+        result.add("No such item on the ground or moveable object here.")
 
     def _resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_drop()")
@@ -214,3 +250,24 @@ class ExplorationController:
             result.add("No exploration commands available.")
             return
         result.add("Available commands: " + ", ".join(sorted(c.name for c in cmds)))
+
+    def _resolve_read(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        """Read a readable object in the room."""
+        room = self.world.current_room()
+        if not room:
+            result.add("No room loaded.")
+            return
+        target = (parsed.target_name or "").strip().lower()
+        if not target:
+            result.add("Read what?")
+            return
+        obj = room.find_object(target)
+        if not obj:
+            result.add("You don't see that here.")
+            return
+        # Use the object's look interaction (or a dedicated read text)
+        text = obj.on_interact.get("read") or obj.on_interact.get("look")
+        if text:
+            result.add(text)
+        else:
+            result.add(f"You see nothing special on the {obj.name}.")

@@ -28,6 +28,8 @@ class AssetLoader:
     # ----------------------------------------------------------------------
     def load_room(self, path: Path) -> Room:
         data = self._read_json(path)
+        print(f"[DEBUG] Loading room from {path}")
+        print(f"[DEBUG] Objects in JSON: {[obj.get('id') for obj in data.get('objects', [])]}")
         material = Material(data.get("material", "stone"))
         room = Room(
             id=data.get("id", path.stem),
@@ -45,18 +47,26 @@ class AssetLoader:
         for obj_data in data.get("objects", []):
             obj = self._load_world_object(obj_data)
             room.objects[obj.id] = obj
+            print(f"[DEBUG] Added object: {obj.id}, is_moveable={obj.is_moveable}")
+            if "description_snippet" in obj_data:
+                room.description_snippets[obj.id] = obj_data["description_snippet"]
+                print(f"[DEBUG] Set description_snippet for {obj.id}: '{obj_data['description_snippet']}'")
         room.items_on_ground = list(data.get("items_on_ground", []))
+        print(f"[DEBUG] Room objects after load: {list(room.objects.keys())}")
         return room
 
     def load_all_rooms(self) -> dict[str, Room]:
         if self._room_cache:
             return self._room_cache
         rooms = {}
+        print("[DEBUG] load_all_rooms: scanning for JSON files")
         for path in self._glob_json("rooms"):
             if path.name.startswith("_"):
                 continue
+            print(f"[DEBUG] Found room file: {path}")
             room = self.load_room(path)
             rooms[room.id] = room
+            print(f"[DEBUG] Loaded room '{room.id}' with {len(room.objects)} objects")
         self._room_cache = rooms
         return rooms
 
@@ -236,15 +246,17 @@ class AssetLoader:
     # ----------------------------------------------------------------------
     def build_world_map(self, enemy_templates: dict[str, dict]) -> WorldMap:
         rooms = self.load_all_rooms()
+        print(f"[DEBUG] build_world_map: loaded {len(rooms)} rooms")
         world = WorldMap()
         for room in rooms.values():
+            print(
+                f"[DEBUG]   Room {room.id} has {len(room.objects)} objects, snippets: {list(room.description_snippets.keys())}")
             for enemy in self.instantiate_enemies_for_room(room.enemy_spawns, enemy_templates):
                 room.add_enemy(enemy)
             world.add_room(room)
         if world.start_room_id:
             world.current_room_id = world.start_room_id
         return world
-
     # ----------------------------------------------------------------------
     # Validation (optional)
     # ----------------------------------------------------------------------

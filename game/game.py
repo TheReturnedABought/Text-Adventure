@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from enum import Enum, auto
 from pathlib import Path
 from types import SimpleNamespace
@@ -99,13 +100,17 @@ class TextAdventureGame:
             window.append_log(f"Warning: Could not create parser: {e}")
             self.parser = None
 
-        if self.enemy_templates and self.parser:
+        # Always try to build world from asset loader if rooms exist
+        if self._rooms_raw and self.parser:
             try:
+                # Load all rooms properly using the loader's world builder
                 self.world = self.loader.build_world_map(self.enemy_templates)
+                window.append_log(f"[DEBUG] Built world with {len(self.world.rooms)} rooms using asset loader")
             except Exception as e:
-                window.append_log(f"Warning: Could not build world map from templates: {e}")
+                window.append_log(f"Warning: Could not build world map from loader: {e}")
                 self.world = None
 
+        # Fallback: build a minimal world from raw JSON (no objects)
         if self.world is None and self._rooms_raw:
             from game.world import WorldMap, Room, Material
             self.world = WorldMap()
@@ -123,7 +128,9 @@ class TextAdventureGame:
                     ambient=room_data.get("ambient", ""),
                     is_start=room_data.get("is_start", False),
                 )
+                # Note: objects are NOT loaded in fallback – this is why you saw empty objects
                 self.world.add_room(room)
+                window.append_log(f"[DEBUG] Fallback room added: {room_id} (no objects)")
             if self.world.start_room_id:
                 self.world.current_room_id = self.world.start_room_id
             else:
