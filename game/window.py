@@ -16,6 +16,7 @@ GameWindow — standalone Tkinter window, 4 panels.
 
 import re
 import sys
+import traceback
 import threading
 import tkinter as tk
 from collections import deque, Counter
@@ -544,9 +545,17 @@ class GameWindow:
             game_fn()
         except SystemExit:
             pass
-        except Exception as exc:
-            err_msg = str(exc)
-            self._schedule(lambda msg=err_msg: self._append_log(f'\n  [Error: {msg}]'))
+        except Exception:
+            tb_str = traceback.format_exc()           # full traceback for terminal
+            last_frame = traceback.extract_tb(sys.exc_info()[2])[-1]
+            exc = sys.exc_info()[1]
+            short = (
+                f"{type(exc).__name__}: {exc}\n"
+                f"  File: {last_frame.filename}, "
+                f"Line {last_frame.lineno}: {last_frame.line}"
+            )
+            self._schedule(lambda msg=short: self._append_log(f'\n  [Error]\n  {msg}'))
+            print(tb_str, file=sys.stderr)            # full trace to terminal
         finally:
             self._input_result = ''
             self._input_event.set()

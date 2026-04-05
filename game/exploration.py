@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
+from game.window import window
 
 if TYPE_CHECKING:
     from game.entities import Player, Enemy
@@ -33,15 +34,22 @@ class ExplorationController:
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
                  player: "Player", world: "WorldMap",
                  puzzle_flags: dict | None = None,
-                 item_catalog: dict[str, "EquippableItem"] | None = None) -> None:
+                 item_catalog: dict[str, "EquippableItem"] | None = None,
+                 debug: bool = False) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
         self.world = world
         self.puzzle_flags = puzzle_flags or {}
         self.item_catalog = item_catalog or {}
+        self._debug = debug
+
+    def _debug_log(self, msg: str) -> None:
+        if self._debug:
+            print(f"[DEBUG] {msg}")
 
     def player_input(self, raw: str) -> ExplorationResult:
+        self._debug_log(f"player_input({raw})")
         result = ExplorationResult()
         parsed = self.parser.parse(raw, self.player, CommandContext.WORLD)
         if not parsed.valid:
@@ -82,6 +90,7 @@ class ExplorationController:
         return result
 
     def _resolve_go(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_go()")
         direction = (parsed.target_name or "").strip().lower()
         if not direction:
             result.add("Go where?")
@@ -92,6 +101,7 @@ class ExplorationController:
             result.add(self.world.current_room().get_description(verbose=True))
 
     def _resolve_look(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_look()")
         room = self.world.current_room()
         if not room:
             result.add("You are nowhere.")
@@ -111,6 +121,7 @@ class ExplorationController:
         result.add("You don't see that.")
 
     def _resolve_object_command(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_object_command()")
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -133,6 +144,7 @@ class ExplorationController:
             result.add(f"Revealed: {new_obj.name}.")
 
     def _resolve_take(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_take()")
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -158,6 +170,7 @@ class ExplorationController:
         result.add(f"Picked up {item_obj.name}.")
 
     def _resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_drop()")
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -171,6 +184,7 @@ class ExplorationController:
             room.items_on_ground.append(item.id)
 
     def _resolve_equip(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_equip()")
         item_name = parsed.item_name or parsed.target_name
         if not item_name:
             result.add("Equip what?")
@@ -178,6 +192,7 @@ class ExplorationController:
         result.add(self.player.equip(item_name))
 
     def _resolve_unequip(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_unequip()")
         slot = parsed.target_name or ""
         if not slot:
             result.add("Unequip which slot?")
@@ -185,12 +200,15 @@ class ExplorationController:
         result.add(self.player.unequip(slot))
 
     def _resolve_inventory(self, result: ExplorationResult) -> None:
+        self._debug_log("_resolve_inventory()")
         result.add(self.player.inventory_summary())
 
     def _resolve_put(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        self._debug_log("_resolve_put()")
         result.add("Put command not fully implemented yet.")
 
     def _resolve_help(self, result: ExplorationResult) -> None:
+        self._debug_log("_resolve_help()")
         cmds = self.registry.available_for(self.player, CommandContext.WORLD)
         if not cmds:
             result.add("No exploration commands available.")

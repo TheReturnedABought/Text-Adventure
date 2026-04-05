@@ -16,6 +16,7 @@ from game.dice import DiceExpression
 from game.effects import EffectTrigger, EffectCategory
 from game.models import ParsedCommand, ArticleType
 from game.world import DamageType, coerce_damage_type, resolve_material_interaction
+from game.window import window
 
 if TYPE_CHECKING:
     from game.entities import Enemy, Player
@@ -52,7 +53,8 @@ class CombatController:
                  player: "Player", enemies: list["Enemy"],
                  world: "WorldMap | None" = None,
                  player_room_id: str | None = None,
-                 puzzle_flags: dict | None = None) -> None:
+                 puzzle_flags: dict | None = None,
+                 debug: bool = False) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
@@ -63,12 +65,18 @@ class CombatController:
         self.round = 1
         self.combat_zone: set[str] = set()
         self._pending_disambiguation: list[Enemy] | None = None
+        self._debug = debug
         self._refresh_combat_zone()
+
+    def _debug_log(self, msg: str) -> None:
+        if self._debug:
+            print(f"[DEBUG] {msg}")
 
     # ----------------------------------------------------------------------
     # Combat zone management (line of sight)
     # ----------------------------------------------------------------------
     def _refresh_combat_zone(self) -> None:
+        self._debug_log("_refresh_combat_zone()")
         if not self.world:
             self.combat_zone = set()
             return
@@ -91,6 +99,7 @@ class CombatController:
         return not self.combat_zone or room_id in self.combat_zone
 
     def _eligible_targets(self, ranged: bool) -> list["Enemy"]:
+        self._debug_log(f"_eligible_targets(ranged={ranged})")
         living = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
         if ranged or not self.world:
             return living
@@ -101,6 +110,7 @@ class CombatController:
     # Combat flow
     # ----------------------------------------------------------------------
     def start_encounter(self) -> str:
+        self._debug_log("start_encounter()")
         self._refresh_combat_zone()
         for enemy in self.enemies:
             enemy.reset_ap()
@@ -108,6 +118,7 @@ class CombatController:
         return f"Combat begins! You face: {', '.join(e.name for e in self.enemies if e.is_alive)}."
 
     def player_input(self, raw: str) -> TurnResult:
+        self._debug_log(f"player_input({raw})")
         result = TurnResult()
         direction = raw.strip().lower()
         if self._is_combat_movement(direction):
@@ -172,6 +183,7 @@ class CombatController:
         return result
 
     def end_player_turn(self) -> TurnResult:
+        self._debug_log("end_player_turn()")
         result = TurnResult()
         self.player.clear_block()
         for line in self.player.tick_effects(EffectTrigger.ON_TURN_END):
@@ -195,6 +207,7 @@ class CombatController:
         return result
 
     def _enemy_turn(self, enemy: "Enemy") -> TurnResult:
+        self._debug_log(f"_enemy_turn({enemy.name})")
         result = TurnResult()
         enemy.clear_block()
         for intent in list(enemy.active_intents):
@@ -211,6 +224,7 @@ class CombatController:
         return result
 
     def check_outcome(self) -> CombatOutcome:
+        self._debug_log("check_outcome()")
         if not self.player.is_alive:
             return CombatOutcome.PLAYER_DEFEATED
         if not any(e.is_alive for e in self.enemies):
@@ -227,6 +241,7 @@ class CombatController:
         return bool(room and direction in room.exits)
 
     def _handle_combat_movement(self, direction: str, raw: str) -> TurnResult:
+        self._debug_log(f"_handle_combat_movement({direction})")
         result = TurnResult()
         ap_cost = max(1, len(raw.strip()) - self.player.ap_cost_reduction_for(direction))
         if ap_cost > self.player.current_ap:
@@ -243,7 +258,6 @@ class CombatController:
         self._refresh_combat_zone()
         result.add(f"You move {direction} ({ap_cost} AP).")
 
-        # If player left combat zone, end combat (flee)
         if self.player_room_id not in self.combat_zone:
             result.add("You moved out of the combat zone!")
             for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
@@ -262,6 +276,7 @@ class CombatController:
     # Attack resolution (with damage types & material interactions)
     # ----------------------------------------------------------------------
     def _resolve_attack(self, parsed: ParsedCommand, result: TurnResult) -> None:
+        self._debug_log("_resolve_attack()")
         target = self._resolve_target(parsed, result)
         if target is None:
             return
@@ -330,6 +345,7 @@ class CombatController:
     # Other combat actions
     # ----------------------------------------------------------------------
     def _resolve_block(self, parsed: ParsedCommand, result: TurnResult) -> None:
+        self._debug_log("_resolve_block()")
         cmd = self.registry.get_command(parsed.intent or "block")
         dice = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(max(1, self.player.defense_value()))
         dice = self._apply_modifiers_to_dice(dice, parsed.modifiers)
@@ -338,6 +354,7 @@ class CombatController:
         result.add(f"You gain {block} block.")
 
     def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> None:
+        self._debug_log("_resolve_ability()")
         name = (parsed.item_name or parsed.target_name or "").lower()
         for item in self.player.equipped.values():
             for ability in item.abilities:
@@ -356,6 +373,7 @@ class CombatController:
         result.add("No matching ability is equipped.")
 
     def _resolve_equip(self, parsed: ParsedCommand, result: TurnResult) -> None:
+        self._debug_log("_resolve_equip()")
         item_name = parsed.item_name or parsed.target_name
         if not item_name:
             result.add("Equip what?")
@@ -363,6 +381,7 @@ class CombatController:
         result.add(self.player.equip(item_name))
 
     def _resolve_flee(self, parsed: ParsedCommand, result: TurnResult) -> None:
+        self._debug_log("_resolve_flee()")
         if random.random() < 0.5:
             result.add("You successfully flee.")
             result.outcome = CombatOutcome.PLAYER_FLED
@@ -370,12 +389,14 @@ class CombatController:
             result.add("You fail to flee!")
 
     def _resolve_status(self, result: TurnResult) -> None:
+        self._debug_log("_resolve_status()")
         result.add(self.player.status_line())
         for enemy in self.enemies:
             if enemy.is_alive:
                 result.add(enemy.status_line() + f" | Intents: {enemy.intent_display()}")
 
     def _resolve_help(self, result: TurnResult) -> None:
+        self._debug_log("_resolve_help()")
         cmds = self.registry.available_for(self.player, CommandContext.COMBAT)
         if not cmds:
             result.add("No combat commands available.")
@@ -388,6 +409,7 @@ class CombatController:
     # Enemy intent resolution
     # ----------------------------------------------------------------------
     def _resolve_enemy_intent(self, enemy: "Enemy", intent, result: TurnResult) -> None:
+        self._debug_log(f"_resolve_enemy_intent({enemy.name}, {intent.id})")
         kind = getattr(intent.intent_type, "name", "ATTACK")
         if kind == "ATTACK" and not self._enemy_can_hit_player(enemy, intent):
             if self._enemy_step_toward_player(enemy):
@@ -459,6 +481,7 @@ class CombatController:
     # Target selection & disambiguation
     # ----------------------------------------------------------------------
     def _resolve_target(self, parsed: ParsedCommand, result: TurnResult) -> "Enemy | None":
+        self._debug_log("_resolve_target()")
         cmd = self.registry.get_command(parsed.intent or "")
         ranged = bool(cmd and "ranged" in [t.lower() for t in cmd.tags])
         living = self._eligible_targets(ranged=ranged)
@@ -493,6 +516,7 @@ class CombatController:
         return None
 
     def _resolve_disambiguation(self, raw: str, result: TurnResult) -> "Enemy | None":
+        self._debug_log("_resolve_disambiguation()")
         if not self._pending_disambiguation:
             return None
         if not raw.strip().isdigit():
