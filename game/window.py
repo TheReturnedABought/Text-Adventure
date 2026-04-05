@@ -468,10 +468,6 @@ class GameWindow:
                 t.insert('end', '  Objects:  ', 'bold')
                 t.insert('end', ', '.join(visible) + '\n', 'cyan')
 
-        exits = list(room.exits.keys()) if hasattr(room, 'exits') else []
-        t.insert('end', '  Exits:    ', 'bold')
-        t.insert('end', ', '.join(exits) + '\n', 'green')
-
     # STATUS / HUD ----------------------------------------------------------
     def _refresh_hud(self):
         c = self._hud_canvas
