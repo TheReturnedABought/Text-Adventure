@@ -11,7 +11,7 @@ GameWindow — standalone Tkinter window, 4 panels.
 │  Scrolling story / combat output                  │
 ├─ INPUT ───────────────────────────────────────────┤
 │  > _                                              │
-└───────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────┘
 """
 
 import re
@@ -109,10 +109,12 @@ class GameWindow:
     C_GRAY    = '#666666'
     C_WHITE   = '#cccccc'
 
-    FONT    = ('Courier New', 9)
-    FONT_B  = ('Courier New', 9, 'bold')
-    FONT_SM = ('Courier New', 8)
-    FONT_XS = ('Courier New', 7)  # Smaller for status
+    # Fonts: separate sizes for different panels
+    FONT     = ('Courier New', 9)       # input, general
+    FONT_B   = ('Courier New', 9, 'bold')
+    FONT_SM  = ('Courier New', 6)       # ART panel (explore/combat) - smaller
+    FONT_LOG = ('Courier New', 12)      # LOG panel - larger
+    FONT_XS  = ('Courier New', 9)       # STATUS panel
 
     _TAGS = {
         'bold':    {'font': ('Courier New', 9, 'bold')},
@@ -140,6 +142,7 @@ class GameWindow:
         self._input_result = ''
         self._active = False
         self._root = None
+        self._char_width = None   # will be computed lazily
 
     # Public API ------------------------------------------------------------
     def set_explore(self, player, room):
@@ -156,7 +159,6 @@ class GameWindow:
         self._schedule(self._refresh_art)
         self._schedule(self._refresh_hud)
 
-    # NEW: Three helper functions for each panel
     def update_art(self, content: str):
         """Manually replace content in the ART panel."""
         self._schedule(lambda c=content: self._set_art_text(c))
@@ -202,13 +204,22 @@ class GameWindow:
         root = tk.Tk()
         root.title('Text Adventure')
         root.configure(bg=self.C_BG)
-        root.geometry('960x720')
+        # Smaller default geometry, will be overridden by zoomed state
+        root.geometry('800x600')
         root.minsize(720, 540)
         root.protocol('WM_DELETE_WINDOW', self._on_close)
+        # Auto full screen (maximized)
+        try:
+            root.state('zoomed')
+        except tk.TclError:
+            try:
+                root.attributes('-fullscreen', True)
+            except tk.TclError:
+                pass
         self._root = root
 
         root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=0)
+        root.rowconfigure(0, weight=2)
         root.rowconfigure(1, weight=0)
         root.rowconfigure(2, weight=1)
         root.rowconfigure(3, weight=0)
@@ -234,7 +245,7 @@ class GameWindow:
         self._art_hdr = self._hdr(frm, 0, 'EXPLORE', self.C_CYAN)
 
         self._art_txt = tk.Text(
-            frm, height=12, bg=self.C_PANEL, fg=self.C_TEXT,
+            frm, height=49, bg=self.C_PANEL, fg=self.C_TEXT,
             font=self.FONT_SM, bd=0, relief='flat',
             state='disabled', wrap='none', cursor='arrow',
         )
@@ -251,8 +262,9 @@ class GameWindow:
 
         self._status_hdr = self._hdr(frm, 0, 'STATUS', self.C_GREEN)
 
+        # Increased height to accommodate larger status font
         self._hud_canvas = tk.Canvas(
-            frm, height=60, bg=self.C_PANEL,  # Slightly shorter
+            frm, height=80, bg=self.C_PANEL,
             bd=0, relief='flat', highlightthickness=0,
         )
         self._hud_canvas.grid(row=1, column=0, sticky='ew')
@@ -268,9 +280,10 @@ class GameWindow:
 
         self._log_hdr = self._hdr(frm, 0, 'LOG', self.C_BLUE)
 
+        # Use the larger FONT_LOG for the log text widget
         self._log_txt = tk.Text(
             frm, bg=self.C_PANEL, fg=self.C_TEXT,
-            font=self.FONT_SM, bd=0, relief='flat',
+            font=self.FONT_LOG, bd=0, relief='flat',
             state='disabled', wrap='word',
         )
         sb = tk.Scrollbar(frm, command=self._log_txt.yview,
@@ -334,6 +347,16 @@ class GameWindow:
         t.configure(state='disabled')
 
     # SIDE-BY-SIDE combat ---------------------------------------------------
+    def _get_char_width(self):
+        """Return pixel width of a monospace character in the art Text widget."""
+        if self._char_width is None:
+            import tkinter.font as tkfont
+            font_obj = tkfont.Font(font=self._art_txt['font'])
+            self._char_width = font_obj.measure('0')
+            if self._char_width <= 0:
+                self._char_width = 5   # fallback
+        return self._char_width
+
     def _draw_combat(self, t, s):
         alive = [e for e in s.enemies if e.is_alive and not getattr(e, 'fled', False)]
         if not alive:
@@ -341,8 +364,8 @@ class GameWindow:
             return
 
         n = len(alive)
+        ch_px = self._get_char_width()
         px_w = max(t.winfo_width(), 480)
-        ch_px = 6  # Courier New 8 ≈ 6px/char
         total = px_w // ch_px - 4
         gap = 2
         col_w = max(26, (total - gap * (n - 1)) // n)
@@ -404,16 +427,33 @@ class GameWindow:
         return rows
 
     # Explore art -----------------------------------------------------------
+    def _load_room_art(self, room_id: str) -> str | None:
+        from pathlib import Path
+        base = Path("assets") / "rooms"
+        for path in base.rglob(f"{room_id}.txt"):
+            if path.is_file():
+                try:
+                    return path.read_text(encoding="utf-8").rstrip("\n")
+                except OSError:
+                    pass
+        return None
+
     def _draw_explore(self, t, s):
         room = s.room
         if not room:
             return
 
-        desc = str(getattr(room, "description", "")).strip()
-        if desc:
-            for ln in desc.splitlines()[:3]:
-                t.insert('end', f'  {ln}\n', 'white')
+        art = self._load_room_art(room.id)
+        if art:
+            for line in art.splitlines():
+                t.insert('end', f'  {line}\n', 'white')
             t.insert('end', '\n')
+        else:
+            desc = str(getattr(room, "description", "")).strip()
+            if desc:
+                for ln in desc.splitlines()[:3]:
+                    t.insert('end', f'  {ln}\n', 'white')
+                t.insert('end', '\n')
 
         alive = [e for e in getattr(room, 'enemies', []) if e.is_alive]
         if alive:
@@ -442,7 +482,8 @@ class GameWindow:
 
         W = max(c.winfo_width(), 700)
         pad = 8
-        y1 = 6
+        y1 = 8
+        bar_h = 14
 
         label_w = 24
         value_w = 42
@@ -451,8 +492,7 @@ class GameWindow:
         available = max(min_step * 3, W - pad * 2 - 12)
         step = available // 3
         bar_w = max(min_bar, step - label_w - value_w)
-        bar_h = 12
-        font_size = self.FONT_XS  # Smaller font for status
+        font_size = self.FONT_XS
 
         def _bar(x, label, cur, mx, fill_col, txt_col=None):
             txt_col = txt_col or fill_col
@@ -480,7 +520,7 @@ class GameWindow:
                       text=f'Lv{p.level}  XP {p.xp}  Gold {getattr(p, "gold", 0)}',
                       fill=self.C_GOLD, font=font_size, anchor='e')
 
-        y2 = y1 + bar_h + 6
+        y2 = y1 + bar_h + 8
         st = _strip(_format_statuses(p))
         rls = '  ·  '.join(getattr(p, 'relics', []))
         mid = '  '.join(filter(None, [st, rls]))
@@ -488,7 +528,7 @@ class GameWindow:
             c.create_text(pad, y2 + 5, text=mid[:120],
                           fill=self.C_DIM, font=font_size, anchor='w')
 
-        y3 = y2 + 14
+        y3 = y2 + 16
         base = "attack heal block"
         if hasattr(p, 'unlocked_commands') and p.unlocked_commands:
             cmds = sorted(p.unlocked_commands)[:10]
@@ -546,7 +586,7 @@ class GameWindow:
         except SystemExit:
             pass
         except Exception:
-            tb_str = traceback.format_exc()           # full traceback for terminal
+            tb_str = traceback.format_exc()
             last_frame = traceback.extract_tb(sys.exc_info()[2])[-1]
             exc = sys.exc_info()[1]
             short = (
@@ -555,7 +595,7 @@ class GameWindow:
                 f"Line {last_frame.lineno}: {last_frame.line}"
             )
             self._schedule(lambda msg=short: self._append_log(f'\n  [Error]\n  {msg}'))
-            print(tb_str, file=sys.stderr)            # full trace to terminal
+            print(tb_str, file=sys.stderr)
         finally:
             self._input_result = ''
             self._input_event.set()

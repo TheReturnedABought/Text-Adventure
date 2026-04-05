@@ -157,6 +157,10 @@ class CommandRegistry:
     def get_modifier(self, word: str) -> CommandModifier | None:
         return self._modifiers.get(word.lower())
 
+    def all_modifier_names(self) -> list[str]:
+        """Return a list of all registered modifier names."""
+        return list(self._modifiers.keys())
+
     def all_commands(self) -> list[CommandDefinition]:
         return list(self._commands.values())
 

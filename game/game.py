@@ -155,7 +155,6 @@ class TextAdventureGame:
             window.append_log("Invalid choice. Enter a number from the list.")
 
         self.player = self._build_player(selected.id)
-        window.append_log(f"You are now a {self.player.char_class_name}.")
 
     def _build_player(self, class_id: str) -> Player:
         char_class = self.class_catalog.get(class_id)
@@ -221,6 +220,10 @@ class TextAdventureGame:
                         window.append_log(line)
                     if result.combat_triggered:
                         self._enter_combat(result.aggressors)
+                    if self.world and self.player:
+                        current_room = self.world.current_room()
+                        if current_room:
+                            window.set_explore(self.player, current_room)
             elif self.state == GameState.COMBAT:
                 if not self.combat:
                     if raw.strip().lower() in {"flee", "run"}:

@@ -194,7 +194,6 @@ class Room:
         living = self.living_enemies()
         if living:
             lines.append("Enemies: " + ", ".join(e.name for e in living))
-        lines.append("Exits: " + ", ".join(sorted(self.exits.keys())))
         return "\n".join(lines)
 
     def living_enemies(self) -> list["Enemy"]:
