@@ -39,7 +39,7 @@ class EquippableItem:
     abilities: list[Ability] = field(default_factory=list)
     equip_requirements: dict = field(default_factory=dict)
     upgrade_path: str | None = None
-
+    readable_text: str | None = None
 
 @dataclass
 class PassiveTrait:
