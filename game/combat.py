@@ -120,9 +120,6 @@ class CombatController:
     def player_input(self, raw: str) -> TurnResult:
         self._debug_log(f"player_input({raw})")
         result = TurnResult()
-        direction = raw.strip().lower()
-        if self._is_combat_movement(direction):
-            return self._handle_combat_movement(direction, raw)
 
         if self._pending_disambiguation:
             target = self._resolve_disambiguation(raw, result)
@@ -137,6 +134,11 @@ class CombatController:
             return result
 
         intent = parsed.intent or ""
+
+        # Handle movement if command is "go"
+        if intent == "go":
+            return self._handle_combat_movement(parsed, result)
+
         if intent in {"status", "look"}:
             self._resolve_status(result)
             return result
@@ -232,25 +234,24 @@ class CombatController:
         return CombatOutcome.ONGOING
 
     # ----------------------------------------------------------------------
-    # Movement during combat
+    # Movement during combat (using parsed command)
     # ----------------------------------------------------------------------
-    def _is_combat_movement(self, direction: str) -> bool:
-        if not self.world or not self.player_room_id:
-            return False
-        room = self.world.get_room(self.player_room_id)
-        return bool(room and direction in room.exits)
+    def _handle_combat_movement(self, parsed: ParsedCommand, result: TurnResult) -> TurnResult:
+        direction = parsed.target_name
+        if not direction:
+            result.add("Go where?")
+            return result
 
-    def _handle_combat_movement(self, direction: str, raw: str) -> TurnResult:
-        self._debug_log(f"_handle_combat_movement({direction})")
-        result = TurnResult()
-        ap_cost = max(1, len(raw.strip()) - self.player.ap_cost_reduction_for(direction))
+        ap_cost = parsed.ap_cost   # already includes raw length minus reductions
         if ap_cost > self.player.current_ap:
             result.add("Not enough AP to move.")
             return result
+
         room = self.world.get_room(self.player_room_id)
         if not room or direction not in room.exits:
             result.add("You cannot go that way.")
             return result
+
         self.player.spend_ap(ap_cost)
         result.ap_spent = ap_cost
         self.player_room_id = room.exits[direction]
@@ -260,6 +261,7 @@ class CombatController:
 
         if self.player_room_id not in self.combat_zone:
             result.add("You moved out of the combat zone!")
+            # Give enemies a free turn before fleeing
             for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
                 free_turn = self._enemy_turn(enemy)
                 result.lines.extend(free_turn.lines)
@@ -402,8 +404,8 @@ class CombatController:
             result.add("No combat commands available.")
             return
         for cmd in sorted(cmds, key=lambda c: c.name):
-            cost = self.registry.ap_cost_for(cmd.name, cmd, self.player)
-            result.add(f"{cmd.name} (AP {cost}) - {cmd.description}")
+            # AP cost for display only – we don't recalc here
+            result.add(f"{cmd.name} - {cmd.description}")
 
     # ----------------------------------------------------------------------
     # Enemy intent resolution

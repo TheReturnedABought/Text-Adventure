@@ -1,3 +1,5 @@
+# game/parser.py (corrected)
+
 from __future__ import annotations
 
 import re
@@ -11,12 +13,10 @@ from game.models import ParsedCommand, ArticleType
 if TYPE_CHECKING:
     from game.entities import Player
 
-# ── Configuration ─────────────────────────────────────────────────────────────
 TURN_STACK_SIZE = 10
 ENTITY_LOG_DECAY_TURNS = 20
 
 
-# FIX: Turn stack / entity log data structures (unchanged, but moved here)
 @dataclass
 class TurnEntry:
     verb: str
@@ -42,7 +42,6 @@ class EntityLogEntry:
 
 
 class ContextResolver:
-    # (unchanged – keep as is)
     PRONOUN_MAP: dict[str, tuple[str, str]] = {
         "the one": ("singular", "any"),
         "those":   ("plural",   "any"),
@@ -190,27 +189,36 @@ class CommandParser:
     }
     _ITEM_PREPS: frozenset[str] = frozenset({"with", "using"})
 
+    _TYPO_MAP = {
+        "wouth": "south",
+        "sputh": "south",
+        "gp": "go",
+        "noth": "north",
+        "eastt": "east",
+        "westt": "west",
+    }
+
     def __init__(self, registry: CommandRegistry) -> None:
         self.registry = registry
         self._resolver = ContextResolver()
-        # FIX: cache known commands for faster unknown word suggestions
         self._known_commands_cache: list[str] = []
         self._refresh_known_commands()
 
     def _refresh_known_commands(self) -> None:
-        """Refresh the cache of command names that are available to any player."""
         self._known_commands_cache = self.registry.all_intents() + self.registry.all_modifier_names()
 
-    # ── Main entry point ──────────────────────────────────────────────────────
+    def _preprocess_typos(self, raw: str) -> str:
+        words = raw.strip().lower().split()
+        corrected = [self._TYPO_MAP.get(w, w) for w in words]
+        return " ".join(corrected)
+
     def parse(self, raw: str, player: "Player", context: CommandContext) -> ParsedCommand:
         normalised = raw.strip().lower()
-        if not normalised:
-            return self._make_error(raw, "What do you want to do?", ArticleType.NONE)
-
+        normalised = self._preprocess_typos(normalised)
         expanded = self._resolver.rewrite(normalised, player)
-        tokens: list[str] = expanded.split()
+        tokens = expanded.split()
 
-        # Modifiers – check unlock first
+        # Modifiers
         for token in tokens:
             mod = self.registry.get_modifier(token)
             if mod is not None and not player.has_unlocked(mod.name):
@@ -227,6 +235,16 @@ class CommandParser:
         if cmd_def is None:
             return self._make_error(raw, self.unknown_feedback(verb, player, context), article)
 
+        # Initialise target variables
+        target_name = None
+        target_index = None
+
+        # Handle direction-only "go" commands
+        if cmd_def.name == "go" and not rest:
+            target_name = verb
+        else:
+            target_name, target_index = self.extract_target(rest)
+
         item_name: str | None = None
         for prep in self._ITEM_PREPS:
             if prep in rest:
@@ -236,15 +254,13 @@ class CommandParser:
                 item_name = " ".join(item_tokens) or None
                 break
 
-        target_name, target_index = self.extract_target(rest)
-
         valid, error_msg = self.validate_command(cmd_def.intent, player, context)
         if not valid:
             return self._make_error(raw, error_msg, article)
 
-        # FIX: AP cost based on command's base cost, not raw length
-        ap_cost = self.calculate_ap_cost(cmd_def, player)
-        mp_cost = self.calculate_mp_cost(cmd_def, player)
+        # AP cost based on raw input length (letter count system)
+        ap_cost = max(1, len(raw.strip()) - player.ap_cost_reduction_for(cmd_def.name))
+        mp_cost = 0   # MP cost not used in current system
 
         return ParsedCommand(
             raw=raw,
@@ -260,7 +276,6 @@ class CommandParser:
             error=None,
         )
 
-    # ── Extraction helpers ────────────────────────────────────────────────────
     def extract_modifiers(self, tokens: list[str], player: "Player") -> tuple[list[str], list[str]]:
         found: list[str] = []
         remaining: list[str] = []
@@ -288,7 +303,6 @@ class CommandParser:
         joined = " ".join(tokens)
         return (joined or None), None
 
-    # ── Disambiguation ────────────────────────────────────────────────────────
     def needs_disambiguation(self, target_name: str | None, candidates: list) -> bool:
         if not target_name or not candidates:
             return False
@@ -307,49 +321,25 @@ class CommandParser:
             return candidates[index - 1]
         return None
 
-    # ── Validation ────────────────────────────────────────────────────────────
     def validate_command(self, intent: str, player: "Player", context: CommandContext) -> tuple[bool, str]:
         cmd_def = self.registry.get_command(intent)
         if cmd_def is None:
             return False, f"Unknown command: '{intent}'."
         if getattr(cmd_def, "requires_unlock", False) and not player.has_unlocked(intent):
             return False, f"You haven't learned how to {intent} yet."
-        allowed_contexts: list[CommandContext] = getattr(cmd_def, "allowed_contexts", [])
+        allowed_contexts: list[CommandContext] = getattr(cmd_def, "valid_contexts", [])
         if allowed_contexts and context not in allowed_contexts:
             return False, "You can't do that here."
         return True, ""
 
-    # ── AP / MP cost calculation (FIXED) ──────────────────────────────────────
-    def calculate_ap_cost(self, cmd_def: "CommandDefinition", player: "Player") -> int:
-        """AP cost = command's base cost + modifiers flat cost, minus reductions."""
-        base = cmd_def.ap_cost_override if cmd_def.ap_cost_override is not None else cmd_def.base_ap_cost
-        # Add modifier flat costs
-        mod_extra = 0
-        for mod_name in getattr(player, "_current_modifiers", []):
-            mod = self.registry.get_modifier(mod_name)
-            if mod:
-                mod_extra += mod.ap_cost_flat
-        total = base + mod_extra - player.ap_cost_reduction_for(cmd_def.name)
-        return max(1, total)
-
-    def calculate_mp_cost(self, cmd_def: "CommandDefinition", player: "Player") -> int:
-        if not cmd_def.costs_mp:
-            return 0
-        base = cmd_def.mp_cost_override if cmd_def.mp_cost_override is not None else cmd_def.base_mp_cost
-        reduction = player.mp_cost_reduction_for(cmd_def.name)
-        return max(0, base - reduction)
-
-    # ── Feedback ──────────────────────────────────────────────────────────────
     def unknown_feedback(self, verb: str, player: "Player", context: CommandContext) -> str:
         if not verb:
             return "What do you want to do?"
-        # Use cached known commands for speed
         close = get_close_matches(verb, self._known_commands_cache, n=1, cutoff=0.6)
         if close:
             return f"I don't know the word '{verb}'. Did you mean '{close[0]}'?"
         return f"I don't know the word '{verb}'."
 
-    # ── Internal helpers ──────────────────────────────────────────────────────
     def _make_error(self, raw: str, error: str, article: ArticleType) -> ParsedCommand:
         return ParsedCommand(
             raw=raw,
