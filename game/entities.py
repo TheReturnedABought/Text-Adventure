@@ -37,6 +37,12 @@ class Entity:
     def is_alive(self) -> bool:
         return self.current_hp > 0
 
+    @property
+    def hp_fraction(self) -> float:
+        if self.max_hp <= 0:
+            return 0.0
+        return max(0.0, min(1.0, self.current_hp / self.max_hp))
+
     def receive_damage(self, amount: int) -> int:
         """Apply damage after block and defense. Returns HP lost."""
         blocked = min(self.block, amount)
@@ -158,12 +164,15 @@ class Player(Entity):
         base += self.effects.stat_bonus("defense")
         return base
 
-    def ap_cost_reduction_for(self, command_name: str) -> int:
+    def ap_cost_reduction_for_text(self, raw_text: str) -> int:
+        text = str(raw_text or "").lower()
         total = 0
         for item in self.equipped.values():
-            for name, amount in item.ability_cost_reductions.items():
-                if name.lower() == command_name.lower():
-                    total += amount
+            for letter, amount in item.letter_cost_reductions.items():
+                ch = str(letter or "").strip().lower()
+                if len(ch) != 1 or not ch.isalpha():
+                    continue
+                total += text.count(ch) * int(amount)
         return total
 
     def mp_cost_reduction_for(self, command_name: str) -> int:

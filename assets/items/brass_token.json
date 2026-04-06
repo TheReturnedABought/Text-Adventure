@@ -1,0 +1,13 @@
+{
+  "id": "brass_token",
+  "name": "Brass Token",
+  "slot": "misc",
+  "description": "A stamped brass token bearing a tiny maze emblem.",
+  "material": "metal",
+  "rarity": "common",
+  "tier": 1,
+  "stat_modifiers": {},
+  "ability_cost_reductions": {},
+  "abilities": [],
+  "equip_requirements": {}
+}

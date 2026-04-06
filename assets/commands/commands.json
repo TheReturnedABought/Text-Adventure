@@ -188,6 +188,21 @@
       "unlocked_by_default": true
     },
     {
+      "name": "search",
+      "aliases": ["probe", "feel around"],
+      "description": "Search a specific object or area for hidden mechanisms or loot.",
+      "ap_cost_override": null,
+      "base_dice": null,
+      "unlock_class": null,
+      "unlock_level": 0,
+      "valid_contexts": ["world"],
+      "modifiers_allowed": [],
+      "tags": ["interaction", "puzzle"],
+      "world_use_hint": null,
+      "base_ap_cost": 4,
+      "unlocked_by_default": true
+    },
+    {
       "name": "open",
       "aliases": [],
       "description": "Open a door, chest, or container.",

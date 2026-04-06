@@ -79,6 +79,8 @@ class ExplorationController:
             self._resolve_help(result)
         elif intent == "read":
             self._resolve_read(parsed, result)
+        elif self._resolve_data_rule(parsed, result):
+            pass
         else:
             result.add("Nothing happens.")
 
@@ -156,12 +158,6 @@ class ExplorationController:
             result.add("Take what?")
             return
 
-        print(f"[DEBUG] _resolve_take: target='{target}'")
-        print(f"[DEBUG] Items on ground: {room.items_on_ground}")
-        print(f"[DEBUG] Objects in room: {list(room.objects.keys())}")
-        for obj_id, obj in room.objects.items():
-            print(f"[DEBUG]   {obj_id}: hidden={obj.hidden}, is_moveable={obj.is_moveable}, name='{obj.name}'")
-
         # First check items on ground
         matching_id = None
         for item_id in room.items_on_ground:
@@ -181,7 +177,6 @@ class ExplorationController:
         # Then check moveable objects
         obj = room.find_object(target)
         if obj and obj.is_moveable:
-            print(f"[DEBUG] Found moveable object: {obj.id}")
             # Convert object to a simple misc item
             item = EquippableItem(
                 id=obj.id,
@@ -199,11 +194,53 @@ class ExplorationController:
             # Remove the description snippet so the placeholder becomes empty
             if obj.id in room.description_snippets:
                 room.description_snippets[obj.id] = ""
-                print(f"[DEBUG] Cleared snippet for {obj.id}")
             return
 
-        print(f"[DEBUG] No matching item or moveable object found")
         result.add("No such item on the ground or moveable object here.")
+
+    def _resolve_data_rule(self, parsed: "ParsedCommand", result: ExplorationResult) -> bool:
+        room = self.world.current_room()
+        if not room:
+            return False
+        rule = room.find_matching_rule(parsed.intent or "", parsed.target_name)
+        if not rule:
+            return False
+
+        req = rule.get("requires", {})
+        min_level = int(req.get("min_level", 0) or 0)
+        if self.player.level < min_level:
+            result.add(rule.get("blocked_text", f"You need to be level {min_level} to do that."))
+            return True
+
+        class_req = req.get("class")
+        class_id = getattr(getattr(self.player, "char_class", None), "id", None)
+        if class_req and class_id != class_req:
+            result.add(rule.get("blocked_text", "You are not trained for that."))
+            return True
+
+        text = rule.get("text")
+        if text:
+            result.add(str(text))
+
+        for object_id in rule.get("reveal_objects", []):
+            if object_id in room.objects:
+                room.objects[object_id].hidden = False
+                result.add(f"You reveal {room.objects[object_id].name}.")
+
+        for item_id in rule.get("spawn_items", []):
+            if item_id not in room.items_on_ground:
+                room.items_on_ground.append(item_id)
+
+        for direction, target_room in rule.get("set_exits", {}).items():
+            room.exits[str(direction).lower()] = str(target_room)
+
+        for direction in rule.get("remove_exits", []):
+            room.exits.pop(str(direction).lower(), None)
+
+        for key, value in rule.get("set_flags", {}).items():
+            self.puzzle_flags[str(key)] = value
+
+        return True
 
     def _resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_drop()")

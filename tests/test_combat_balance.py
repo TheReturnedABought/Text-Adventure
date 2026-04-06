@@ -15,7 +15,7 @@ import pytest
 from game.commands import CommandRegistry, CommandContext, CommandDefinition
 from game.combat import CombatController, CombatOutcome
 from game.entities import Player, Enemy
-from game.models import EnemyIntent, IntentType
+from game.models import EnemyIntent, IntentType, EquippableItem
 from game.parser import CommandParser
 from game.loader import AssetLoader
 
@@ -239,7 +239,7 @@ def test_combat_vs_two_goblins(test_player, goblin, test_registry):
 
 
 def test_combat_ap_cost_calculation(test_player, test_registry):
-    """Verify that AP cost is based on command's base_ap_cost minus reductions."""
+    """Verify that AP cost is based on command's base_ap_cost minus letter reductions."""
     parser = CommandParser(test_registry)
     # "attack" has base_ap_cost=6, no reductions → AP cost 6
     parsed = parser.parse("attack", test_player, CommandContext.COMBAT)
@@ -247,6 +247,18 @@ def test_combat_ap_cost_calculation(test_player, test_registry):
     # "attack goblin" – same base cost, modifiers? none, still 6
     parsed = parser.parse("attack goblin", test_player, CommandContext.COMBAT)
     assert parsed.ap_cost == 6, f"Expected 6 AP, got {parsed.ap_cost}"
+
+    # Letter reductions apply to typed text, not command names.
+    test_player.equipped["trinket"] = EquippableItem(
+        id="scribe_ring",
+        name="Scribe Ring",
+        slot="trinket",
+        description="Reduces AP for specific letters.",
+        letter_cost_reductions={"a": 1},
+    )
+    parsed = parser.parse("attack", test_player, CommandContext.COMBAT)
+    # "attack" has two 'a' letters -> 6 - 2 = 4
+    assert parsed.ap_cost == 4, f"Expected 4 AP, got {parsed.ap_cost}"
 
 
 def test_mp_cost_calculation(test_player, test_registry):
