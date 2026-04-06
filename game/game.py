@@ -227,10 +227,14 @@ class TextAdventureGame:
                         window.append_log(line)
                     if result.combat_triggered:
                         self._enter_combat(result.aggressors)
+
                     if self.world and self.player:
                         current_room = self.world.current_room()
                         if current_room:
-                            window.set_explore(self.player, current_room)
+                            if self.state == GameState.COMBAT and self.combat:
+                                window.set_combat(self.player, current_room, self.combat.enemies)
+                            else:
+                                window.set_explore(self.player, current_room)
             elif self.state == GameState.COMBAT:
                 if not self.combat:
                     if raw.strip().lower() in {"flee", "run"}:
@@ -241,6 +245,12 @@ class TextAdventureGame:
                     result = self.combat.player_input(raw)
                     for line in result.lines:
                         window.append_log(line)
+
+                    if self.world and self.player and self.combat:
+                        current_room = self.world.current_room()
+                        if current_room:
+                            window.set_combat(self.player, current_room, self.combat.enemies)
+
                     if result.outcome == CombatOutcome.PLAYER_WON:
                         self._on_combat_won()
                     elif result.outcome == CombatOutcome.PLAYER_FLED:
@@ -304,6 +314,10 @@ class TextAdventureGame:
         window.append_log(self.combat.start_encounter())
         self.state = GameState.COMBAT
 
+        current_room = self.world.current_room()
+        if current_room:
+            window.set_combat(self.player, current_room, self.combat.enemies)
+
     def _on_combat_won(self) -> None:
         self._debug("_on_combat_won()")
         window.append_log("You won the encounter.")
@@ -325,6 +339,7 @@ class TextAdventureGame:
                 room = self.world.current_room()
                 if room:
                     room.update_after_combat()
+                    window.set_explore(self.player, room)
 
     def _on_combat_fled(self) -> None:
         self._debug("_on_combat_fled()")
@@ -333,6 +348,11 @@ class TextAdventureGame:
         window.append_log("You fled combat.")
         self.combat = None
         self.state = GameState.EXPLORING
+
+        if self.world and self.player:
+            current_room = self.world.current_room()
+            if current_room:
+                window.set_explore(self.player, current_room)
 
     def _prompt(self) -> str:
         if self.state == GameState.COMBAT:
