@@ -112,7 +112,8 @@ class GameWindow:
     # Fonts: separate sizes for different panels
     FONT     = ('Courier New', 9)       # input, general
     FONT_B   = ('Courier New', 9, 'bold')
-    FONT_SM  = ('Courier New', 6)       # ART panel (explore/combat) - smaller
+    FONT_SM  = ('Courier New', 6)       # ART panel in explore mode
+    FONT_COMBAT = ('Courier New', 10, 'bold')  # ART panel in combat mode for readability
     FONT_LOG = ('Courier New', 12)      # LOG panel - larger
     FONT_XS  = ('Courier New', 9)       # STATUS panel
 
@@ -143,6 +144,7 @@ class GameWindow:
         self._active = False
         self._root = None
         self._char_width = None   # will be computed lazily
+        self._art_font_mode = None
 
     # Public API ------------------------------------------------------------
     def set_explore(self, player, room):
@@ -330,13 +332,22 @@ class GameWindow:
         t.delete('1.0', 'end')
         s = self._state
         if s.mode == 'combat':
+            self._set_art_font(self.FONT_COMBAT, mode='combat')
             self._art_hdr.configure(text='  ⚔  COMBAT', fg=self.C_YELLOW)
             self._draw_combat(t, s)
         else:
+            self._set_art_font(self.FONT_SM, mode='explore')
             name = s.room.name if s.room else '…'
             self._art_hdr.configure(text=f'  {name}', fg=self.C_CYAN)
             self._draw_explore(t, s)
         t.configure(state='disabled')
+
+    def _set_art_font(self, font, mode: str):
+        """Apply a font to ART panel and reset cached width if changed."""
+        if self._art_font_mode != mode:
+            self._art_txt.configure(font=font)
+            self._char_width = None
+            self._art_font_mode = mode
 
     def _set_art_text(self, content: str):
         """Internal: Set raw art text."""
@@ -370,7 +381,7 @@ class GameWindow:
         gap = 2
         col_w = max(26, (total - gap * (n - 1)) // n)
 
-        cards = [self._enemy_card_rows(e, s.enemies, col_w) for e in alive]
+        cards = [self._enemy_card_rows(i, e, col_w) for i, e in enumerate(alive, start=1)]
         height = max(len(c) for c in cards)
 
         for card in cards:
@@ -392,8 +403,7 @@ class GameWindow:
                     t.insert('end', ' ' * gap)
             t.insert('end', '\n')
 
-    def _enemy_card_rows(self, enemy, all_enemies, col_w):
-        idx = all_enemies.index(enemy) + 1 if enemy in all_enemies else '?'
+    def _enemy_card_rows(self, idx, enemy, col_w):
         hpct = enemy.current_hp / max(enemy.max_hp, 1)
         hcol = 'hp_good' if hpct > 0.5 else ('hp_mid' if hpct > 0.25 else 'hp_low')
         bw = max(6, min(12, col_w - 15))
