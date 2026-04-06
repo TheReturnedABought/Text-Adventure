@@ -285,8 +285,9 @@ class WorldMap:
             return False, "That exit leads nowhere."
         self.current_room_id = target
         new_room = self.current_room()
+        was_visited = new_room.visited
         new_room.visited = True
-        return True, new_room.get_description(verbose=not new_room.visited)
+        return True, new_room.get_description(verbose=not was_visited)
 
     def neighbors_of(self, room_id: str) -> list[str]:
         room = self.get_room(room_id)
