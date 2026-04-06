@@ -100,9 +100,14 @@ class ExplorationController:
             result.add("Go where?")
             return
         ok, msg = self.world.move_player(direction)
-        result.add(msg)
-        if ok and self.world.current_room():
-            result.add(self.world.current_room().get_description(verbose=True))
+        if not ok:
+            result.add(msg)
+            return
+        room = self.world.current_room()
+        if room:
+            result.add(room.get_description(verbose=True))
+        else:
+            result.add(msg)
 
     def _resolve_look(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_look()")
@@ -184,6 +189,7 @@ class ExplorationController:
                 slot="misc",
                 description=obj.description,
                 material=obj.material.value,
+                readable_text=obj.on_interact.get("read") or obj.on_interact.get("look"),
             )
             # Remove object from room
             del room.objects[obj.id]
@@ -299,12 +305,20 @@ class ExplorationController:
             result.add("Read what?")
             return
         obj = room.find_object(target)
-        if not obj:
+        text = None
+        if obj:
+            text = obj.on_interact.get("read") or obj.on_interact.get("look")
+        else:
+            item = self.player.find_in_inventory(target)
+            if item:
+                text = item.readable_text or item.description
+            else:
+                for equipped_item in self.player.equipped.values():
+                    if target in equipped_item.name.lower():
+                        text = equipped_item.readable_text or equipped_item.description
+                        break
+        if not text:
             result.add("You don't see that here.")
             return
-        # Use the object's look interaction (or a dedicated read text)
-        text = obj.on_interact.get("read") or obj.on_interact.get("look")
         if text:
             result.add(text)
-        else:
-            result.add(f"You see nothing special on the {obj.name}.")
