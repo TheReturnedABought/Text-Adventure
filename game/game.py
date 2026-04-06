@@ -322,6 +322,9 @@ class TextAdventureGame:
             self.state = GameState.EXPLORING
             if self.world and self.exploration:
                 self.exploration.world = self.world
+                room = self.world.current_room()
+                if room:
+                    room.update_after_combat()
 
     def _on_combat_fled(self) -> None:
         self._debug("_on_combat_fled()")

@@ -42,6 +42,7 @@ class AssetLoader:
             is_start=bool(data.get("is_start", False)),
             enemy_spawns=list(data.get("enemy_spawns", [])),
             interaction_rules=list(data.get("interaction_rules", [])),
+            combat_won_snippet=data.get("combat_won_snippet", ""),
         )
         for obj_data in data.get("objects", []):
             obj = self._load_world_object(obj_data)

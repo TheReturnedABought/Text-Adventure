@@ -185,6 +185,7 @@ class Room:
     enemy_spawns: list[dict] = field(default_factory=list)
     description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
     interaction_rules: list[dict] = field(default_factory=list)
+    combat_won_snippet: str = ""
 
     def get_description(self, verbose: bool = False) -> str:
         # Substitute all {{object_id_desc}} placeholders
@@ -254,6 +255,16 @@ class Room:
             lines.append(f"Nearby entities risk becoming {interaction.applies_status}.")
         return lines
 
+    def update_after_combat(self) -> None:
+        """Call this when all enemies in the room are defeated."""
+        if not self.living_enemies():
+            # Reveal objects marked to appear after combat
+            for obj in self.objects.values():
+                if getattr(obj, "reveal_on_combat_end", False):
+                    obj.hidden = False
+            # Set the combat won snippet if provided
+            if self.combat_won_snippet:
+                self.description_snippets["combat_update"] = self.combat_won_snippet
 
 class WorldMap:
     def __init__(self):

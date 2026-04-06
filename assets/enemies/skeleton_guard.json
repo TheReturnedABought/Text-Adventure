@@ -1,0 +1,36 @@
+{
+  "id": "skeleton_guard",
+  "name": "Skeleton Guard",
+  "description": "A rattling skeleton clutching a rusted shortsword. Empty eye sockets stare ahead.",
+  "material": "bone",
+  "max_hp": 18,
+  "attack": 5,
+  "defense": 1,
+  "total_ap": 16,
+  "ai_profile": "guard",
+  "guard_home": "wyrmwood_2skeletons",
+  "intent_pool": [
+    {
+      "id": "slash",
+      "intent_type": "attack",
+      "description": "slashes with its shortsword",
+      "dice_expression": "1d6+2",
+      "ap_cost": 6,
+      "weight": 3
+    },
+    {
+      "id": "shield_block",
+      "intent_type": "block",
+      "description": "raises a cracked shield",
+      "dice_expression": "1d6+1",
+      "ap_cost": 5,
+      "weight": 2,
+      "condition": "hp_below_half"
+    }
+  ],
+  "loot_table": [
+    { "item_id": "rusty_shortsword", "chance": 0.5, "count_expression": "1" },
+    { "item_id": "bone_fragment", "chance": 0.8, "count_expression": "1d3" }
+  ],
+  "xp_reward": 25
+}

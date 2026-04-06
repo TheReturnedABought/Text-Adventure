@@ -1,42 +1,30 @@
 {
   "id": "wyrmwood_2skeletons",
   "name": "Wyrmwood",
-  "description": "Two skeletons lie slumped against a mossy trunk, their arms outstretched — one pointing east, one west. They have been here a very long time. There is no other landmark. Every direction looks like every other.",
-  "material": "wood",
-  "is_outdoor": true,
-  "is_start": false,
-  "light_level": 4,
-  "ambient": [
-    "Silence presses in from all sides.",
-    "The bones shift with a faint hollow rattle, though nothing touches them."
-  ],
-  "exits": {
-    "west": "wyrmwood_a",
-    "north": "wyrmwood_b",
-    "south": "wyrmwood_c",
-    "east": "wyrmwood_d"
+  "description": "Two skeletons lie slumped against a mossy trunk, their arms outstretched — one pointing east, one west. {{combat_update}}",
+  "combat_won_snippet": "They have been destroyed, their remains now still.",
+  "description_snippets": {
+    "combat_update": ""
   },
-  "line_of_sight": [],
   "objects": [
     {
-      "id": "skeletons",
-      "name": "skeletons",
-      "description": "Two human skeletons, long dead. Whatever they carried has rotted away. Their arms point east and west respectively, as if disagreeing about the way out.",
-      "description_snippet": "Two skeletons slump against the roots, arms outstretched.",
+      "id": "skeleton_corpses",
+      "name": "skeleton remains",
+      "description": "The broken bones of the two skeleton guards lie scattered. You might search them for anything left behind.",
+      "description_snippet": "Two shattered skeletons lie on the ground, their weapons and armour discarded.",
       "material": "bone",
       "is_container": false,
       "is_moveable": false,
       "is_locked": false,
-      "hidden": false,
-      "reveals": [],
+      "hidden": true,
+      "reveal_on_combat_end": true,
       "on_interact": {
-        "look": "Two lost souls. Their arms point in opposite directions. You wonder if either of them was right.",
-        "move": "The bones shift with a hollow clatter. Nothing useful is revealed.",
-        "search": "Rotted scraps of cloth. Nothing more."
-      },
-      "required_commands": {}
+        "search": "You rummage through the remains and find a few usable items.",
+        "look": "Broken bones and rusted gear."
+      }
     }
   ],
-  "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [
+    { "template_id": "skeleton_guard", "count": 2 }
+  ]
 }
