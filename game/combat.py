@@ -65,6 +65,7 @@ class CombatController:
         self.round = 1
         self.combat_zone: set[str] = set()
         self._pending_disambiguation: list[Enemy] | None = None
+        self._pending_attack_parsed: ParsedCommand | None = None
         self._debug = debug
         self._refresh_combat_zone()
 
@@ -125,6 +126,23 @@ class CombatController:
             target = self._resolve_disambiguation(raw, result)
             if target is None:
                 return result
+            if self._pending_attack_parsed is not None:
+                parsed = self._pending_attack_parsed
+                self._pending_attack_parsed = None
+                attack_performed = self._resolve_attack(parsed, result, forced_target=target)
+                if attack_performed and result.outcome == CombatOutcome.ONGOING:
+                    self.player.spend_ap(parsed.ap_cost)
+                    self.player.mana -= parsed.mp_cost
+                    result.ap_spent = parsed.ap_cost
+                    for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
+                        result.add(line)
+                    self._refresh_combat_zone()
+                result.outcome = self.check_outcome() if result.outcome == CombatOutcome.ONGOING else result.outcome
+                if result.outcome == CombatOutcome.ONGOING and self.player.current_ap <= 0:
+                    end = self.end_player_turn()
+                    result.lines.extend(end.lines)
+                    result.outcome = end.outcome
+                return result
             result.add(f"Target selected: {target.name}.")
             return result
 
@@ -156,20 +174,25 @@ class CombatController:
             return result
 
         # Resolve command
+        action_performed = False
         if intent in {"attack", "strike", "hit"}:
-            self._resolve_attack(parsed, result)
+            action_performed = self._resolve_attack(parsed, result)
         elif intent == "block":
             self._resolve_block(parsed, result)
+            action_performed = True
         elif intent in {"ability", "cast", "use"}:
             self._resolve_ability(parsed, result)
+            action_performed = True
         elif intent == "equip":
             self._resolve_equip(parsed, result)
+            action_performed = True
         elif intent == "flee":
             self._resolve_flee(parsed, result)
+            action_performed = True
         else:
             result.add("That command has no combat resolver yet.")
 
-        if result.outcome == CombatOutcome.ONGOING:
+        if result.outcome == CombatOutcome.ONGOING and action_performed:
             self.player.spend_ap(parsed.ap_cost)
             self.player.mana -= parsed.mp_cost
             result.ap_spent = parsed.ap_cost
@@ -277,11 +300,13 @@ class CombatController:
     # ----------------------------------------------------------------------
     # Attack resolution (with damage types & material interactions)
     # ----------------------------------------------------------------------
-    def _resolve_attack(self, parsed: ParsedCommand, result: TurnResult) -> None:
+    def _resolve_attack(self, parsed: ParsedCommand, result: TurnResult, forced_target: "Enemy | None" = None) -> bool:
         self._debug_log("_resolve_attack()")
-        target = self._resolve_target(parsed, result)
+        target = forced_target or self._resolve_target(parsed, result)
         if target is None:
-            return
+            self._pending_attack_parsed = parsed
+            return False
+        self._pending_attack_parsed = None
 
         cmd = self.registry.get_command(parsed.intent or "attack")
         damage_type = self._get_damage_type(cmd)
@@ -310,6 +335,7 @@ class CombatController:
         env_lines = self._apply_environmental_reaction(damage_type, target)
         for line in env_lines:
             result.add(line)
+        return True
 
     def _get_damage_type(self, cmd: "CommandDefinition | None") -> DamageType:
         if not cmd:

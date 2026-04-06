@@ -188,11 +188,12 @@ class Room:
     combat_won_snippet: str = ""
 
     def get_description(self, verbose: bool = False) -> str:
-        # Substitute all {{object_id_desc}} placeholders
+        # Substitute all placeholders (supports both {{key_desc}} and {{key}})
         desc = self.description
-        for obj_id, snippet in self.description_snippets.items():
-            placeholder = f"{{{{{obj_id}_desc}}}}"   # e.g. {{letter_desc}}
-            desc = desc.replace(placeholder, snippet)
+        for key, snippet in self.description_snippets.items():
+            legacy_placeholder = f"{{{{{key}_desc}}}}"   # e.g. {{letter_desc}}
+            desc = desc.replace(legacy_placeholder, snippet)
+            desc = desc.replace(f"{{{{{key}}}}}", snippet)
         lines = [self.name]
         if verbose or not self.visited:
             lines.append(desc)
