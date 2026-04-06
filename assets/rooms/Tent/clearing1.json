@@ -1,0 +1,21 @@
+{
+  "id": "clearing",
+  "name": "Forest Clearing",
+  "description": "A modest clearing where the tree cover thins enough to see the sky. To the west, a narrow trail leads back toward a canvas tent. To the east, the forest thickens into something older and darker.",
+  "material": "earth",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 10,
+  "ambient": [
+    "Wind moves through the tall grass at the clearing's edge.",
+    "The trees to the east seem unnaturally still."
+  ],
+  "exits": {
+    "west": "east_of_tent",
+    "east": "wyrmwood_entry"
+  },
+  "line_of_sight": ["east_of_tent"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

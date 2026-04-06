@@ -1,0 +1,42 @@
+{
+  "id": "wyrmwood_sword_stone",
+  "name": "Wyrmwood — Sword in Stone",
+  "description": "At the western end of the glade stands a flat grey stone. A sword has been driven hilt-deep into it. No rust. No wear. It looks as though it was placed here yesterday.",
+  "material": "stone",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 8,
+  "ambient": [
+    "The stone emits a low, almost-inaudible hum.",
+    "The grass around the stone grows in a perfect circle."
+  ],
+  "exits": {
+    "east": "wyrmwood_glade"
+  },
+  "line_of_sight": [
+    "wyrmwood_glade"
+  ],
+  "objects": [
+    {
+      "id": "sword_in_stone",
+      "name": "sword in stone",
+      "description": "A longsword buried to the hilt in a flat grey stone. The blade is immaculate. Runes are carved into the stone around the base.",
+      "description_snippet": "A sword stands upright in a stone at the clearing's western end.",
+      "material": "metal",
+      "is_container": false,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "look": "The blade shows no age and no rust. The runes carved around the base are worn but legible: 'The worthy bear no wicked words.'",
+        "read": "Carved into the stone: 'The worthy bear no wicked words.'",
+        "take": "The sword does not move. Not even slightly. You strain until your arms ache. It will not come.",
+        "smash": "Your blow glances off the blade with a ringing clang that echoes into the wood. The stone does not chip."
+      },
+      "required_commands": {}
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

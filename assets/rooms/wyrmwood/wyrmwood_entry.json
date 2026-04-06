@@ -1,0 +1,23 @@
+{
+  "id": "wyrmwood_entry",
+  "name": "Wyrmwood",
+  "description": "The forest swallows the light. Gnarled trunks close in from every side, bark dark with moss and age. The trees thicken into something worse.",
+  "material": "wood",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 5,
+  "ambient": [
+    "Something shifts in the undergrowth, just out of sight.",
+    "The trees groan faintly, though there is no wind."
+  ],
+  "exits": {
+    "west": "clearing1",
+    "east": "wyrmwood_a",
+    "north": "wyrmwood_b",
+    "south": "wyrmwood_c"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

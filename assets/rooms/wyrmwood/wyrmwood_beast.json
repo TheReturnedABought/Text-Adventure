@@ -1,0 +1,41 @@
+{
+  "id": "wyrmwood_beast",
+  "name": "Wyrmwood — Beast",
+  "description": "A colossal carcass lies at the eastern end of the glade, half-swallowed by the encroaching trees. The creature is long dead — its ribs arch overhead like the vaults of a fallen hall. Where its belly meets the earth, a reeking darkness opens downward.",
+  "material": "flesh",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 5,
+  "ambient": [
+    "Flies circle in the thick, still air.",
+    "A sweet rot hangs heavy on the breeze."
+  ],
+  "exits": {
+    "west": "wyrmwood_glade",
+    "down": "wyrmwood_beast_gut"
+  },
+  "line_of_sight": [
+    "wyrmwood_glade"
+  ],
+  "objects": [
+    {
+      "id": "beast_carcass",
+      "name": "carcass",
+      "description": "The remains of something enormous. No living creature you know of grows this large. Its bones are as thick as old oaks. Scales, or perhaps bark, still cling to the hide in places.",
+      "description_snippet": "The massive ribcage of a long-dead beast dominates the area.",
+      "material": "flesh",
+      "is_container": false,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "look": "Ancient. Whatever killed it left no visible mark. The opening in its belly leads down into darkness.",
+        "search": "The hide is hard as old leather. You find nothing on the exterior."
+      },
+      "required_commands": {}
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

@@ -1,7 +1,7 @@
 {
   "id": "east_of_tent",
   "name": "East of Tent",
-  "description": "A narrow clearing east of the tent. Thorny bushes block further progress to the east.",
+  "description": "A narrow clearing east of the tent. Thorny bushes crowd the edges, but a gap in the undergrowth to the east reveals a faint trail heading into the forest.",
   "material": "earth",
   "is_outdoor": true,
   "is_start": false,
@@ -9,7 +9,8 @@
   "ambient": ["Birds chatter somewhere in the distance."],
   "exits": {
     "north": "north_of_tent",
-    "south": "south_of_tent"
+    "south": "south_of_tent",
+    "east": "clearing1"
   },
   "line_of_sight": ["north_of_tent", "south_of_tent"],
   "objects": [],

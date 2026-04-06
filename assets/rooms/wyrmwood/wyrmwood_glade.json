@@ -1,0 +1,25 @@
+{
+  "id": "wyrmwood_glade",
+  "name": "Wyrmwood Glade",
+  "description": "A rare break in the canopy. Pale light falls on a long strip of open ground running east to west — the first real path you've seen in the wood. The forest south is impenetrably dense. No way through.",
+  "material": "earth",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 8,
+  "ambient": [
+    "Light filters down through the gap overhead.",
+    "Wind moves freely."
+  ],
+  "exits": {
+    "north": "wyrmwood_c",
+    "west": "wyrmwood_sword_stone",
+    "east": "wyrmwood_beast"
+  },
+  "line_of_sight": [
+    "wyrmwood_sword_stone",
+    "wyrmwood_beast"
+  ],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

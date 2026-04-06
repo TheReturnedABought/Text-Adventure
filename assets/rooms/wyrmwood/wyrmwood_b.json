@@ -1,0 +1,23 @@
+{
+  "id": "wyrmwood_b",
+  "name": "Wyrmwood",
+  "description": "Twisted branches interlock overhead, blotting out the sky. Every direction looks much the same. You are not sure you have not been here before.",
+  "material": "wood",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 4,
+  "ambient": [
+    "The forest breathes around you.",
+    "Leaves fall with no wind to carry them."
+  ],
+  "exits": {
+    "west": "wyrmwood_a",
+    "north": "wyrmwood_a",
+    "south": "wyrmwood_2skeletons",
+    "east": "wyrmwood_d"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

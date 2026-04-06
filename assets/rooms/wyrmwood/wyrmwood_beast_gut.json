@@ -1,0 +1,39 @@
+{
+  "id": "wyrmwood_beast_gut",
+  "name": "Wyrmwood — Beast Gut",
+  "description": "You are inside the ribcage of the long-dead beast. Leathery walls press close. Bioluminescent fungi cling to the interior in pale green clusters, casting just enough light to see by. It smells of old death and deep earth. The opening above leads back out.",
+  "material": "flesh",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 3,
+  "ambient": [
+    "Something drips steadily in the dark.",
+    "The walls creak and settle around you, as if breathing."
+  ],
+  "exits": {
+    "up": "wyrmwood_beast"
+  },
+  "line_of_sight": [],
+  "objects": [
+    {
+      "id": "fungal_growth",
+      "name": "fungi",
+      "description": "Strange pale-green mushrooms growing in dense clusters along the ribs. They pulse very faintly.",
+      "description_snippet": "Bioluminescent fungi cling to the ribs, casting pale green light.",
+      "material": "flesh",
+      "is_container": false,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "look": "The fungi pulse with a soft, rhythmic light. They smell faintly of copper. You are not sure if they are plant or animal.",
+        "take": "You could take some, but touching them leaves a faint green stain on your fingers that does not wash off.",
+        "search": "Nothing hidden behind them. Just more ribs."
+      },
+      "required_commands": {}
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}
