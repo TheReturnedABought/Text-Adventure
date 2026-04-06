@@ -258,9 +258,21 @@ class CommandParser:
         if not valid:
             return self._make_error(raw, error_msg, article)
 
-        # AP cost based on raw input length (letter count system)
-        ap_cost = max(1, len(raw.strip()) - player.ap_cost_reduction_for(cmd_def.name))
-        mp_cost = 0   # MP cost not used in current system
+        # AP and MP costs are command-definition driven so encounters can be tuned in data.
+        # If an override exists we use it; otherwise base cost minus equipment reductions.
+        if cmd_def.ap_cost_override is not None:
+            ap_cost = max(0, int(cmd_def.ap_cost_override))
+        else:
+            reduction = player.ap_cost_reduction_for_text(normalised)
+            ap_cost = max(1, int(cmd_def.base_ap_cost) - reduction)
+
+        if cmd_def.costs_mp:
+            if cmd_def.mp_cost_override is not None:
+                mp_cost = max(0, int(cmd_def.mp_cost_override))
+            else:
+                mp_cost = max(0, int(cmd_def.base_mp_cost) - player.mp_cost_reduction_for(cmd_def.name))
+        else:
+            mp_cost = 0
 
         return ParsedCommand(
             raw=raw,

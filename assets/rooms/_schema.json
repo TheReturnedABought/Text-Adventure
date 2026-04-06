@@ -84,5 +84,20 @@
   "enemy_spawns": [
     { "template_id": "goblin_scout", "count": 2 },
     { "template_id": "goblin_guard", "count": 1 }
+  ],
+
+  "interaction_rules": [
+    {
+      "commands": ["pray", "kneel"],
+      "targets": ["altar"],
+      "text": "You whisper an old word and hidden gears click in the walls.",
+      "requires": { "min_level": 1, "class": null },
+      "blocked_text": "You do not understand how to invoke that rite.",
+      "reveal_objects": ["secret_door"],
+      "spawn_items": ["silver_key"],
+      "set_exits": { "down": "hidden_crypt" },
+      "remove_exits": [],
+      "set_flags": { "altar_rite_complete": true }
+    }
   ]
 }

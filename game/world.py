@@ -184,6 +184,7 @@ class Room:
     visited: bool = False
     enemy_spawns: list[dict] = field(default_factory=list)
     description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
+    interaction_rules: list[dict] = field(default_factory=list)
 
     def get_description(self, verbose: bool = False) -> str:
         # Substitute all {{object_id_desc}} placeholders
@@ -195,7 +196,7 @@ class Room:
         if verbose or not self.visited:
             lines.append(desc)
             # Fixed: use random.random() and random.choice() correctly
-            if random.random() > 0.3:
+            if self.ambient and random.random() > 0.3:
                 chosen = random.choice(self.ambient)  # pick one random string
                 lines.append(chosen)
         living = self.living_enemies()
@@ -216,13 +217,22 @@ class Room:
 
     def find_object(self, name: str) -> WorldObject | None:
         needle = name.lower()
-        print(f"[DEBUG] find_object: searching for '{needle}' in {list(self.objects.keys())}")
-        for obj_id, obj in self.objects.items():
-            print(f"[DEBUG]   checking {obj_id}: name='{obj.name}', hidden={obj.hidden}")
+        for _, obj in self.objects.items():
             if not obj.hidden and needle in obj.name.lower():
-                print(f"[DEBUG]   MATCH found: {obj_id}")
                 return obj
-        print(f"[DEBUG]   No match found")
+        return None
+
+    def find_matching_rule(self, intent: str, target_name: str | None = None) -> dict | None:
+        command = (intent or "").strip().lower()
+        target = (target_name or "").strip().lower()
+        for rule in self.interaction_rules:
+            verbs = [v.strip().lower() for v in rule.get("commands", []) if str(v).strip()]
+            if verbs and command not in verbs:
+                continue
+            targets = [t.strip().lower() for t in rule.get("targets", []) if str(t).strip()]
+            if targets and target not in targets:
+                continue
+            return rule
         return None
 
     def enemies_visible_from(self, from_room: "Room") -> list["Enemy"]:

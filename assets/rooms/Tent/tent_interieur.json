@@ -47,5 +47,17 @@
     }
   ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["search", "inspect"],
+      "targets": ["crate"],
+      "text": "You check under the crate and find a tiny brass token tucked in a seam.",
+      "requires": {},
+      "spawn_items": ["brass_token"],
+      "set_flags": {
+        "tent_crate_searched": true
+      }
+    }
+  ]
 }

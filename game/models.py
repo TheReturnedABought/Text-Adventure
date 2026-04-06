@@ -35,6 +35,7 @@ class EquippableItem:
     rarity: str = "common"
     tier: int = 1
     stat_modifiers: dict[str, int] = field(default_factory=dict)
+    letter_cost_reductions: dict[str, int] = field(default_factory=dict)
     ability_cost_reductions: dict[str, int] = field(default_factory=dict)
     abilities: list[Ability] = field(default_factory=list)
     equip_requirements: dict = field(default_factory=dict)
