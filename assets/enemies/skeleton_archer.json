@@ -8,9 +8,9 @@
   "defense": 1,
   "total_ap": 16,
   "ai_profile": "guard",
-  "guard_home": "guard_room",
+  "guard_home": "",
   "vulnerabilities": ["bludgeoning"],
-  "resistances": ["piercing", "slashing"],
+  "resistances": [],
   "intent_pool": [
     {
       "id": "arrow",

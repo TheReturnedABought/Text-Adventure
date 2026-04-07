@@ -114,7 +114,7 @@ class AssetLoader:
             abilities=abilities,
             equip_requirements=dict(data.get("equip_requirements", {})),
             upgrade_path=data.get("upgrade_path"),
-            readable_text=data.get("readable_text"),
+            item_flags=data.get("item_flags", []),
         )
 
     def load_all_items(self) -> dict[str, EquippableItem]:
@@ -208,18 +208,22 @@ class AssetLoader:
             art_asset=t.get("art_asset"),
         )
 
-    def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict]) -> list[Enemy]:
+    def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict], room_id: str) -> list[
+        Enemy]:
         enemies = []
         for spawn in spawn_list:
             tid = spawn.get("template_id")
             if tid not in templates:
+                print(f"[WARN] Template '{tid}' not found for room spawn")
                 continue
             for _ in range(int(spawn.get("count", 1))):
                 enemy = self.instantiate_enemy(tid, templates)
-                enemy.current_zone = spawn.get("zone_id")
+                if enemy.guard_home is None and enemy.ai_profile is "guard":
+                    enemy.guard_home = room_id
+                enemy.current_zone = room_id
+                enemy.combat_room_id = room_id
                 enemies.append(enemy)
         return enemies
-
     # ----------------------------------------------------------------------
     # Class loading
     # ----------------------------------------------------------------------
@@ -264,8 +268,10 @@ class AssetLoader:
         rooms = self.load_all_rooms()
         world = WorldMap()
         for room in rooms.values():
-            for enemy in self.instantiate_enemies_for_room(room.enemy_spawns, enemy_templates):
+            enemies = self.instantiate_enemies_for_room(room.enemy_spawns, enemy_templates, room.id)
+            for enemy in enemies:
                 room.add_enemy(enemy)
+                print(f"[DEBUG] Added {enemy.name} to room {room.id} with guard_home={enemy.guard_home}")
             world.add_room(room)
         if world.start_room_id:
             world.current_room_id = world.start_room_id

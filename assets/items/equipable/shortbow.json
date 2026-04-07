@@ -1,0 +1,18 @@
+{
+  "id": "shortbow",
+  "name": "Shortbow",
+  "slot": "weapon",
+  "item_type": "bow",
+  "description": "A well‑strung shortbow. The limbs still have some spring.",
+  "material": "wood",
+  "rarity": "common",
+  "tier": 1,
+  "stat_modifiers": {
+    "attack": 2
+  },
+  "item_flags": ["ranged_attack"],
+  "equip_requirements": {
+    "min_level": 1
+  },
+  "upgrade_path": "longbow"
+}

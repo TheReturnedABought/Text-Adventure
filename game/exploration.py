@@ -196,8 +196,13 @@ class ExplorationController:
             result.add(f"Picked up {obj.name}.")
 
             # Remove the description snippet so the placeholder becomes empty
-            if obj.id in room.description_snippets:
-                room.description_snippets[obj.id] = ""
+            for key in (obj.id, f"{obj.id}_desc"):
+                if key in room.description_snippets:
+                    room.description_snippets[key] = ""
+            return
+
+        if obj and not obj.is_moveable:
+            result.add(f"You cannot take the {obj.name}; it's fixed in place.")
             return
 
         result.add("No such item on the ground or moveable object here.")

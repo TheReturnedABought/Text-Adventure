@@ -1,20 +1,38 @@
 {
   "id": "watchtower_third_floor",
   "name": "Watchtower Third Floor",
-  "description": "The topmost floor of the watchtower, open to the elements through wide arrow slits. You have a commanding view of the surrounding lands: a dense forest spreads to the east, a small village lies to the southwest, a murky swamp festers to the south, and to the north the castle looms across many moats and layers of walls.",
+  "description": "The topmost floor of the watchtower, open to the elements through wide arrow slits. You have a commanding view of the surrounding lands: a dense forest spreads to the east, a small village lies to the southwest, a murky swamp festers to the south, and to the north the castle looms across many moats and layers of walls.{{shortbow_desc}}",
   "material": "stone",
   "is_outdoor": true,
   "is_start": false,
   "light_level": 10,
   "ambient": [
-    "Wind whistles through the arrow slits, carrying the distant sounds of the village and the croaking of swamp frogs.",
-    "From here you can see the layers of the castle’s southern defenses across the moat."
+    "The wind whistles through the arrow slits.",
+    "You can see smoke rising from the village to the southwest."
   ],
   "exits": {
     "down": "watchtower_second_floor"
   },
   "line_of_sight": [],
-  "objects": [],
+  "objects": [
+    {
+      "id": "shortbow",
+      "name": "shortbow",
+      "description": "A well‑strung shortbow leaning against the arrow slit.",
+      "material": "wood",
+      "is_moveable": true,
+      "hidden": false,
+      "reveals": [],
+      "on_interact": {
+        "take": "You take the shortbow.",
+        "look": "A well‑strung shortbow. The limbs still have some spring."
+      },
+      "required_commands": {}
+    }
+  ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "description_snippets": {
+    "shortbow_desc": " A shortbow lies upon a parapet."
+  }
 }

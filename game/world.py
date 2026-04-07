@@ -197,10 +197,8 @@ class Room:
             if living:
                 lines.append("Enemies: " + ", ".join(e.name for e in living))
             if self.items_on_ground:
-                from collections import Counter
-                counts = Counter(self.items_on_ground)
-                items_str = ", ".join(f"{count} x {name}" if count > 1 else name for name, count in counts.items())
-                lines.append(f"- {items_str}")
+                for item in self.items_on_ground:
+                    lines.append(f"-{item}")
             return "\n".join(lines)
 
         # First visit OR explicit 'look' command → full description
@@ -365,11 +363,13 @@ class WorldMap:
         room = self.current_room()
         if not room:
             return []
+        print(f"[DEBUG] current room: {room.id}, enemies in room: {[e.name for e in room.enemies if e.is_alive]}")
         visible = list(room.living_enemies())
         for other_id in room.line_of_sight:
             other = self.get_room(other_id)
             if other:
                 visible.extend(other.enemies_visible_from(room))
+        print(f"[DEBUG] total visible enemies: {[e.name for e in visible]}")
         return visible
 
     def step_enemy_outside_combat(self, player_room_id: str | None) -> list[str]:

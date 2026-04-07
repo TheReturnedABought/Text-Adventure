@@ -42,6 +42,7 @@ class EquippableItem:
     equip_requirements: dict = field(default_factory=dict)
     upgrade_path: str | None = None
     readable_text: str | None = None
+    item_flags: list[str] = field(default_factory=list)
 
 @dataclass
 class PassiveTrait:

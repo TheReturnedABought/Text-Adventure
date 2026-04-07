@@ -487,7 +487,7 @@ class GameWindow:
         return None
 
     def _draw_explore(self, t, s):
-        # top panel room art
+        # top panel room art --> only art not description that is in logs
         room = s.room
         if not room:
             return

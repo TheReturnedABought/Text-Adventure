@@ -100,9 +100,9 @@ class CombatController:
     def _eligible_targets(self, ranged: bool) -> list["Enemy"]:
         self._debug_log(f"_eligible_targets(ranged={ranged})")
         living = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
+        print(f"[DEBUG] living enemies: {[(e.name, e.combat_room_id) for e in living]}")
         if ranged or not self.world:
             return living
-        # Melee: only enemies in the same room
         return [e for e in living if e.combat_room_id == self.player_room_id]
 
     # ----------------------------------------------------------------------
@@ -154,9 +154,7 @@ class CombatController:
             result.add(parsed.error or "Invalid command.")
             return result
         else:
-            cmd = self.registry.get_command(parsed.intent)
-            raw_ap = cmd.base_ap_cost if cmd else 0
-            print(f"[DEBUG] Raw AP: {raw_ap}, Reduced AP: {parsed.ap_cost}")
+            print(f"[DEBUG] Raw AP: {raw}, Reduced AP: {parsed.ap_cost}")
         intent = parsed.intent or ""
 
         # Handle movement if command is "go"
@@ -590,7 +588,8 @@ class CombatController:
     def _resolve_target(self, parsed: ParsedCommand, result: TurnResult) -> "Enemy | None":
         self._debug_log("_resolve_target()")
         cmd = self.registry.get_command(parsed.intent or "")
-        ranged = bool(cmd and "ranged" in [t.lower() for t in cmd.tags])
+        cmd_ranged = bool(cmd and "ranged" in [t.lower() for t in cmd.tags])
+        ranged = cmd_ranged or self._has_ranged_weapon()
         living = self._eligible_targets(ranged=ranged)
         if not living:
             all_enemies = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
@@ -699,3 +698,10 @@ class CombatController:
 
     def _format_roll(self, expr: DiceExpression, rolls: list[int], total: int) -> str:
         return f"rolled {expr} -> {rolls} = {total}"
+
+    def _has_ranged_weapon(self) -> bool:
+        for item in self.player.equipped.values():
+            print(f"[DEBUG] Equipped: {item.name}, slot={item.slot}, flags={item.item_flags}")
+            if item.slot == "weapon" and "ranged_attack" in item.item_flags:
+                return True
+        return False

@@ -12,7 +12,7 @@
     "The moat bubbles sporadically."
   ],
   "exits": {
-    "south": "foot_of_mountain",
+    "down": "foot_of_mountain",
     "north": "castle_courtyard",
     "west": "watchtower_base"
   },
@@ -22,7 +22,7 @@
       "blocked_text": "Even if you swam across the moat there is nowhere to go."
     }
   },
-  "line_of_sight": ["west_of_tent", "watchtower_base"],
+  "line_of_sight": [],
   "objects": [],
   "items_on_ground": [],
   "enemy_spawns": []

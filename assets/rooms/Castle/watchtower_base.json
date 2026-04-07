@@ -14,7 +14,7 @@
     "east": "foot_of_castle",
     "up": "watchtower_second_floor"
   },
-  "line_of_sight": ["foot_of_castle", "watchtower_second_floor"],
+  "line_of_sight": [],
   "objects": [],
   "items_on_ground": [],
   "enemy_spawns": []
