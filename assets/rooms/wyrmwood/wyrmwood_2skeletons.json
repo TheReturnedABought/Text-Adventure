@@ -25,6 +25,6 @@
     }
   ],
   "enemy_spawns": [
-    { "template_id": "skeleton_guard", "count": 2 }
+    { "template_id": "skeleton", "count": 2 }
   ]
 }

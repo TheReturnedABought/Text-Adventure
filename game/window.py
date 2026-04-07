@@ -20,6 +20,7 @@ import traceback
 import threading
 import tkinter as tk
 from collections import deque, Counter
+from pathlib import Path
 
 # ---------- ANSI helpers ----------
 _ANSI_RE = re.compile(r'\x1b\[([0-9;]*)m')
@@ -427,8 +428,10 @@ class GameWindow:
         def txt(s, tag='', width=col_w):
             return (s[:width].ljust(width), tag)
 
+        art_lines = self._load_enemy_art(enemy)
         rows = [
             row(txt(f'[{idx}] {enemy.name}', 'bold')),
+            *[row(txt(line, 'white')) for line in art_lines],
             row(txt(intent, itag)),
             row(txt(f'HP[{hp_bar}] {enemy.current_hp}/{enemy.max_hp}', hcol)),
             row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')),
@@ -436,9 +439,27 @@ class GameWindow:
         ]
         return rows
 
+    def _load_enemy_art(self, enemy) -> list[str]:
+        inline = str(getattr(enemy, "ascii_art", "") or "").strip("\n")
+        if inline.strip():
+            return inline.splitlines()[:4]
+
+        enemy_id = str(getattr(enemy, "template_id", "") or "").strip()
+        if enemy_id:
+            base = Path("assets") / "enemies"
+            txt_path = base / f"{enemy_id}.txt"
+            if txt_path.is_file():
+                try:
+                    content = txt_path.read_text(encoding="utf-8").strip("\n")
+                    if content.strip():
+                        return content.splitlines()[:4]
+                except OSError:
+                    pass
+
+        return ["?"]
+
     # Explore art -----------------------------------------------------------
     def _load_room_art(self, room_id: str) -> str | None:
-        from pathlib import Path
         base = Path("assets") / "rooms"
         for path in base.rglob(f"{room_id}.txt"):
             if path.is_file():
@@ -459,11 +480,7 @@ class GameWindow:
                 t.insert('end', f'  {line}\n', 'white')
             t.insert('end', '\n')
         else:
-            desc = str(getattr(room, "description", "")).strip()
-            if desc:
-                for ln in desc.splitlines()[:3]:
-                    t.insert('end', f'  {ln}\n', 'white')
-                t.insert('end', '\n')
+            t.insert('end', '  ?\n\n', 'white')
 
         alive = [e for e in getattr(room, 'enemies', []) if e.is_alive]
         if alive:

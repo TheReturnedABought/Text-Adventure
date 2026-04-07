@@ -44,8 +44,12 @@ class AssetLoader:
             interaction_rules=list(data.get("interaction_rules", [])),
             combat_won_snippet=data.get("combat_won_snippet", ""),
         )
+        room.description_snippets = {
+            str(k): str(v) for k, v in dict(data.get("description_snippets", {})).items()
+        }
         for obj_data in data.get("objects", []):
             obj = self._load_world_object(obj_data)
+            obj.reveal_on_combat_end = bool(obj_data.get("reveal_on_combat_end", False))
             room.objects[obj.id] = obj
             if "description_snippet" in obj_data:
                 room.description_snippets[obj.id] = obj_data["description_snippet"]
@@ -172,7 +176,7 @@ class AssetLoader:
         # Load vulnerabilities and resistances
         vulnerabilities = t.get("vulnerabilities", [])
         resistances = t.get("resistances", [])
-        return Enemy(
+        enemy = Enemy(
             template_id=template_id,
             name=t.get("name", template_id),
             max_hp=int(t.get("max_hp", 10)),
@@ -191,6 +195,8 @@ class AssetLoader:
             vulnerabilities=vulnerabilities,
             resistances=resistances,
         )
+        setattr(enemy, "ascii_art", t.get("ascii_art", ""))
+        return enemy
 
     def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict]) -> list[Enemy]:
         enemies = []
