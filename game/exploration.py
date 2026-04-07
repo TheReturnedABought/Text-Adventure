@@ -57,11 +57,11 @@ class ExplorationController:
             return result
 
         intent = (parsed.intent or "").lower()
-        if intent in {"go", "move"}:
+        if intent == "go":
             self._resolve_go(parsed, result)
         elif intent == "look":
             self._resolve_look(parsed, result)
-        elif intent in {"open", "close", "unlock", "smash", "push", "pull", "move_object"}:
+        elif intent in {"open", "close", "unlock", "smash", "push", "pull", "move_object", "move"}:
             self._resolve_object_command(parsed, result)
         elif intent == "put":
             self._resolve_put(parsed, result)

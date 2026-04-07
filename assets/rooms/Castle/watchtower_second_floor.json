@@ -13,7 +13,7 @@
   "exits": {
     "down": "watchtower_base"
   },
-  "line_of_sight": ["watchtower_base", "foot_of_castle"],
+  "line_of_sight": [],
   "objects": [
     {
       "id": "gate_lever",

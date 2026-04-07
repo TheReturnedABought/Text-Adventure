@@ -1,0 +1,18 @@
+{
+  "id": "foot_of_mountain",
+  "name": "Foot of mountain",
+  "description": "The base of the mighty crag. The path continues up.",
+  "material": "stone",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 12,
+  "ambient": ["The mountain's presence imposes itself."],
+  "exits": {
+    "up": "foot_of_castle",
+    "south": "north_of_tent"
+  },
+  "line_of_sight": ["east_of_tent", "west_of_tent","north_of_tent"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

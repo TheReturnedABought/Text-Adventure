@@ -1,24 +1,25 @@
 {
   "id": "foot_of_castle",
   "name": "Foot of the Castle",
-  "description": "You stand beneath an old fortress wall in front of a sealed iron gate. A nearby watchtower rises above the approach.",
+  "description": "You stand beneath an old fortress wall in front of a sealed drawbridge across a moat. A nearby watchtower rises above the approach.",
   "material": "stone",
   "is_outdoor": true,
   "is_start": false,
   "light_level": 9,
   "ambient": [
     "The wind moans through cracks in the battlements.",
-    "You hear chains clinking somewhere above."
+    "You hear chains clinking somewhere above.",
+    "The moat bubbles sporadically."
   ],
   "exits": {
-    "east": "west_of_tent",
+    "south": "foot_of_mountain",
     "north": "castle_courtyard",
     "west": "watchtower_base"
   },
   "exit_requirements": {
     "north": {
       "required_flag": "castle_gate_lever_pulled",
-      "blocked_text": "The iron gate is shut tight. Maybe a mechanism controls it."
+      "blocked_text": "Even if you swam across the moat there is nowhere to go."
     }
   },
   "line_of_sight": ["west_of_tent", "watchtower_base"],

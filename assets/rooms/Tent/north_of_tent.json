@@ -1,13 +1,14 @@
 {
   "id": "north_of_tent",
   "name": "North of Tent",
-  "description": "A patch of grass directly north of the tent. The ground is slightly muddy, with boot prints leading to the tent flap.",
+  "description": "A path north of the tent leads from the tent to the mountain. There are prints leading to the inside of the tent.",
   "material": "earth",
   "is_outdoor": true,
   "is_start": true,
   "light_level": 12,
   "ambient": ["A cool breeze blows from the north."],
   "exits": {
+    "north": "foot_of_mountain",
     "south": "tent_interieur",
     "east": "east_of_tent",
     "west": "west_of_tent"
