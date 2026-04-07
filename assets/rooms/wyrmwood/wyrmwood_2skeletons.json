@@ -2,6 +2,7 @@
   "id": "wyrmwood_2skeletons",
   "name": "Wyrmwood",
   "description": "Two skeletons lie slumped against a mossy trunk, their arms outstretched — one pointing east, one west. {{combat_update}}",
+  "art_asset": "assets/rooms/wyrmwood/art/wyrmwood_c.txt",
   "combat_won_snippet": "They have been destroyed, their remains now still.",
   "description_snippets": {
     "combat_update": ""

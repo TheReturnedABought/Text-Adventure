@@ -2,6 +2,7 @@
   "id": "east_of_tent",
   "name": "East of Tent",
   "description": "A narrow clearing east of the tent. Thorny bushes crowd the edges, but a gap in the undergrowth to the east reveals a faint trail heading into the forest.",
+  "art_asset": "assets/rooms/Tent/art/east_of_tent.txt",
   "material": "earth",
   "is_outdoor": true,
   "is_start": false,

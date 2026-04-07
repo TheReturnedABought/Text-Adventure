@@ -4,6 +4,7 @@
   "id": "goblin_scout",
   "name": "Goblin Scout",
   "description": "A scrawny goblin clutching a rusty knife. Quick and cowardly.",
+  "art_asset": "assets/rooms/wyrmwood/art/wyrmwood_c.txt",
   "material": "flesh",
 
   "max_hp":   12,

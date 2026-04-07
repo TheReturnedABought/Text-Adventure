@@ -19,6 +19,7 @@ import sys
 import traceback
 import threading
 import tkinter as tk
+from pathlib import Path
 from collections import deque, Counter
 
 # ---------- ANSI helpers ----------
@@ -145,6 +146,7 @@ class GameWindow:
         self._root = None
         self._char_width = None   # will be computed lazily
         self._art_font_mode = None
+        self._art_cache: dict[str, str] = {}
 
     # Public API ------------------------------------------------------------
     def set_explore(self, player, room):
@@ -427,8 +429,16 @@ class GameWindow:
         def txt(s, tag='', width=col_w):
             return (s[:width].ljust(width), tag)
 
+        crest = ""
+        if getattr(enemy, "art_asset", None):
+            art = self._load_room_art(enemy.template_id or enemy.name.lower(), enemy.art_asset)
+            if art:
+                crest = art.splitlines()[0].strip()[:8]
+        title = f'[{idx}] {enemy.name}'
+        if crest:
+            title = f"{title} {crest}"
         rows = [
-            row(txt(f'[{idx}] {enemy.name}', 'bold')),
+            row(txt(title, 'bold')),
             row(txt(intent, itag)),
             row(txt(f'HP[{hp_bar}] {enemy.current_hp}/{enemy.max_hp}', hcol)),
             row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')),
@@ -437,15 +447,31 @@ class GameWindow:
         return rows
 
     # Explore art -----------------------------------------------------------
-    def _load_room_art(self, room_id: str) -> str | None:
-        from pathlib import Path
+    def _load_room_art(self, room_id: str, art_asset: str | None = None) -> str | None:
+        if art_asset:
+            path = Path(art_asset)
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            key = str(path.resolve())
+            if key in self._art_cache:
+                return self._art_cache[key]
+            if path.is_file():
+                try:
+                    art = path.read_text(encoding="utf-8").rstrip("\n")
+                    self._art_cache[key] = art
+                    return art
+                except OSError:
+                    return None
+            return None
         base = Path("assets") / "rooms"
         for path in base.rglob(f"{room_id}.txt"):
             if path.is_file():
                 try:
-                    return path.read_text(encoding="utf-8").rstrip("\n")
+                    art = path.read_text(encoding="utf-8").rstrip("\n")
+                    self._art_cache[str(path.resolve())] = art
+                    return art
                 except OSError:
-                    pass
+                    return None
         return None
 
     def _draw_explore(self, t, s):
@@ -453,7 +479,7 @@ class GameWindow:
         if not room:
             return
 
-        art = self._load_room_art(room.id)
+        art = self._load_room_art(room.id, getattr(room, "art_asset", None))
         if art:
             for line in art.splitlines():
                 t.insert('end', f'  {line}\n', 'white')

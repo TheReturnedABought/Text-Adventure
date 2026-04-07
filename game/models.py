@@ -22,6 +22,7 @@ class Ability:
     effect_duration: int = 1
     effect_stacks: int = 1
     tags: list[str] = field(default_factory=list)
+    payload: dict = field(default_factory=dict)
     execute: Callable[["BattleContext"], str] | None = None
 
 

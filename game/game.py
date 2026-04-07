@@ -317,7 +317,8 @@ class TextAdventureGame:
 
         self.combat = CombatController(
             self.parser, self.registry, self.player, aggressors,
-            self.world, self.world.current_room_id, self.exploration.puzzle_flags if self.exploration else {}
+            self.world, self.world.current_room_id, self.exploration.puzzle_flags if self.exploration else {},
+            debug=self.debug
         )
         window.append_log(self.combat.start_encounter())
         self.state = GameState.COMBAT

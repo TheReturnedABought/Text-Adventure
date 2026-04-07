@@ -2,6 +2,7 @@
   "id": "west_of_tent",
   "name": "West of Tent",
   "description": "A rocky patch west of the tent. A few large stones lie scattered around.",
+  "art_asset": "assets/rooms/Tent/art/east_of_tent.txt",
   "material": "stone",
   "is_outdoor": true,
   "is_start": false,

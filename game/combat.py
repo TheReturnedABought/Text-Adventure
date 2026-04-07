@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
 from game.dice import DiceExpression
-from game.effects import EffectTrigger, EffectCategory
+from game.effects import EffectTrigger, EffectCategory, StatusEffect
 from game.models import ParsedCommand, ArticleType
-from game.world import DamageType, coerce_damage_type, resolve_material_interaction
+from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction
 from game.window import window
 
 if TYPE_CHECKING:
@@ -368,11 +368,9 @@ class CombatController:
             room = self.world.get_room(self.player_room_id)
             if room:
                 return room.material
-        from game.world import Material
         return Material.STONE
 
     def _material_from_str(self, mat_str: str) -> Material:
-        from game.world import Material
         try:
             return Material(mat_str.lower())
         except ValueError:
@@ -412,8 +410,27 @@ class CombatController:
                     if target:
                         dealt = target.receive_damage(dmg)
                         result.add(f"You use {ability.name} and deal {dealt} damage.")
+                        if ability.effect_on_hit:
+                            effect = StatusEffect(
+                                id=ability.effect_on_hit,
+                                name=ability.effect_on_hit.capitalize(),
+                                description="",
+                                trigger=EffectTrigger.ON_TURN_END,
+                                category=EffectCategory.DEBUFF,
+                                duration=ability.effect_duration,
+                                stacks=ability.effect_stacks,
+                            )
+                            result.add(target.apply_effect(effect))
                 else:
                     result.add(f"You use {ability.name}.")
+                bonus_ap = int(ability.payload.get("restore_ap", 0) or 0)
+                if bonus_ap > 0:
+                    self.player.current_ap = min(self.player.total_ap, self.player.current_ap + bonus_ap)
+                    result.add(f"You regain {bonus_ap} AP.")
+                bonus_mp = int(ability.payload.get("restore_mp", 0) or 0)
+                if bonus_mp > 0:
+                    self.player.mana = min(self.player.max_mana, self.player.mana + bonus_mp)
+                    result.add(f"You regain {bonus_mp} MP.")
                 return
         result.add("No matching ability is equipped.")
 
@@ -469,7 +486,6 @@ class CombatController:
             dealt = self.player.receive_damage(dmg)
             result.add(f"{enemy.name} {intent.description} for {dealt} damage.")
             if intent.effect_on_hit:
-                from game.effects import StatusEffect, EffectTrigger, EffectCategory
                 effect = StatusEffect(
                     id=intent.effect_on_hit,
                     name=intent.effect_on_hit.capitalize(),

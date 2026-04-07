@@ -29,6 +29,10 @@ class AssetLoader:
     def load_room(self, path: Path) -> Room:
         data = self._read_json(path)
         material = Material(data.get("material", "stone"))
+        art_asset = data.get("art_asset")
+        if not art_asset:
+            default_art = path.parent / "art" / f"{path.stem}.txt"
+            art_asset = str(default_art.as_posix()) if default_art.exists() else None
         room = Room(
             id=data.get("id", path.stem),
             name=data.get("name", path.stem.title()),
@@ -44,6 +48,7 @@ class AssetLoader:
             enemy_spawns=list(data.get("enemy_spawns", [])),
             interaction_rules=list(data.get("interaction_rules", [])),
             combat_won_snippet=data.get("combat_won_snippet", ""),
+            art_asset=art_asset,
         )
         for obj_data in data.get("objects", []):
             obj = self._load_world_object(obj_data)
@@ -122,6 +127,10 @@ class AssetLoader:
         return items
 
     def _load_ability(self, data: dict) -> Ability:
+        known = {
+            "id", "name", "description", "ap_cost", "dice_expression",
+            "effect_on_hit", "effect_duration", "effect_stacks", "tags"
+        }
         return Ability(
             id=data.get("id", data.get("name", "ability").lower().replace(" ", "_")),
             name=data.get("name", "Ability"),
@@ -132,6 +141,7 @@ class AssetLoader:
             effect_duration=int(data.get("effect_duration", 1)),
             effect_stacks=int(data.get("effect_stacks", 1)),
             tags=list(data.get("tags", [])),
+            payload={k: v for k, v in data.items() if k not in known},
         )
 
     # ----------------------------------------------------------------------
@@ -192,6 +202,7 @@ class AssetLoader:
             fear_zones=set(t.get("fear_zones", [])),
             vulnerabilities=vulnerabilities,
             resistances=resistances,
+            art_asset=t.get("art_asset"),
         )
 
     def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict]) -> list[Enemy]:

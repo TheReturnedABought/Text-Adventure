@@ -2,6 +2,7 @@
   "id": "skeleton",
   "name": "Skeleton",
   "description": "A rattling skeleton clutching a rusted shortsword. Empty eye sockets stare ahead.",
+  "art_asset": "assets/rooms/wyrmwood/art/wyrmwood_c.txt",
   "material": "bone",
   "max_hp": 18,
   "attack": 5,

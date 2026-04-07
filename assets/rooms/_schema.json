@@ -4,6 +4,7 @@
   "id": "forest_clearing",
   "name": "Forest Clearing",
   "description": "A sun-dappled clearing surrounded by tall oaks. Wind rustles the canopy above.",
+  "art_asset": "assets/rooms/Tent/art/east_of_tent.txt",
   "material": "wood",
   "is_outdoor": true,
   "is_start": false,

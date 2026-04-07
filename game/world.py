@@ -188,6 +188,7 @@ class Room:
     description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
     interaction_rules: list[dict] = field(default_factory=list)
     combat_won_snippet: str = ""
+    art_asset: str | None = None
 
     def get_description(self, verbose: bool = False) -> str:
         # Substitute all placeholders (supports both {{key_desc}} and {{key}})
