@@ -2,7 +2,9 @@
   "flags": {
     "castle_gate_lever_pulled": false,
     "beast_tunnel_unlocked": false,
+    "lyra_offering_made": false,
     "cave_passage_open": false,
+    "hut_door_open": false,
     "worthy": false
   }
 }

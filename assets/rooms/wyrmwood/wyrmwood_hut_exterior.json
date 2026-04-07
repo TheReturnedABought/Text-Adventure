@@ -14,6 +14,12 @@
     "south": "wyrmwood_b",
     "north": "wyrmwood_hut_interior"
   },
+  "exit_requirements": {
+    "north": {
+      "required_flag": "hut_door_open",
+      "blocked_text": "The door is closed. You need to open it first."
+    }
+  },
   "line_of_sight": ["wyrmwood_b"],
   "objects": [
     {
@@ -24,11 +30,43 @@
       "is_moveable": false,
       "hidden": false,
       "on_interact": {
-        "open": "The door creaks open further. Darkness waits inside.",
+        "open": "You push the warped door open. It swings inward with a low groan.",
         "look": "Old wood, swollen with damp. It has been opened many times."
+      },
+      "set_flags_on_interact": {
+        "open": {
+          "hut_door_open": true
+        }
+      }
+    },
+    {
+      "id": "gravestone",
+      "name": "gravestone",
+      "description": "A weathered stone marker, half-swallowed by moss. The inscription is worn but you can just make out a name: 'Lyra'. A small hollow at the base looks like it was meant to hold an offering.",
+      "material": "stone",
+      "is_moveable": false,
+      "hidden": false,
+      "on_interact": {
+        "look": "The gravestone reads 'Lyra – Beloved and Lost'. The hollow at the base is empty.",
+        "read": "You trace the worn letters: 'Lyra – Beloved and Lost'."
       }
     }
   ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["put", "place"],
+      "targets": ["flower", "wildflower", "lyra flower"],
+      "text": "You gently place the flower into the hollow at the base of the gravestone. A faint shimmer runs through the stone, and a small needle wrapped in wasp silk materialises at your feet.",
+      "requires": {
+        "min_level": 1
+      },
+      "blocked_text": "Nothing happens.",
+      "spawn_items": ["wasp_needle"],
+      "set_flags": {
+        "lyra_offering_made": true
+      }
+    }
+  ]
 }
