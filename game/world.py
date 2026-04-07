@@ -197,9 +197,8 @@ class Room:
         lines = [self.name]
         if verbose or not self.visited:
             lines.append(desc)
-            # Fixed: use random.random() and random.choice() correctly
             if self.ambient and random.random() > 0.3:
-                chosen = random.choice(self.ambient)  # pick one random string
+                chosen = random.choice(self.ambient)
                 lines.append(chosen)
         living = self.living_enemies()
         if living:
@@ -249,6 +248,9 @@ class Room:
         if not dt:
             return [f"The {effect_type} energy dissipates."]
         interaction = resolve_material_interaction(dt, self.material)
+        # Suppress generic "has little effect" messages
+        if interaction.summary == "has little effect":
+            return []
         lines = [f"{source.name}'s {dt.value} effect {interaction.summary} in {self.name}."]
         if interaction.spreads:
             lines.append("The effect spreads through the environment.")
@@ -266,6 +268,7 @@ class Room:
             # Set the combat won snippet if provided
             if self.combat_won_snippet:
                 self.description_snippets["combat_update"] = self.combat_won_snippet
+
 
 class WorldMap:
     def __init__(self):
@@ -368,7 +371,7 @@ class WorldMap:
                     "visited": r.visited,
                     "items_on_ground": list(r.items_on_ground),
                     "objects_hidden": {oid: obj.hidden for oid, obj in r.objects.items()},
-                    "description_snippets": dict(r.description_snippets)  # persist snippets
+                    "description_snippets": dict(r.description_snippets)
                 } for rid, r in self.rooms.items()
             }
         }

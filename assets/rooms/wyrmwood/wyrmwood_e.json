@@ -1,19 +1,19 @@
 {
-  "id": "wyrmwood_c",
+  "id": "wyrmwood_e",
   "name": "Wyrmwood",
   "description": "Twisted branches interlock overhead, blotting out the sky. Every direction looks much the same. You are not sure you have not been here before.",
   "material": "wood",
   "is_outdoor": true,
   "is_start": false,
-  "light_level": 3,
+  "light_level": 4,
   "ambient": [
-    "An insect drones somewhere overhead.",
-    "The air is damp and heavy, difficult to breathe."
+    "Your footsteps sound wrong here — too loud, or too quiet.",
+    "A branch snaps somewhere close. Nothing is there."
   ],
   "exits": {
-    "north": "wyrmwood_2skeletons",
-    "west": "wyrmwood_a",
-    "east": "wyrmwood_d",
+   "north": "wyrmwood_c",
+    "west": "wyrmwood_entry",
+    "east": "wyrmwood_glade",
     "south": "wyrmwood_e"
   },
   "line_of_sight": [],

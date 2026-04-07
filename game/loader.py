@@ -169,6 +169,9 @@ class AssetLoader:
             ))
         loot = [LootEntry(item_id=row["item_id"], chance=float(row["chance"]), count_expression=str(row.get("count_expression", "1")))
                 for row in t.get("loot_table", [])]
+        # Load vulnerabilities and resistances
+        vulnerabilities = t.get("vulnerabilities", [])
+        resistances = t.get("resistances", [])
         return Enemy(
             template_id=template_id,
             name=t.get("name", template_id),
@@ -185,6 +188,8 @@ class AssetLoader:
             guard_home=t.get("guard_home"),
             forbidden_zones=set(t.get("forbidden_zones", [])),
             fear_zones=set(t.get("fear_zones", [])),
+            vulnerabilities=vulnerabilities,
+            resistances=resistances,
         )
 
     def instantiate_enemies_for_room(self, spawn_list: list[dict], templates: dict[str, dict]) -> list[Enemy]:

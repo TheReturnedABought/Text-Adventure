@@ -1,6 +1,6 @@
 {
-  "id": "skeleton_guard",
-  "name": "Skeleton Guard",
+  "id": "skeleton",
+  "name": "Skeleton",
   "description": "A rattling skeleton clutching a rusted shortsword. Empty eye sockets stare ahead.",
   "material": "bone",
   "max_hp": 18,
@@ -9,6 +9,8 @@
   "total_ap": 16,
   "ai_profile": "guard",
   "guard_home": "wyrmwood_2skeletons",
+  "vulnerabilities": ["bludgeoning"],
+  "resistances": ["piercing", "slashing"],
   "intent_pool": [
     {
       "id": "slash",

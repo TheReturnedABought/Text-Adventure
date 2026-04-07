@@ -339,7 +339,9 @@ class TextAdventureGame:
                 room = self.world.current_room()
                 if room:
                     room.update_after_combat()
+                    # Force refresh of the room description
                     window.set_explore(self.player, room)
+                    window.append_log(room.get_description(verbose=True))
 
     def _on_combat_fled(self) -> None:
         self._debug("_on_combat_fled()")

@@ -1,0 +1,19 @@
+{
+  "id": "wyrmwood_cave",
+  "name": "Belly of the beast",
+  "description": "A hollow chamber formed within the beast's petrified organs. The walls are not stone but ossified flesh—smooth, veined, and faintly warm. In the centre, a rib bone has been carved into an altar bearing an ancient symbol. Above the passage leads back into the beast's gut.",
+  "material": "flesh",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 3,
+  "ambient": [
+    "A faint, organic hum resonates through the walls.",
+    "The chamber smells of old marrow and dried blood."
+  ],
+  "exits": {
+    "up": "wyrmwood_beast_gut"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "enemy_spawns": []
+}

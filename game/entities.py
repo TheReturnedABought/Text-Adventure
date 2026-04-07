@@ -118,6 +118,22 @@ class Player(Entity):
     def unlock_command(self, command_name: str) -> None:
         self.unlocked_commands.add(command_name)
 
+    # Base attack (without weapon bonuses)
+    def base_attack_value(self) -> int:
+        """Attack without any equipped weapon bonuses."""
+        base = self.attack
+        base += self.effects.stat_bonus("attack")
+        return base
+
+    def weapon_attack_bonus(self, weapon_name: str | None = None) -> int:
+        """Bonus from a specific equipped weapon, or 0 if none."""
+        if not weapon_name:
+            return 0
+        for item in self.equipped.values():
+            if item.slot == "weapon" and weapon_name.lower() in item.name.lower():
+                return item.stat_modifiers.get("attack", 0)
+        return 0
+
     # Equipment
     def equip(self, item_name: str) -> str:
         item = self.find_in_inventory(item_name)
@@ -280,6 +296,9 @@ class Enemy(Entity):
     scout_range_max: int = 4
     trap_placed: bool = False
     trap_room_id: str | None = None
+    # Vulnerabilities and resistances (damage type strings)
+    vulnerabilities: list[str] = field(default_factory=list)
+    resistances: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()

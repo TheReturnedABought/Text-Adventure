@@ -313,6 +313,18 @@ class CombatController:
         dice = self._build_attack_dice(cmd, parsed)
         total, rolls, mod = dice.roll_with_breakdown()
 
+        # Determine if we are using a specific weapon
+        weapon_bonus = 0
+        if parsed.item_name:
+            weapon_bonus = self.player.weapon_attack_bonus(parsed.item_name)
+            if weapon_bonus == 0:
+                result.add(f"You don't have '{parsed.item_name}' equipped.")
+                return False
+            total += weapon_bonus
+        else:
+            # Use base attack (no weapon bonuses)
+            total += self.player.base_attack_value()
+
         # Apply material interactions
         room_material = self._current_room_material()
         interaction = resolve_material_interaction(damage_type, room_material)
@@ -322,13 +334,18 @@ class CombatController:
         target_interaction = resolve_material_interaction(damage_type, target_material)
         total = int(total * target_interaction.damage_multiplier)
 
+        # Apply enemy-specific vulnerabilities and resistances
+        vuln_mult = 2.0 if damage_type.value in target.vulnerabilities else 1.0
+        resist_mult = 0.5 if damage_type.value in target.resistances else 1.0
+        total = int(total * vuln_mult * resist_mult)
+
         # Article bonus
         if parsed.article == ArticleType.GENERIC:
             total += self.registry.article_rule.generic_flat_bonus
         elif parsed.article == ArticleType.SPECIFIC:
             total += self.registry.article_rule.specific_flat_bonus
 
-        dealt = target.receive_damage(total + self.player.attack_value())
+        dealt = target.receive_damage(total)
         result.add(f"You hit {target.name} for {dealt} damage ({self._format_roll(dice, rolls, total)}).")
 
         # Environmental reaction
