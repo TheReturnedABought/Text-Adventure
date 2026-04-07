@@ -1,5 +1,8 @@
 {
   "flags": {
-    "castle_gate_lever_pulled": false
+    "castle_gate_lever_pulled": false,
+    "beast_tunnel_unlocked": false,
+    "cave_passage_open": false,
+    "worthy": false
   }
 }

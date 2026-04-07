@@ -56,7 +56,7 @@
       }
     }
   ],
-  "items_on_ground": ["shortbow_arrow"],
+  "items_on_ground": [],
   "enemy_spawns": [],
   "interaction_rules": [
     {
@@ -65,12 +65,13 @@
       "text": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
       "reveal_objects": ["hidden_lever"]
     },
-    {
-      "commands": ["pull"],
-      "targets": ["hidden lever"],
-      "text": "You pull the lever. With a grinding rumble, part of the rubble shifts, creating a narrow gap to the east.",
-      "set_exits": { "east": "wyrmwood_cave" },
-      "set_flags": { "cave_passage_open": true }
-    }
+      {
+        "commands": ["pull"],
+        "targets": ["hidden lever"],
+        "text": "You pull the lever. With a grinding rumble, distant stone shifts and a passage somewhere reconfigures.",
+        "set_flags": {
+          "cave_passage_open": true
+        }
+      }
   ]
 }

@@ -1,0 +1,32 @@
+{
+  "id": "ancient_tunnel_mural_1",
+  "name": "Ancient Tunnel",
+  "description": "The tunnel continues north. The murals grow clearer here, less worn by time.{{mural_desc}}",
+  "material": "stone",
+  "is_outdoor": false,
+  "light_level": 2,
+  "ambient": [
+    "Your footsteps echo too loudly in the confined space.",
+    "The silence here feels preserved, not natural."
+  ],
+  "exits": {
+    "south": "ancient_tunnel_entrance",
+    "north": "ancient_tunnel_mural_2"
+  },
+  "description_snippets": {
+    "mural_desc": " The warrior now strikes the wyrm — the blade glowing, larger than before."
+  },
+  "objects": [
+    {
+      "id": "mural_battle",
+      "name": "mural",
+      "description": "A carved scene of battle.",
+      "material": "stone",
+      "on_interact": {
+        "look": "The warrior drives the blade into the wyrm. The weapon is no longer small — it has grown, or changed. Light radiates from it.",
+        "read": "The wyrm recoils. The blade drinks something unseen."
+      }
+    }
+  ],
+  "enemy_spawns": []
+}

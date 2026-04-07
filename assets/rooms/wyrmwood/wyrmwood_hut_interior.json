@@ -1,0 +1,57 @@
+{
+  "id": "wyrmwood_hut_interior",
+  "name": "Inside the Crooked Hut",
+  "description": "The hut's interior is cramped and dim. A table sits at the center, covered in scraps of parchment. A crude mechanism is mounted into the far wall.{{book_desc}}{{device_desc}}",
+  "material": "wood",
+  "is_outdoor": false,
+  "light_level": 3,
+  "ambient": [
+    "Dust drifts lazily in the still air.",
+    "The wood creaks softly, though nothing moves.",
+    "You feel as though this place is being remembered rather than inhabited."
+  ],
+  "exits": {
+    "out": "wyrmwood_hut_exterior"
+  },
+  "description_snippets": {
+    "book_desc": " A strange book lies open on the table.",
+    "device_desc": " A metal mechanism is set into the wall."
+  },
+  "objects": [
+    {
+      "id": "wyrmwood_book",
+      "name": "book",
+      "description": "A weathered book filled with cramped, obsessive handwriting.",
+      "material": "paper",
+      "is_moveable": false,
+      "hidden": false,
+      "on_interact": {
+        "look": "The pages are filled with notes about the forest. Many passages are scratched out.",
+        "read": "You read:\n\n\"The wood does not turn you — you turn yourself.\n\nListen:\n\nWhere the air stills — you are wrong.\nWhere the insects fall silent — you are wrong.\nWhere the trees creak without wind — you are wrong.\n\nBut where something changes — truly changes — there the path bends.\n\nI walked in circles until I learned to hear the lie.\"\n\nSeveral lines are underlined repeatedly."
+      }
+    },
+    {
+      "id": "ancient_mechanism",
+      "name": "mechanism",
+      "description": "A strange metal device with a recessed slot and a lever. It hums faintly.",
+      "material": "metal",
+      "is_moveable": false,
+      "hidden": false,
+      "on_interact": {
+        "look": "The mechanism seems connected to something deep underground.",
+        "pull": "You pull the lever. Far below, something shifts — a wet, grinding sound.",
+        "use": "You try to operate the mechanism. It resists, then gives slightly."
+      },
+      "set_flags_on_interact": {
+        "pull": {
+          "beast_tunnel_unlocked": true
+        },
+        "use": {
+          "beast_tunnel_unlocked": true
+        }
+      }
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

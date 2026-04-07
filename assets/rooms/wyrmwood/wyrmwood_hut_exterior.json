@@ -1,0 +1,34 @@
+{
+  "id": "wyrmwood_hut_exterior",
+  "name": "Wyrmwood — Crooked Hut",
+  "description": "North a crooked wooden hut leans between the trees, its frame warped as though grown rather than built. The forest presses close, but here the air feels... quieter.",
+  "material": "wood",
+  "is_outdoor": true,
+  "light_level": 5,
+  "ambient": [
+    "No wind reaches this place.",
+    "The trees creak, but the hut does not answer.",
+    "Something about the silence here feels deliberate."
+  ],
+  "exits": {
+    "south": "wyrmwood_b",
+    "north": "wyrmwood_hut_interior"
+  },
+  "line_of_sight": ["wyrmwood_b"],
+  "objects": [
+    {
+      "id": "hut_door",
+      "name": "hut door",
+      "description": "A warped wooden door, slightly ajar.",
+      "material": "wood",
+      "is_moveable": false,
+      "hidden": false,
+      "on_interact": {
+        "open": "The door creaks open further. Darkness waits inside.",
+        "look": "Old wood, swollen with damp. It has been opened many times."
+      }
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

@@ -12,7 +12,7 @@
   ],
   "exits": {
     "west": "wyrmwood_a",
-    "north": "wyrmwood_a",
+    "north": "wyrmwood_hut_exterior",
     "south": "wyrmwood_2skeletons",
     "east": "wyrmwood_d"
   },

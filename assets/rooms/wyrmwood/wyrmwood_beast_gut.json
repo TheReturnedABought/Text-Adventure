@@ -1,7 +1,7 @@
 {
   "id": "wyrmwood_beast_gut",
   "name": "Belly of the beast",
-  "description": "You are inside the ribcage of the long-dead beast. Leathery walls press close. The only light comes from a narrow fissure above, casting dim grey shadows. It smells of old death and deep earth. The opening above leads back out. There is a path down.",
+  "description": "You are inside the ribcage of the long-dead beast. Leathery walls press close. The only light comes from a narrow fissure above, casting dim grey shadows. It smells of old death and deep earth. The opening above leads back out. There is a path down.{{recess_desc}}",
   "material": "flesh",
   "is_outdoor": false,
   "is_start": false,
@@ -15,7 +15,32 @@
     "down": "wyrmwood_cave"
   },
   "line_of_sight": [],
-  "objects": [],
+  "description_snippets": {
+    "recess_desc": " A small recess has been carved into the fleshy wall, roughly the shape of a talisman."
+  },
+  "objects": [
+    {
+      "id": "flesh_recess",
+      "name": "flesh recess",
+      "description": "A small hollow in the leathery wall, shaped as if something was meant to fit inside.",
+      "description_snippet": "A small recess in the fleshy wall.",
+      "material": "flesh",
+      "is_container": true,
+      "is_moveable": false,
+      "is_locked": true,
+      "key_item_id": "ancient_talisman",
+      "hidden": false,
+      "reveals": [],
+      "items_inside": ["beasts_heart"],
+      "on_interact": {
+        "look": "The recess is roughly hand‑sized, with worn edges. Something was clearly meant to be placed here.",
+        "unlock": "You press the ancient talisman into the recess. It fits perfectly. With a wet, sucking sound, the flesh around it contracts and releases a hidden compartment.",
+        "open": "The recess is locked.",
+        "take": "You reach into the recess and retrieve a pulsing organ – the Beast's Heart."
+      },
+      "required_commands": {}
+    }
+  ],
   "items_on_ground": [],
   "enemy_spawns": []
 }

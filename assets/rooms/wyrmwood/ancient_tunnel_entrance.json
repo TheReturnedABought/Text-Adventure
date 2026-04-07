@@ -1,0 +1,32 @@
+{
+  "id": "ancient_tunnel_entrance",
+  "name": "Ancient Tunnel",
+  "description": "The organic passage gives way abruptly to worked stone. The tunnel here is old — far older than the forest above. Faded murals line the walls.{{mural_desc}}",
+  "material": "stone",
+  "is_outdoor": false,
+  "light_level": 2,
+  "ambient": [
+    "Dust shifts underfoot in long undisturbed layers.",
+    "The air is dry — unnaturally so after the beast above."
+  ],
+  "exits": {
+    "up": "wyrmwood_cave",
+    "north": "ancient_tunnel_mural_1"
+  },
+  "description_snippets": {
+    "mural_desc": " The first mural shows a lone warrior facing a vast serpent."
+  },
+  "objects": [
+    {
+      "id": "mural_entrance",
+      "name": "mural",
+      "description": "A faded mural carved into the stone wall.",
+      "material": "stone",
+      "on_interact": {
+        "look": "A warrior stands before a towering wyrm. The blade in their hand is small — almost insignificant compared to the beast.",
+        "read": "There are no words. Only the image of defiance."
+      }
+    }
+  ],
+  "enemy_spawns": []
+}
