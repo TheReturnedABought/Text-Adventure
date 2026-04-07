@@ -94,7 +94,6 @@ class ExplorationController:
         return result
 
     def _resolve_go(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        self._debug_log("_resolve_go()")
         direction = (parsed.target_name or "").strip().lower()
         if not direction:
             result.add("Go where?")
@@ -103,11 +102,7 @@ class ExplorationController:
         if not ok:
             result.add(msg)
             return
-        room = self.world.current_room()
-        if room:
-            result.add(room.get_description(verbose=True))
-        else:
-            result.add(msg)
+        result.add(msg)
 
     def _resolve_look(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_look()")
@@ -299,7 +294,7 @@ class ExplorationController:
         result.add("Available commands: " + ", ".join(sorted(c.name for c in cmds)))
 
     def _resolve_read(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        """Read a readable object in the room."""
+        """Read a readable object in the room (object, ground item, inventory, equipped)."""
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -309,20 +304,37 @@ class ExplorationController:
             result.add("Read what?")
             return
         obj = room.find_object(target)
-        text = None
         if obj:
             text = obj.on_interact.get("read") or obj.on_interact.get("look")
-        else:
-            item = self.player.find_in_inventory(target)
-            if item:
-                text = item.readable_text or item.description
-            else:
-                for equipped_item in self.player.equipped.values():
-                    if target in equipped_item.name.lower():
-                        text = equipped_item.readable_text or equipped_item.description
-                        break
-        if not text:
-            result.add("You don't see that here.")
-            return
-        if text:
-            result.add(text)
+            if text:
+                result.add(text)
+                return
+
+        for item_id in room.items_on_ground:
+            if target in item_id.lower():
+                item = self.item_catalog.get(item_id)
+                if item:
+                    # Use readable_text if present, otherwise description
+                    text = getattr(item, "readable_text", None) or item.description
+                    if text:
+                        result.add(text)
+                        return
+                else:
+                    result.add(f"Unknown item: {item_id}")
+                    return
+
+        item = self.player.find_in_inventory(target)
+        if item:
+            text = getattr(item, "readable_text", None) or item.description
+            if text:
+                result.add(text)
+                return
+
+        for equipped_item in self.player.equipped.values():
+            if target in equipped_item.name.lower():
+                text = getattr(equipped_item, "readable_text", None) or equipped_item.description
+                if text:
+                    result.add(text)
+                    return
+
+        result.add("You don't see that here.")

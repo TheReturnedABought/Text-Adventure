@@ -487,6 +487,7 @@ class GameWindow:
         return None
 
     def _draw_explore(self, t, s):
+        # top panel room art
         room = s.room
         if not room:
             return

@@ -95,7 +95,6 @@ MATERIAL_INTERACTIONS: dict[DamageType, dict[Material, MaterialInteraction]] = {
         Material.WATER: MaterialInteraction("conducts", 1.2, spreads=True),
         Material.FLESH: MaterialInteraction("shocks", 1.1, "shocked"),
     },
-    # ... add other damage types similarly
 }
 
 
@@ -171,7 +170,7 @@ class WorldObject:
 class Room:
     id: str
     name: str
-    description: str          # template string with {{object_id_desc}} placeholders
+    description: str
     material: Material = Material.STONE
     is_outdoor: bool = False
     light_level: int = 10
@@ -185,27 +184,43 @@ class Room:
     is_start: bool = False
     visited: bool = False
     enemy_spawns: list[dict] = field(default_factory=list)
-    description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
+    description_snippets: dict[str, str] = field(default_factory=dict)
     interaction_rules: list[dict] = field(default_factory=list)
     combat_won_snippet: str = ""
     art_asset: str | None = None
 
     def get_description(self, verbose: bool = False) -> str:
-        # Substitute all placeholders (supports both {{key_desc}} and {{key}})
+        # ZORK RULE: repeat visit → only room name + items + enemies
+        if self.visited and not verbose:
+            lines = [self.name]
+            living = self.living_enemies()
+            if living:
+                lines.append("Enemies: " + ", ".join(e.name for e in living))
+            if self.items_on_ground:
+                from collections import Counter
+                counts = Counter(self.items_on_ground)
+                items_str = ", ".join(f"{count} x {name}" if count > 1 else name for name, count in counts.items())
+                lines.append(f"- {items_str}")
+            return "\n".join(lines)
+
+        # First visit OR explicit 'look' command → full description
         desc = self.description
         for key, snippet in self.description_snippets.items():
-            legacy_placeholder = f"{{{{{key}_desc}}}}"   # e.g. {{letter_desc}}
-            desc = desc.replace(legacy_placeholder, snippet)
+            legacy = f"{{{{{key}_desc}}}}"
+            desc = desc.replace(legacy, snippet)
             desc = desc.replace(f"{{{{{key}}}}}", snippet)
-        lines = [self.name]
-        if verbose or not self.visited:
-            lines.append(desc)
-            if self.ambient and random.random() > 0.3:
-                chosen = random.choice(self.ambient)
-                lines.append(chosen)
+
+        lines = [self.name, desc]
+        if self.ambient and random.random() > 0.3:
+            lines.append(random.choice(self.ambient))
         living = self.living_enemies()
         if living:
             lines.append("Enemies: " + ", ".join(e.name for e in living))
+        if self.items_on_ground:
+            from collections import Counter
+            counts = Counter(self.items_on_ground)
+            items_str = ", ".join(f"{count} x {name}" if count > 1 else name for name, count in counts.items())
+            lines.append(f"-{items_str}")
         return "\n".join(lines)
 
     def living_enemies(self) -> list["Enemy"]:
@@ -251,7 +266,6 @@ class Room:
         if not dt:
             return [f"The {effect_type} energy dissipates."]
         interaction = resolve_material_interaction(dt, self.material)
-        # Suppress generic "has little effect" messages
         if interaction.summary == "has little effect":
             return []
         lines = [f"{source.name}'s {dt.value} effect {interaction.summary} in {self.name}."]
@@ -262,16 +276,12 @@ class Room:
         return lines
 
     def update_after_combat(self) -> None:
-        """Call this when all enemies in the room are defeated."""
         if not self.living_enemies():
-            # Reveal objects marked to appear after combat
             for obj in self.objects.values():
                 if getattr(obj, "reveal_on_combat_end", False):
                     obj.hidden = False
-            # Replace the entire description with the victory snippet if provided
             if self.combat_won_snippet:
                 self.description = self.combat_won_snippet
-                # Clear any leftover placeholders
                 self.description_snippets.clear()
 
 
@@ -310,8 +320,11 @@ class WorldMap:
             return False, "That exit leads nowhere."
         self.current_room_id = target
         new_room = self.current_room()
+        # Capture visited state BEFORE marking it as visited
         was_visited = new_room.visited
         new_room.visited = True
+        # Optional debug (remove comment to see values)
+        print(f"[DEBUG] move_player: room={new_room.id}, was_visited={was_visited}, verbose={not was_visited}")
         return True, new_room.get_description(verbose=not was_visited)
 
     def neighbors_of(self, room_id: str) -> list[str]:

@@ -1,0 +1,20 @@
+{
+  "id": "watchtower_third_floor",
+  "name": "Watchtower Third Floor",
+  "description": "The topmost floor of the watchtower, open to the elements through wide arrow slits. You have a commanding view of the surrounding lands: a dense forest spreads to the east, a small village lies to the southwest, a murky swamp festers to the south, and to the north the castle looms across many moats and layers of walls.",
+  "material": "stone",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 10,
+  "ambient": [
+    "Wind whistles through the arrow slits, carrying the distant sounds of the village and the croaking of swamp frogs.",
+    "From here you can see the layers of the castle’s southern defenses across the moat."
+  ],
+  "exits": {
+    "down": "watchtower_second_floor"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

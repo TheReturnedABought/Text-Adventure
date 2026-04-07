@@ -1,0 +1,8 @@
+{
+  "id": "letter",
+  "name": "letter",
+  "slot": "misc",
+  "description": "A worn piece of parchment, covered in elegant handwriting.",
+  "material": "cloth",
+  "readable_text": "You unfold the creased parchment and read:\n\n\"You've without a doubt arrived at the foot of the castle.\nIt is an ancient stronghold full of wonders.\nYou need to find and bring treasures that you find and deposit them in the cabinet in the tent. For every treasure you manage to collect your reward will increase.\n\nBut wonders attract dangers. Words have power here and wicked words have tainted the land.\nBut I trust that your will and wisdom will overcome the trials.\""
+}

@@ -4,7 +4,7 @@
   "description": "A skeletal figure in tattered leather, clutching a bow. Its hollow eye sockets track your movement with unnerving precision.",
   "material": "bone",
   "max_hp": 16,
-  "attack": 6,
+  "attack": 3,
   "defense": 1,
   "total_ap": 16,
   "ai_profile": "guard",

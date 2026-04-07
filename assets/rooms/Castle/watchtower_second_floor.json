@@ -7,11 +7,11 @@
   "is_start": false,
   "light_level": 8,
   "ambient": [
-    "The chain mechanism rattles when the wind hits the tower.",
-    "From here you can see the sealed courtyard gate below."
+    "The chain mechanism rattles when the wind hits the tower."
   ],
   "exits": {
-    "down": "watchtower_base"
+    "down": "watchtower_base",
+    "up": "watchtower_third_floor"
   },
   "line_of_sight": [],
   "objects": [
@@ -36,5 +36,7 @@
     }
   ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [
+    { "template_id": "skeleton", "count": 1 }
+    ]
 }

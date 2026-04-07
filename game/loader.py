@@ -114,6 +114,7 @@ class AssetLoader:
             abilities=abilities,
             equip_requirements=dict(data.get("equip_requirements", {})),
             upgrade_path=data.get("upgrade_path"),
+            readable_text=data.get("readable_text"),
         )
 
     def load_all_items(self) -> dict[str, EquippableItem]:
