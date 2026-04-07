@@ -263,9 +263,13 @@ class CommandParser:
         if cmd_def.ap_cost_override is not None:
             ap_cost = max(0, int(cmd_def.ap_cost_override))
         else:
-            raw_length = len(raw.replace(" ", ""))
             reduction = player.ap_cost_reduction_for_text(normalised)
-            ap_cost = max(1, int(raw_length) - reduction)
+            ap_cost = max(1, int(cmd_def.base_ap_cost) - reduction)
+        if cmd_def.name in {"take", "put"}:
+            for item in player.equipped.values():
+                if "faster_take_put" in item.item_flags:
+                    ap_cost = max(0, ap_cost - 1)
+                    break
 
         if cmd_def.costs_mp:
             if cmd_def.mp_cost_override is not None:

@@ -216,7 +216,7 @@ class TextAdventureGame:
             if start_room:
                 start_room.visited = True
                 window.set_explore(self.player, start_room)
-                window.append_log(start_room.get_description(verbose=True))
+                window.append_log(start_room.get_description(verbose=True, turn_number=self.world.turn_counter if self.world else 0))
         else:
             self._print_room()
 

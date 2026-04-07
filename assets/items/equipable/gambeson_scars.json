@@ -1,0 +1,10 @@
+{
+  "id": "gambeson_scars",
+  "name": "Gambeson of Scars",
+  "slot": "chest",
+  "description": "Layered cloth and old stitches that harden after every hit.",
+  "material": "cloth",
+  "tier": 2,
+  "stat_modifiers": {"defense": 2},
+  "item_flags": ["gambeson_scars"]
+}

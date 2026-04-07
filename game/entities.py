@@ -92,6 +92,7 @@ class Player(Entity):
     inventory: list[EquippableItem] = field(default_factory=list)
     equipped: dict[str, EquippableItem] = field(default_factory=dict)
     unlocked_commands: set[str] = field(default_factory=set)
+    combat_defense_bonus: int = 0
 
     # Conversation memory (for pronoun resolution)
     turn_stack: list = field(default_factory=list)
@@ -143,7 +144,10 @@ class Player(Entity):
         if not ok:
             return reason
         previous = self.equipped.get(item.slot)
+        if previous:
+            self._remove_dynamic_item_effects(previous)
         self.equipped[item.slot] = item
+        self._apply_dynamic_item_effects(item)
         if item in self.inventory:
             self.inventory.remove(item)
         if previous:
@@ -155,6 +159,7 @@ class Player(Entity):
         item = self.equipped.pop(slot, None)
         if not item:
             return f"Nothing equipped in {slot}."
+        self._remove_dynamic_item_effects(item)
         self.inventory.append(item)
         return f"Unequipped {item.name}."
 
@@ -177,8 +182,21 @@ class Player(Entity):
     def defense_value(self) -> int:
         base = self.defense
         base += sum(i.stat_modifiers.get("defense", 0) for i in self.equipped.values())
+        base += self.combat_defense_bonus
         base += self.effects.stat_bonus("defense")
         return base
+
+    def _apply_dynamic_item_effects(self, item: EquippableItem) -> None:
+        bonus_mp = int(item.stat_modifiers.get("max_mana", 0) or item.stat_modifiers.get("mp", 0))
+        if bonus_mp:
+            self.max_mana += bonus_mp
+            self.mana = min(self.max_mana, self.mana + bonus_mp)
+
+    def _remove_dynamic_item_effects(self, item: EquippableItem) -> None:
+        bonus_mp = int(item.stat_modifiers.get("max_mana", 0) or item.stat_modifiers.get("mp", 0))
+        if bonus_mp:
+            self.max_mana = max(0, self.max_mana - bonus_mp)
+            self.mana = min(self.mana, self.max_mana)
 
     def ap_cost_reduction_for_text(self, raw_text: str) -> int:
         text = str(raw_text or "").lower()

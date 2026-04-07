@@ -1,0 +1,9 @@
+{
+  "id": "wasp_needle",
+  "name": "Wasp Needle",
+  "slot": "weapon",
+  "description": "A thin dagger that leaves venom in the blood.",
+  "material": "metal",
+  "tier": 2,
+  "item_flags": ["wasp_needle"]
+}

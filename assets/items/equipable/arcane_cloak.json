@@ -1,0 +1,10 @@
+{
+  "id": "arcane_cloak",
+  "name": "Arcane Cloak",
+  "slot": "back",
+  "description": "A runed cloak that stores and slowly restores mana.",
+  "material": "cloth",
+  "tier": 2,
+  "stat_modifiers": {"max_mana": 2},
+  "item_flags": ["arcane_cloak"]
+}

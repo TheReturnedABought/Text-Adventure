@@ -43,6 +43,8 @@ class EquippableItem:
     upgrade_path: str | None = None
     readable_text: str | None = None
     item_flags: list[str] = field(default_factory=list)
+    on_hit_effects: dict = field(default_factory=dict)
+    passive_effects: dict = field(default_factory=dict)
 
 @dataclass
 class PassiveTrait:

@@ -112,6 +112,7 @@ class CombatController:
         self._debug_log("start_encounter()")
         self._refresh_combat_zone()
         self._refresh_movement_hints()
+        self.player.combat_defense_bonus = 0
         for enemy in self.enemies:
             enemy.reset_ap()
             enemy.plan_turn(self.player)
@@ -231,6 +232,10 @@ class CombatController:
         self.player.clear_block()
         for line in self.player.tick_effects(EffectTrigger.ON_TURN_END):
             result.add(line)
+        for line in self._tick_enemy_damage_over_time():
+            result.add(line)
+        for line in self._apply_turn_passives():
+            result.add(line)
 
         for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
             enemy_result = self._enemy_turn(enemy)
@@ -240,6 +245,8 @@ class CombatController:
                 return result
 
         self.round += 1
+        if self.world:
+            self.world.advance_turn()
         self.player.reset_ap()
         for enemy in self.enemies:
             enemy.reset_ap()
@@ -381,6 +388,9 @@ class CombatController:
         vuln_mult = 2.0 if damage_type.value in target.vulnerabilities else 1.0
         resist_mult = 0.5 if damage_type.value in target.resistances else 1.0
         total = int(total * vuln_mult * resist_mult)
+        used_weapon = self._active_weapon(parsed.item_name)
+        if used_weapon and "bone_crusher" in used_weapon.item_flags and "skeleton" in target.template_id:
+            total += 2
 
         # Article bonus
         if parsed.article == ArticleType.GENERIC:
@@ -390,6 +400,8 @@ class CombatController:
 
         dealt = target.receive_damage(total)
         result.add(f"You hit {target.name} for {dealt} damage ({self._format_roll(dice, rolls, total)}).")
+        for line in self._apply_weapon_on_hit_effects(used_weapon, target, dealt):
+            result.add(line)
 
         # Environmental reaction
         env_lines = self._apply_environmental_reaction(damage_type, target)
@@ -525,7 +537,12 @@ class CombatController:
             dice = DiceExpression.parse(intent.dice_expression) if intent.dice_expression else DiceExpression.flat(enemy.attack)
             dmg = max(0, dice.roll() + enemy.attack)
             dealt = self.player.receive_damage(dmg)
+            reflected = self._maybe_reflect_with_mirror_shield(intent, enemy, dealt)
             result.add(f"{enemy.name} {intent.description} for {dealt} damage.")
+            if reflected:
+                result.add(reflected)
+            if dealt > 0:
+                self._proc_gambeson(dealt, result)
             if intent.effect_on_hit:
                 effect = StatusEffect(
                     id=intent.effect_on_hit,
@@ -557,6 +574,92 @@ class CombatController:
         if "ranged" in tags:
             return bool(self.player_room_id in self._zone_from_anchor(enemy_room))
         return False
+
+    def _active_weapon(self, weapon_name: str | None) -> "EquippableItem | None":
+        for item in self.player.equipped.values():
+            if item.slot != "weapon":
+                continue
+            if weapon_name and weapon_name.lower() not in item.name.lower():
+                continue
+            return item
+        return None
+
+    def _apply_weapon_on_hit_effects(self, weapon, target: "Enemy", dealt: int) -> list[str]:
+        lines: list[str] = []
+        if not weapon or dealt <= 0:
+            return lines
+        flags = set(getattr(weapon, "item_flags", []))
+        if "wasp_needle" in flags and random.random() < 0.2:
+            target.poison_turns = int(getattr(target, "poison_turns", 0)) + 3
+            lines.append(f"{target.name} is poisoned.")
+        if "fungal_shiv" in flags and random.random() < 0.25:
+            target.spore_turns = 2
+            lines.append(f"Spores burst from the wound around {target.name}.")
+        if "bone_crusher" in flags and not target.is_alive and random.random() < 0.2:
+            lines.append(f"{target.name} shatters violently!")
+            for other in self.enemies:
+                if other.is_alive and other is not target and other.combat_room_id == target.combat_room_id:
+                    splash = DiceExpression.parse("1d4").roll()
+                    dealt_splash = other.receive_damage(splash)
+                    lines.append(f"{other.name} takes {dealt_splash} splash damage.")
+        return lines
+
+    def _tick_enemy_damage_over_time(self) -> list[str]:
+        lines: list[str] = []
+        for enemy in [e for e in self.enemies if e.is_alive]:
+            poison_turns = int(getattr(enemy, "poison_turns", 0))
+            if poison_turns > 0:
+                dmg = DiceExpression.parse("1d4").roll()
+                dealt = enemy.receive_damage(dmg)
+                enemy.poison_turns = poison_turns - 1
+                lines.append(f"{enemy.name} takes {dealt} poison damage.")
+            spore_turns = int(getattr(enemy, "spore_turns", 0))
+            if spore_turns > 0:
+                enemy.spore_turns = spore_turns - 1
+                for other in self.enemies:
+                    if other.is_alive and other is not enemy and other.combat_room_id == enemy.combat_room_id:
+                        dmg = DiceExpression.parse("1d4").roll()
+                        dealt = other.receive_damage(dmg)
+                        lines.append(f"Spore cloud harms {other.name} for {dealt}.")
+        return lines
+
+    def _maybe_reflect_with_mirror_shield(self, intent, enemy: "Enemy", dealt_to_player: int) -> str | None:
+        shield = self.player.equipped.get("offhand")
+        if not shield or "mirror_shield" not in shield.item_flags or dealt_to_player <= 0:
+            return None
+        tags = {t.lower() for t in getattr(intent, "tags", [])}
+        if not ({"lightning", "radiant"} & tags):
+            return None
+        reflected = max(1, dealt_to_player // 2)
+        self.player.heal(reflected)
+        enemy.receive_damage(reflected)
+        return f"Mirror Shield reflects {reflected} damage back to {enemy.name}."
+
+    def _proc_gambeson(self, dealt: int, result: TurnResult) -> None:
+        chest = self.player.equipped.get("chest")
+        if not chest or "gambeson_scars" not in chest.item_flags:
+            return
+        if self.player.combat_defense_bonus >= 5:
+            return
+        self.player.combat_defense_bonus += 1
+        result.add("Gambeson of Scars hardens. Defense +1 (combat).")
+
+    def _apply_turn_passives(self) -> list[str]:
+        lines: list[str] = []
+        if self.world and self.player_room_id:
+            room = self.world.get_room(self.player_room_id)
+            if room:
+                for item in self.player.equipped.values():
+                    if "beasts_heart" in item.item_flags and (self.player_room_id.startswith("wyrmwood") or room.material.value == "flesh"):
+                        healed = self.player.heal(1)
+                        if healed:
+                            lines.append("Beast's Heart regenerates 1 HP.")
+                    if "arcane_cloak" in item.item_flags:
+                        before = self.player.mana
+                        self.player.mana = min(self.player.max_mana, self.player.mana + 1)
+                        if self.player.mana > before:
+                            lines.append("Arcane Cloak restores 1 MP.")
+        return lines
 
     def _enemy_step_toward_player(self, enemy: "Enemy") -> bool:
         # Guard AI never moves from its home room
