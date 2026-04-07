@@ -263,8 +263,9 @@ class CommandParser:
         if cmd_def.ap_cost_override is not None:
             ap_cost = max(0, int(cmd_def.ap_cost_override))
         else:
+            raw_length = len(raw.replace(" ", ""))
             reduction = player.ap_cost_reduction_for_text(normalised)
-            ap_cost = max(1, int(cmd_def.base_ap_cost) - reduction)
+            ap_cost = max(1, int(raw_length) - reduction)
 
         if cmd_def.costs_mp:
             if cmd_def.mp_cost_override is not None:

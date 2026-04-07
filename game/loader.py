@@ -50,6 +50,8 @@ class AssetLoader:
             combat_won_snippet=data.get("combat_won_snippet", ""),
             art_asset=art_asset,
         )
+        # Load top-level description snippets
+        room.description_snippets.update(data.get("description_snippets", {}))
         for obj_data in data.get("objects", []):
             obj = self._load_world_object(obj_data)
             room.objects[obj.id] = obj

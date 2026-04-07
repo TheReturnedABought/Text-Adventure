@@ -150,7 +150,10 @@ class CombatController:
         if not parsed.valid:
             result.add(parsed.error or "Invalid command.")
             return result
-
+        else:
+            cmd = self.registry.get_command(parsed.intent)
+            raw_ap = cmd.base_ap_cost if cmd else 0
+            print(f"[DEBUG] Raw AP: {raw_ap}, Reduced AP: {parsed.ap_cost}")
         intent = parsed.intent or ""
 
         # Handle movement if command is "go"
