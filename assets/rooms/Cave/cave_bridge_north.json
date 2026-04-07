@@ -1,0 +1,21 @@
+{
+  "id": "cave_bridge_north",
+  "name": "Cave Bridge — North End",
+  "description": "You stand at the north end of a narrow stone bridge that spans a deep chasm. The bridge is slick with moisture. Faint torchlight flickers somewhere to the south.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 4,
+  "ambient": [
+    "The chasm below is pitch black. You hear nothing but the slow drip of water.",
+    "A draft carries the scent of old decay."
+  ],
+  "exits": {
+    "south": "cave_bridge_south",
+    "up": "cave_entrance"
+  },
+  "line_of_sight": ["guard_room"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

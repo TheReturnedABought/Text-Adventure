@@ -12,7 +12,8 @@
   ],
   "exits": {
     "west": "east_of_tent",
-    "east": "wyrmwood_entry"
+    "east": "wyrmwood_entry",
+    "north": "foot_of_mountain"
   },
   "line_of_sight": ["east_of_tent"],
   "objects": [],

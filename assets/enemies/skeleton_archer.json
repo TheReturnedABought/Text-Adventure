@@ -1,0 +1,40 @@
+{
+  "id": "skeleton_archer",
+  "name": "Skeleton Archer",
+  "description": "A skeletal figure in tattered leather, clutching a bow. Its hollow eye sockets track your movement with unnerving precision.",
+  "material": "bone",
+  "max_hp": 16,
+  "attack": 6,
+  "defense": 1,
+  "total_ap": 16,
+  "ai_profile": "guard",
+  "guard_home": "guard_room",
+  "vulnerabilities": ["bludgeoning"],
+  "resistances": ["piercing", "slashing"],
+  "intent_pool": [
+    {
+      "id": "arrow",
+      "intent_type": "attack",
+      "description": "fires a black arrow from its bow",
+      "dice_expression": "1d8+2",
+      "ap_cost": 7,
+      "weight": 4,
+      "tags": ["ranged"]
+    },
+    {
+      "id": "defensive_guard",
+      "intent_type": "block",
+      "description": "raises its bow to deflect",
+      "dice_expression": "1d6+1",
+      "ap_cost": 5,
+      "weight": 2,
+      "condition": "hp_below_half"
+    }
+  ],
+  "loot_table": [
+    { "item_id": "shortbow", "chance": 0.3, "count_expression": "1" },
+    { "item_id": "bone_fragment", "chance": 0.8, "count_expression": "1d2" },
+    { "item_id": "copper_coin", "chance": 0.5, "count_expression": "1d4" }
+  ],
+  "xp_reward": 30
+}

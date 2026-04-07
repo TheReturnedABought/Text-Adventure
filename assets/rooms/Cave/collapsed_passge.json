@@ -1,0 +1,76 @@
+{
+  "id": "collapsed_passage",
+  "name": "Collapsed Passage",
+  "description": "A passage lined with torches. The light flickers against a wall of jagged stone and rubble that blocks the way east. The only way out is back west. {{passage_desc}}",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 5,
+  "ambient": [
+    "Dust motes dance in the torchlight.",
+    "Somewhere behind the collapse, water drips steadily."
+  ],
+  "exits": {
+    "west": "cave_bridge_south"
+  },
+  "line_of_sight": [],
+  "description_snippets": {
+    "passage_desc": ""
+  },
+  "objects": [
+    {
+      "id": "loose_stone",
+      "name": "loose stone",
+      "description": "A stone that looks slightly out of place, as if it could be moved.",
+      "description_snippet": "A loose stone sits near the rubble pile.",
+      "material": "stone",
+      "is_moveable": true,
+      "is_container": false,
+      "hidden": false,
+      "reveals": ["hidden_lever"],
+      "on_interact": {
+        "move": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
+        "look": "A rough stone, worn smooth on one side.",
+        "search": "You find nothing else under the stone."
+      },
+      "required_commands": {}
+    },
+    {
+      "id": "hidden_lever",
+      "name": "hidden lever",
+      "description": "A small metal lever embedded in the rock, covered in dust.",
+      "description_snippet": "",
+      "material": "metal",
+      "is_moveable": false,
+      "is_container": false,
+      "hidden": true,
+      "reveals": [],
+      "on_interact": {
+        "pull": "You pull the lever. With a grinding rumble, part of the rubble shifts, creating a narrow gap to the east."
+      },
+      "required_commands": {},
+      "set_flags_on_interact": {
+        "pull": {
+          "cave_passage_open": true
+        }
+      }
+    }
+  ],
+  "items_on_ground": ["shortbow_arrow"],
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["move"],
+      "targets": ["loose stone"],
+      "text": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
+      "reveal_objects": ["hidden_lever"]
+    },
+    {
+      "commands": ["pull"],
+      "targets": ["hidden lever"],
+      "text": "You pull the lever. With a grinding rumble, part of the rubble shifts, creating a narrow gap to the east.",
+      "set_exits": { "east": "wyrmwood_cave" },
+      "set_flags": { "cave_passage_open": true }
+    }
+  ]
+}

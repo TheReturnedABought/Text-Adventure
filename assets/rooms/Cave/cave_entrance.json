@@ -1,0 +1,21 @@
+{
+  "id": "cave_entrance",
+  "name": "Cave Entrance",
+  "description": "A dark opening in the rock face. Cold air flows out, carrying the smell of damp stone and old bones. The path leads down into the earth.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 3,
+  "ambient": [
+    "Water drips somewhere in the darkness.",
+    "The wind whistles through the narrow entrance."
+  ],
+  "exits": {
+    "down": "cave_bridge_north",
+    "east": "foot_of_mountain"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

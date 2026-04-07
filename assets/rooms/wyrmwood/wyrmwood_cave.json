@@ -1,7 +1,7 @@
 {
   "id": "wyrmwood_cave",
   "name": "Belly of the beast",
-  "description": "A hollow chamber formed within the beast's petrified organs. The walls are not stone but ossified flesh—smooth, veined, and faintly warm. In the centre, a rib bone has been carved into an altar bearing an ancient symbol. Above the passage leads back into the beast's gut.",
+  "description": "A hollow chamber formed within the beast's petrified organs. The walls are not stone but ossified flesh—smooth, veined, and faintly warm. Above the passage leads back into the beast's gut.",
   "material": "flesh",
   "is_outdoor": false,
   "is_start": false,

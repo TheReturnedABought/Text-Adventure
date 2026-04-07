@@ -150,7 +150,7 @@
       "base_dice": null,
       "unlock_class": null,
       "unlock_level": 0,
-      "valid_contexts": ["world"],
+      "valid_contexts": ["world", "combat"],
       "modifiers_allowed": [],
       "tags": ["movement"],
       "world_use_hint": null,

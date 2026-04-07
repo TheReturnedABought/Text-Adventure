@@ -1,0 +1,44 @@
+{
+  "id": "guard_room",
+  "name": "Guard Room",
+  "description": "A small chamber hewn from the rock. Arrows are scattered across the floor. {{combat_update}}",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 5,
+  "ambient": [
+    "The air is thick with dust and the smell of old leather.",
+    "A quiver of arrows hangs on the wall, mostly empty."
+  ],
+  "exits": {
+    "east": "cave_bridge_south"
+  },
+  "line_of_sight": ["cave_bridge_north", "cave_bridge_south"],
+  "description_snippets": {
+    "combat_update": ""
+  },
+  "combat_won_snippet": "The skeleton archer collapses into a pile of bones. The room falls silent. You might search the remains.",
+  "objects": [
+    {
+      "id": "archer_corpses",
+      "name": "archer remains",
+      "description": "The shattered bones of the skeleton archer lie scattered.",
+      "description_snippet": "Broken bones and a snapped bow lie on the floor.",
+      "material": "bone",
+      "is_container": false,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": true,
+      "reveal_on_combat_end": true,
+      "on_interact": {
+        "search": "You rummage through the remains and find a few usable items.",
+        "look": "The archer's bones are brittle, its bow broken."
+      },
+      "required_commands": {}
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": [
+    { "template_id": "skeleton_archer", "count": 1 }
+  ]
+}

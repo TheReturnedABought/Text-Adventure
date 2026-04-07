@@ -82,8 +82,6 @@ class CombatController:
             self.combat_zone = set()
             return
         zone = set()
-        if self.player_room_id:
-            zone |= self._zone_from_anchor(self.player_room_id)
         for enemy in self.enemies:
             if enemy.is_alive and enemy.combat_room_id:
                 zone |= self._zone_from_anchor(enemy.combat_room_id)
@@ -113,10 +111,15 @@ class CombatController:
     def start_encounter(self) -> str:
         self._debug_log("start_encounter()")
         self._refresh_combat_zone()
+        self._refresh_movement_hints()
         for enemy in self.enemies:
             enemy.reset_ap()
             enemy.plan_turn(self.player)
         return f"Combat begins! You face: {', '.join(e.name for e in self.enemies if e.is_alive)}."
+
+    def _refresh_movement_hints(self) -> None:
+        for enemy in self.enemies:
+            enemy.movement_hint = self._direction_hint_to_enemy(enemy)
 
     def player_input(self, raw: str) -> TurnResult:
         self._debug_log(f"player_input({raw})")
@@ -158,6 +161,7 @@ class CombatController:
 
         # Handle movement if command is "go"
         if intent == "go":
+            self._refresh_movement_hints()
             return self._handle_combat_movement(parsed, result)
 
         if intent in {"status", "look"}:
@@ -224,6 +228,7 @@ class CombatController:
 
     def end_player_turn(self) -> TurnResult:
         self._debug_log("end_player_turn()")
+        self._refresh_movement_hints()
         result = TurnResult()
         self.player.clear_block()
         for line in self.player.tick_effects(EffectTrigger.ON_TURN_END):
@@ -280,7 +285,7 @@ class CombatController:
             result.add("Go where?")
             return result
 
-        ap_cost = parsed.ap_cost   # already includes raw length minus reductions
+        ap_cost = parsed.ap_cost
         if ap_cost > self.player.current_ap:
             result.add("Not enough AP to move.")
             return result
@@ -290,22 +295,47 @@ class CombatController:
             result.add("You cannot go that way.")
             return result
 
-        self.player.spend_ap(ap_cost)
-        result.ap_spent = ap_cost
-        self.player_room_id = room.exits[direction]
-        self.world.current_room_id = self.player_room_id
-        self._refresh_combat_zone()
-        result.add(f"You move {direction} ({ap_cost} AP).")
+        target_room_id = room.exits[direction]
+        will_flee = target_room_id not in self.combat_zone
 
-        if self.player_room_id not in self.combat_zone:
-            result.add("You moved out of the combat zone!")
-            # Give enemies a free turn before fleeing
+        if will_flee:
+            result.add("You try to flee, but enemies react!")
+            # Enemies get a full turn before you leave
             for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
+                enemy.reset_ap()
+                enemy.plan_turn(self.player)
                 free_turn = self._enemy_turn(enemy)
                 result.lines.extend(free_turn.lines)
-            result.outcome = CombatOutcome.PLAYER_FLED
+                if free_turn.outcome != CombatOutcome.ONGOING:
+                    result.outcome = free_turn.outcome
+                    return result
+
+            if self.player.is_alive:
+                # Reset AP to full instead of spending
+                self.player.current_ap = self.player.total_ap
+                result.ap_spent = 0
+                self.player_room_id = target_room_id
+                self.world.current_room_id = target_room_id
+                self._refresh_combat_zone()
+                result.add(f"You flee to {target_room_id}.")
+                new_room = self.world.current_room()
+                if new_room:
+                    result.add(new_room.get_description(verbose=False))
+                result.outcome = CombatOutcome.PLAYER_FLED
+            else:
+                result.outcome = CombatOutcome.PLAYER_DEFEATED
             return result
 
+        # Normal move (staying in combat zone) – spend AP as usual
+        self.player.spend_ap(ap_cost)
+        result.ap_spent = ap_cost
+        self.player_room_id = target_room_id
+        self.world.current_room_id = target_room_id
+        self._refresh_combat_zone()
+        result.add(f"You move {direction} ({ap_cost} AP).")
+        new_room = self.world.current_room()
+        if new_room:
+            result.add(new_room.get_description(verbose=False))
         if self.player.current_ap <= 0:
             end = self.end_player_turn()
             result.lines.extend(end.lines)
@@ -407,9 +437,9 @@ class CombatController:
         cmd = self.registry.get_command(parsed.intent or "block")
         dice = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(max(1, self.player.defense_value()))
         dice = self._apply_modifiers_to_dice(dice, parsed.modifiers)
-        block = max(0, dice.roll())
-        self.player.add_block(block)
-        result.add(f"You gain {block} block.")
+        block_value = max(0, dice.roll())
+        self.player.add_block(block_value)
+        result.add(f"You brace yourself, gaining {block_value} block.")
 
     def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:
         """Returns (restore_ap, restore_mp) after resolving ability effects. No messages for restoration."""
@@ -531,6 +561,9 @@ class CombatController:
         return False
 
     def _enemy_step_toward_player(self, enemy: "Enemy") -> bool:
+        # Guard AI never moves from its home room
+        if getattr(enemy, "ai_profile", "") == "guard" and enemy.guard_home:
+            return False
         if not self.world or not self.player_room_id:
             return False
         enemy_room = enemy.combat_room_id
@@ -560,7 +593,12 @@ class CombatController:
         ranged = bool(cmd and "ranged" in [t.lower() for t in cmd.tags])
         living = self._eligible_targets(ranged=ranged)
         if not living:
-            result.add("There are no enemies left.")
+            all_enemies = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
+            if all_enemies:
+                result.add(
+                    "No enemies in this room. You cannot reach them from here. Try moving closer or using a ranged attack.")
+            else:
+                result.add("There are no enemies left.")
             return None
         if parsed.target_index is not None:
             if 1 <= parsed.target_index <= len(living):
@@ -603,6 +641,38 @@ class CombatController:
         enemy = self._pending_disambiguation[idx - 1]
         self._pending_disambiguation = None
         return enemy
+
+    # ----------------------------------------------------------------------
+    # Movement hints
+    # ----------------------------------------------------------------------
+    def _direction_hint_to_enemy(self, enemy: "Enemy") -> str:
+        """Return a string like 'south' or 'south → east' to reach the enemy's room."""
+        if not self.world or not self.player_room_id:
+            return "?"
+        enemy_room = enemy.combat_room_id or getattr(enemy, "current_zone", None)
+        if not enemy_room or enemy_room == self.player_room_id:
+            return "here"
+        path = self.world.shortest_path(self.player_room_id, enemy_room)
+        if len(path) < 2:
+            return "?"
+        current_room = self.world.get_room(self.player_room_id)
+        if not current_room:
+            return "?"
+        next_room_id = path[1]
+        direction = None
+        for exit_name, target in current_room.exits.items():
+            if target == next_room_id:
+                direction = exit_name
+                break
+        if not direction:
+            return "?"
+        if len(path) > 2:
+            next_room = self.world.get_room(next_room_id)
+            if next_room:
+                for exit_name, target in next_room.exits.items():
+                    if target == path[2]:
+                        return f"{direction} → {exit_name}"
+        return direction
 
     # ----------------------------------------------------------------------
     # Dice helpers

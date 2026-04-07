@@ -406,12 +406,21 @@ class GameWindow:
             t.insert('end', '\n')
 
     def _enemy_card_rows(self, idx, enemy, col_w):
+        rows = []
+
         hpct = enemy.current_hp / max(enemy.max_hp, 1)
         hcol = 'hp_good' if hpct > 0.5 else ('hp_mid' if hpct > 0.25 else 'hp_low')
         bw = max(6, min(12, col_w - 15))
         hp_bar = _make_bar(enemy.current_hp, enemy.max_hp, bw)
         ap_bar = _make_bar(getattr(enemy, 'current_ap', 0), getattr(enemy, 'total_ap', 18), 6, '◆', '◇')
 
+        def row(*segs):
+            return list(segs)
+
+        def txt(s, tag='', width=col_w):
+            return (s[:width].ljust(width), tag)
+
+        # Intent display
         if _is_stunned(enemy):
             intent, itag = '→ ⚡STUNNED', 'yellow'
         elif hasattr(enemy, 'active_intents') and enemy.active_intents:
@@ -423,12 +432,6 @@ class GameWindow:
 
         st = _strip(_format_statuses(enemy))
 
-        def row(*segs):
-            return list(segs)
-
-        def txt(s, tag='', width=col_w):
-            return (s[:width].ljust(width), tag)
-
         crest = ""
         if getattr(enemy, "art_asset", None):
             art = self._load_room_art(enemy.template_id or enemy.name.lower(), enemy.art_asset)
@@ -437,13 +440,22 @@ class GameWindow:
         title = f'[{idx}] {enemy.name}'
         if crest:
             title = f"{title} {crest}"
-        rows = [
-            row(txt(title, 'bold')),
-            row(txt(intent, itag)),
-            row(txt(f'HP[{hp_bar}] {enemy.current_hp}/{enemy.max_hp}', hcol)),
-            row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')),
-            row(txt(f'[{st}]' if st else '', 'yellow')),
-        ]
+
+        # Build card rows in desired order
+        rows.append(row(txt(title, 'bold')))
+        rows.append(row(txt(intent, itag)))
+        rows.append(row(txt(f'HP[{hp_bar}] {enemy.current_hp}/{enemy.max_hp}', hcol)))
+        rows.append(row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')))
+
+        # Room and movement hint go AFTER the AP line
+        room_name = getattr(enemy, "combat_room_id", "unknown")
+        hint = getattr(enemy, "movement_hint", "?")
+        rows.append(row(txt(f"Room: {room_name}", 'dim')))
+        rows.append(row(txt(f"Move: {hint}", 'cyan')))
+
+        if st:
+            rows.append(row(txt(f'[{st}]', 'yellow')))
+
         return rows
 
     # Explore art -----------------------------------------------------------

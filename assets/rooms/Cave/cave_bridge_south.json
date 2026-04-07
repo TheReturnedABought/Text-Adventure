@@ -1,0 +1,22 @@
+{
+  "id": "cave_bridge_south",
+  "name": "Cave Bridge — South End",
+  "description": "The bridge ends at a small landing. To the west, a corridor leads deeper into the cave. To the east, the path is blocked by a collapse of rock and rubble.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 5,
+  "ambient": [
+    "The torchlight here casts long, wavering shadows.",
+    "A faint clatter of bones echoes from the west."
+  ],
+  "exits": {
+    "north": "cave_bridge_north",
+    "west": "guard_room",
+    "east": "collapsed_passage"
+  },
+  "line_of_sight": ["guard_room"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}
