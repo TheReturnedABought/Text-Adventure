@@ -184,7 +184,17 @@ class CombatController:
             self._resolve_block(parsed, result)
             action_performed = True
         elif intent in {"ability", "cast", "use"}:
-            self._resolve_ability(parsed, result)
+            # Spend AP/MP first (already checked they are sufficient)
+            self.player.spend_ap(parsed.ap_cost)
+            self.player.mana -= parsed.mp_cost
+            result.ap_spent = parsed.ap_cost
+            # Resolve ability (returns restoration amounts, adds any non‑restoration messages)
+            restore_ap, restore_mp = self._resolve_ability(parsed, result)
+            # Apply restoration silently (no messages)
+            if restore_ap > 0:
+                self.player.current_ap = min(self.player.total_ap, self.player.current_ap + restore_ap)
+            if restore_mp > 0:
+                self.player.mana = min(self.player.max_mana, self.player.mana + restore_mp)
             action_performed = True
         elif intent == "equip":
             self._resolve_equip(parsed, result)
@@ -196,9 +206,11 @@ class CombatController:
             result.add("That command has no combat resolver yet.")
 
         if result.outcome == CombatOutcome.ONGOING and action_performed:
-            self.player.spend_ap(parsed.ap_cost)
-            self.player.mana -= parsed.mp_cost
-            result.ap_spent = parsed.ap_cost
+            # For other commands that didn't already spend AP (attack, block, etc.)
+            if intent not in {"ability", "cast", "use"}:
+                self.player.spend_ap(parsed.ap_cost)
+                self.player.mana -= parsed.mp_cost
+                result.ap_spent = parsed.ap_cost
             for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
                 result.add(line)
             self._refresh_combat_zone()
@@ -399,9 +411,11 @@ class CombatController:
         self.player.add_block(block)
         result.add(f"You gain {block} block.")
 
-    def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        self._debug_log("_resolve_ability()")
+    def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:
+        """Returns (restore_ap, restore_mp) after resolving ability effects. No messages for restoration."""
         name = (parsed.item_name or parsed.target_name or "").lower()
+        restore_ap = 0
+        restore_mp = 0
         for item in self.player.equipped.values():
             for ability in item.abilities:
                 if name and name not in ability.name.lower() and name != ability.id.lower():
@@ -426,16 +440,12 @@ class CombatController:
                             result.add(target.apply_effect(effect))
                 else:
                     result.add(f"You use {ability.name}.")
-                bonus_ap = int(ability.payload.get("restore_ap", 0) or 0)
-                if bonus_ap > 0:
-                    self.player.current_ap = min(self.player.total_ap, self.player.current_ap + bonus_ap)
-                    result.add(f"You regain {bonus_ap} AP.")
-                bonus_mp = int(ability.payload.get("restore_mp", 0) or 0)
-                if bonus_mp > 0:
-                    self.player.mana = min(self.player.max_mana, self.player.mana + bonus_mp)
-                    result.add(f"You regain {bonus_mp} MP.")
-                return
+                # Collect restoration values (no messages added here)
+                restore_ap = int(ability.payload.get("restore_ap", 0) or 0)
+                restore_mp = int(ability.payload.get("restore_mp", 0) or 0)
+                return restore_ap, restore_mp
         result.add("No matching ability is equipped.")
+        return 0, 0
 
     def _resolve_equip(self, parsed: ParsedCommand, result: TurnResult) -> None:
         self._debug_log("_resolve_equip()")
