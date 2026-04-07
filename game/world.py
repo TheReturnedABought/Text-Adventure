@@ -123,6 +123,7 @@ class WorldObject:
     reveals: list[str] = field(default_factory=list)
     on_interact: dict[str, str] = field(default_factory=dict)
     required_commands: dict[str, dict] = field(default_factory=dict)
+    set_flags_on_interact: dict[str, dict[str, bool]] = field(default_factory=dict)
     contents: list["WorldObject"] = field(default_factory=list)
     items_inside: list[str] = field(default_factory=list)
 
@@ -175,6 +176,7 @@ class Room:
     is_outdoor: bool = False
     light_level: int = 10
     exits: dict[str, str] = field(default_factory=dict)
+    exit_requirements: dict[str, dict] = field(default_factory=dict)
     line_of_sight: list[str] = field(default_factory=list)
     enemies: list["Enemy"] = field(default_factory=list)
     objects: dict[str, WorldObject] = field(default_factory=dict)
@@ -275,6 +277,7 @@ class WorldMap:
         self.rooms: dict[str, Room] = {}
         self.current_room_id: str | None = None
         self.start_room_id: str | None = None
+        self.global_flags: dict[str, bool] = {}
 
     def add_room(self, room: Room) -> None:
         self.rooms[room.id] = room
@@ -295,6 +298,10 @@ class WorldMap:
             return False, "No current room."
         if direction not in room.exits:
             return False, "You cannot go that way."
+        requirement = room.exit_requirements.get(direction, {})
+        required_flag = requirement.get("required_flag")
+        if required_flag and not bool(self.global_flags.get(required_flag, False)):
+            return False, requirement.get("blocked_text", "You cannot go that way yet.")
         target = room.exits[direction]
         if target not in self.rooms:
             return False, "That exit leads nowhere."

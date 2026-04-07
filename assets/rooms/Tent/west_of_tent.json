@@ -9,7 +9,8 @@
   "ambient": ["The stones are cool to the touch."],
   "exits": {
     "north": "north_of_tent",
-    "south": "south_of_tent"
+    "south": "south_of_tent",
+    "west": "foot_of_castle"
   },
   "line_of_sight": ["north_of_tent", "south_of_tent"],
   "objects": [],

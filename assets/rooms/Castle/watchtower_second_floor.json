@@ -1,0 +1,40 @@
+{
+  "id": "watchtower_second_floor",
+  "name": "Watchtower Second Floor",
+  "description": "The second floor overlooks the gatehouse machinery. A heavy iron lever is bolted beside a chain drum.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 8,
+  "ambient": [
+    "The chain mechanism rattles when the wind hits the tower.",
+    "From here you can see the sealed courtyard gate below."
+  ],
+  "exits": {
+    "down": "watchtower_base"
+  },
+  "line_of_sight": ["watchtower_base", "foot_of_castle"],
+  "objects": [
+    {
+      "id": "gate_lever",
+      "name": "lever",
+      "description": "A heavy iron lever linked to the castle gate chain.",
+      "material": "metal",
+      "hidden": false,
+      "is_moveable": false,
+      "reveals": [],
+      "on_interact": {
+        "move": "You pull the lever. Chains thunder below as the castle gate rises.",
+        "look": "The lever controls the gate winch from this floor of the tower."
+      },
+      "set_flags_on_interact": {
+        "move": {
+          "castle_gate_lever_pulled": true
+        }
+      },
+      "required_commands": {}
+    }
+  ],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

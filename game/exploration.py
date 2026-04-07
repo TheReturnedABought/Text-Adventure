@@ -148,6 +148,9 @@ class ExplorationController:
             return
         text, revealed = obj.interact(parsed.intent or "", self.player, room)
         result.add(text)
+        for key, value in obj.set_flags_on_interact.get(parsed.intent or "", {}).items():
+            self.puzzle_flags[str(key)] = bool(value)
+            self.world.global_flags[str(key)] = bool(value)
         for new_obj in revealed:
             room.add_object(new_obj)
             result.add(f"Revealed: {new_obj.name}.")
@@ -245,6 +248,7 @@ class ExplorationController:
 
         for key, value in rule.get("set_flags", {}).items():
             self.puzzle_flags[str(key)] = value
+            self.world.global_flags[str(key)] = bool(value)
 
         return True
 
