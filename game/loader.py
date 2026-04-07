@@ -115,6 +115,8 @@ class AssetLoader:
             equip_requirements=dict(data.get("equip_requirements", {})),
             upgrade_path=data.get("upgrade_path"),
             item_flags=data.get("item_flags", []),
+            on_hit_effects=dict(data.get("on_hit_effects", {})),
+            passive_effects=dict(data.get("passive_effects", {})),
         )
 
     def load_all_items(self) -> dict[str, EquippableItem]:

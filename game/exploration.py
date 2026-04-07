@@ -84,6 +84,8 @@ class ExplorationController:
         else:
             result.add("Nothing happens.")
 
+        self._apply_turn_passives(result)
+
         # Check for combat trigger
         aggressors = self.world.enemies_visible_from_current()
         if aggressors:
@@ -103,6 +105,17 @@ class ExplorationController:
             result.add(msg)
             return
         result.add(msg)
+        room = self.world.current_room()
+        if room and room.light_level > 7:
+            shield = self.player.equipped.get("offhand")
+            if shield and "mirror_shield" in shield.item_flags:
+                revealed = 0
+                for obj in room.objects.values():
+                    if obj.hidden:
+                        obj.hidden = False
+                        revealed += 1
+                if revealed:
+                    result.add(f"Mirror Shield gleams and reveals {revealed} hidden object(s).")
 
     def _resolve_look(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_look()")
@@ -343,3 +356,18 @@ class ExplorationController:
                     return
 
         result.add("You don't see that here.")
+
+    def _apply_turn_passives(self, result: ExplorationResult) -> None:
+        room = self.world.current_room()
+        if not room:
+            return
+        for item in self.player.equipped.values():
+            if "beasts_heart" in item.item_flags and (room.id.startswith("wyrmwood") or room.material.value == "flesh"):
+                healed = self.player.heal(1)
+                if healed:
+                    result.add("Beast's Heart regenerates 1 HP.")
+            if "arcane_cloak" in item.item_flags:
+                before = self.player.mana
+                self.player.mana = min(self.player.max_mana, self.player.mana + 1)
+                if self.player.mana > before:
+                    result.add("Arcane Cloak restores 1 MP.")

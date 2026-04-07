@@ -1,0 +1,9 @@
+{
+  "id": "fungal_shiv",
+  "name": "Fungal Shiv",
+  "slot": "weapon",
+  "description": "A pitted dagger packed with toxic spores.",
+  "material": "metal",
+  "tier": 2,
+  "item_flags": ["fungal_shiv"]
+}

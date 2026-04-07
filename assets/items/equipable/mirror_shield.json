@@ -1,0 +1,10 @@
+{
+  "id": "mirror_shield",
+  "name": "Mirror Shield",
+  "slot": "offhand",
+  "description": "Polished to a shine that bends light and hostile energies.",
+  "material": "metal",
+  "tier": 3,
+  "stat_modifiers": {"defense": 2},
+  "item_flags": ["mirror_shield"]
+}

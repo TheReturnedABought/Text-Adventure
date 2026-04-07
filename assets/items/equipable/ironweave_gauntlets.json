@@ -1,0 +1,10 @@
+{
+  "id": "ironweave_gauntlets",
+  "name": "Ironweave Gauntlets",
+  "slot": "hands",
+  "description": "Linked iron threads reinforce your strikes and efficient motions.",
+  "material": "metal",
+  "tier": 2,
+  "stat_modifiers": {"attack": 1},
+  "letter_cost_reductions": {"h": 1, "s": 1}
+}

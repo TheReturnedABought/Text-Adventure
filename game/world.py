@@ -189,7 +189,7 @@ class Room:
     combat_won_snippet: str = ""
     art_asset: str | None = None
 
-    def get_description(self, verbose: bool = False) -> str:
+    def get_description(self, verbose: bool = False, turn_number: int = 0) -> str:
         # ZORK RULE: repeat visit → only room name + items + enemies
         if self.visited and not verbose:
             lines = [self.name]
@@ -209,6 +209,9 @@ class Room:
             desc = desc.replace(f"{{{{{key}}}}}", snippet)
 
         lines = [self.name, desc]
+        if turn_number:
+            phase = ("dawn", "day", "dusk", "night")[((turn_number // 8) % 4)]
+            lines.append(f"The world feels like {phase} (turn {turn_number}).")
         if self.ambient and random.random() > 0.3:
             lines.append(random.choice(self.ambient))
         living = self.living_enemies()
@@ -289,6 +292,7 @@ class WorldMap:
         self.current_room_id: str | None = None
         self.start_room_id: str | None = None
         self.global_flags: dict[str, bool] = {}
+        self.turn_counter: int = 0
 
     def add_room(self, room: Room) -> None:
         self.rooms[room.id] = room
@@ -317,13 +321,14 @@ class WorldMap:
         if target not in self.rooms:
             return False, "That exit leads nowhere."
         self.current_room_id = target
+        self.advance_turn()
         new_room = self.current_room()
         # Capture visited state BEFORE marking it as visited
         was_visited = new_room.visited
         new_room.visited = True
         # Optional debug (remove comment to see values)
         print(f"[DEBUG] move_player: room={new_room.id}, was_visited={was_visited}, verbose={not was_visited}")
-        return True, new_room.get_description(verbose=not was_visited)
+        return True, new_room.get_description(verbose=not was_visited, turn_number=self.turn_counter)
 
     def neighbors_of(self, room_id: str) -> list[str]:
         room = self.get_room(room_id)
@@ -385,6 +390,9 @@ class WorldMap:
                 room.remove_enemy(enemy)
                 self.rooms[next_zone].add_enemy(enemy)
         return lines
+
+    def advance_turn(self) -> None:
+        self.turn_counter += 1
 
     def snapshot(self) -> dict:
         return {

@@ -1,0 +1,9 @@
+{
+  "id": "beasts_heart",
+  "name": "Beast's Heart",
+  "slot": "trinket",
+  "description": "A pulsing organ that knits flesh in wild places.",
+  "material": "flesh",
+  "tier": 3,
+  "item_flags": ["beasts_heart"]
+}

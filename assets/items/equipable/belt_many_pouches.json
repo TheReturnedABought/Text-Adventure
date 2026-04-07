@@ -1,0 +1,9 @@
+{
+  "id": "belt_many_pouches",
+  "name": "Belt of Many Pouches",
+  "slot": "waist",
+  "description": "Extra pouches make stowing and retrieving items quick.",
+  "material": "cloth",
+  "tier": 1,
+  "item_flags": ["faster_take_put"]
+}

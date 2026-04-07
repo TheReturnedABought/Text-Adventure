@@ -1,0 +1,10 @@
+{
+  "id": "bone_crusher",
+  "name": "Bone Crusher",
+  "slot": "weapon",
+  "description": "A brutal mace that splinters brittle foes.",
+  "material": "metal",
+  "tier": 2,
+  "stat_modifiers": {"attack": 2},
+  "item_flags": ["bone_crusher"]
+}
