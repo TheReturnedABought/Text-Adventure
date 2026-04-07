@@ -1,0 +1,20 @@
+{
+  "id": "castle_courtyard",
+  "name": "Castle Courtyard",
+  "description": "Inside the walls, the courtyard is overgrown with weeds pushing through cracked flagstones.",
+  "material": "stone",
+  "is_outdoor": true,
+  "is_start": false,
+  "light_level": 10,
+  "ambient": [
+    "A toppled statue lies broken in the grass.",
+    "Crows watch from the keep roof in uneasy silence."
+  ],
+  "exits": {
+    "south": "foot_of_castle"
+  },
+  "line_of_sight": ["foot_of_castle"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

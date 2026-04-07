@@ -52,6 +52,7 @@ class TextAdventureGame:
         self._rooms_raw: dict[str, dict] = {}
         self._room_id: str | None = None
         self._prev_room_id: str | None = None
+        self.world_flags: dict[str, bool] = {}
 
     def _debug(self, msg: str) -> None:
         if self.debug:
@@ -81,6 +82,11 @@ class TextAdventureGame:
         self.enemy_templates = self.loader.load_all_enemy_templates()
         self.class_catalog = self.loader.load_all_classes()
         self._rooms_raw = _load_folder("rooms")
+        world_flags_file = self.ASSETS_ROOT / "world_states.json"
+        if world_flags_file.exists():
+            self.world_flags = json.loads(world_flags_file.read_text(encoding="utf-8")).get("flags", {})
+        else:
+            self.world_flags = {}
 
         cmd_file = self.ASSETS_ROOT / "commands" / "commands.json"
         if cmd_file.exists():
@@ -105,6 +111,7 @@ class TextAdventureGame:
             try:
                 # Load all rooms properly using the loader's world builder
                 self.world = self.loader.build_world_map(self.enemy_templates)
+                self.world.global_flags = dict(self.world_flags)
                 window.append_log(f"[DEBUG] Built world with {len(self.world.rooms)} rooms using asset loader")
             except Exception as e:
                 window.append_log(f"Warning: Could not build world map from loader: {e}")
@@ -135,6 +142,7 @@ class TextAdventureGame:
                 self.world.current_room_id = self.world.start_room_id
             else:
                 self.world.current_room_id = next(iter(self._rooms_raw.keys()), None)
+            self.world.global_flags = dict(self.world_flags)
 
         self.exploration = None
         self.combat = None
@@ -202,7 +210,7 @@ class TextAdventureGame:
         if self.world and self.parser:
             self.exploration = ExplorationController(
                 self.parser, self.registry, self.player, self.world,
-                puzzle_flags={}, item_catalog=self.item_catalog
+                puzzle_flags=dict(self.world.global_flags), item_catalog=self.item_catalog
             )
             start_room = self.world.current_room()
             if start_room:

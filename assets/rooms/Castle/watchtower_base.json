@@ -1,0 +1,21 @@
+{
+  "id": "watchtower_base",
+  "name": "Watchtower Base",
+  "description": "A narrow stone chamber at the base of the watchtower. A spiral stair climbs to the second floor above.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 7,
+  "ambient": [
+    "Dust drifts in pale shafts of light from arrow slits.",
+    "The stair groans softly under its own weight."
+  ],
+  "exits": {
+    "east": "foot_of_castle",
+    "up": "watchtower_second_floor"
+  },
+  "line_of_sight": ["foot_of_castle", "watchtower_second_floor"],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": []
+}

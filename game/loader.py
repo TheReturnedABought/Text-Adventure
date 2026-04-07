@@ -37,6 +37,7 @@ class AssetLoader:
             is_outdoor=bool(data.get("is_outdoor", False)),
             light_level=int(data.get("light_level", 10)),
             exits=dict(data.get("exits", {})),
+            exit_requirements=dict(data.get("exit_requirements", {})),
             line_of_sight=list(data.get("line_of_sight", [])),
             ambient=list(data.get("ambient", [])),
             is_start=bool(data.get("is_start", False)),
@@ -80,6 +81,7 @@ class AssetLoader:
             reveals=list(data.get("reveals", [])),
             on_interact=dict(data.get("on_interact", {})),
             required_commands=dict(data.get("required_commands", {})),
+            set_flags_on_interact=dict(data.get("set_flags_on_interact", {})),
         )
         obj.contents = [self._load_world_object(c) for c in data.get("contents", [])]
         obj.items_inside = list(data.get("items_inside", []))
