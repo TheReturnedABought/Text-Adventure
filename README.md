@@ -1,212 +1,185 @@
-# Text Adventure — Full Project Structure
+```md
+# Text Adventure
 
-## Directory layout
+A data-driven Python text adventure with:
+- **world exploration** (rooms, objects, exits, puzzle flags),
+- **turn-based combat** (AP/MP costs, intents, status effects, targeting),
+- **JSON-first content authoring** (rooms, enemies, items, classes, commands),
+- and a **Tkinter game window** for art, HUD, log, and input.
+
+The core project goal is to keep gameplay logic in code, while keeping game content and tuning in `assets/*.json`.
+
+---
+
+## Project goals
+
+1. **Data-driven design**
+   - Rooms, enemies, items, classes, and commands are loaded from JSON.
+   - Combat/AP/MP tuning should be configurable without rewriting core engine code.
+
+2. **Readable engine code**
+   - Keep subsystems separated: parser, exploration, combat, world, loader.
+   - Prefer extending existing systems over one-off hardcoded logic.
+
+3. **Easy content iteration**
+   - Add or tune content by editing files under `assets/`.
+   - Reuse shared ASCII art via `art_asset` references instead of duplicating art blobs.
+
+---
+
+## Project structure
 
 ```
+
 Text-Adventure/
 │
 ├── main.py                         Entry point
 │
-├── assets/                         ── ALL game content lives here (no hardcoding) ──
-│   ├── rooms/
-│   │   ├── _schema.json            Reference schema for room files
-│   │   └── *.json                  One file per room
-│   ├── items/
-│   │   ├── _schema.json            Reference schema for item files
-│   │   └── *.json                  One file per equippable item
-│   ├── enemies/
-│   │   ├── _schema.json            Reference schema for enemy files
-│   │   └── *.json                  One file per enemy template
-│   ├── classes/
-│   │   ├── _schema.json            Reference schema for class files
-│   │   └── *.json                  One file per character class
-│   ├── abilities/
-│   │   └── *.json                  Optional: standalone ability sets
-│   └── commands/
-│       └── commands.json           Master command + modifier + article table
+├── assets/                         ── ALL game content (no hardcoding) ──
+│   ├── rooms/                      One JSON file per room (supports subfolders)
+│   │   ├── _schema.json            Reference schema
+│   │   └── */                      Zone folders with .json and art/
+│   ├── items/                      One JSON file per equippable item
+│   │   └── _schema.json
+│   ├── enemies/                    One JSON file per enemy template
+│   │   └── _schema.json
+│   ├── classes/                    One JSON file per character class
+│   │   └── _schema.json
+│   ├── commands/
+│   │   └── commands.json           Master command + modifier + article table
+│   └── world_states.json           Global flag defaults
 │
-└── game/
-    ├── __init__.py
-    ├── dice.py                     DiceExpression — parse, roll, scale
-    ├── effects.py                  StatusEffect, EffectRegistry, EffectManager
-    ├── commands.py                 CommandDefinition, CommandModifier,
-    │                               CommandRegistry, UnlockTable
-    ├── models.py                   Ability, EquippableItem, CharacterClass,
-    │                               EnemyIntent, ParsedCommand, BattleContext, …
-    ├── entities.py                 Entity (base), Player, Enemy
-    ├── world.py                    Material, MaterialProperties,
-    │                               WorldObject, Room, WorldMap
-    ├── parser.py                   CommandParser
-    ├── combat.py                   CombatController, TurnResult
-    ├── exploration.py              ExplorationController, ExplorationResult
-    ├── loader.py                   AssetLoader (JSON → objects)
-    └── game.py                     TextAdventureGame (orchestrator + run loop)
+├── game/                           Core engine (all Python modules)
+│   ├── __init__.py
+│   ├── game.py                     TextAdventureGame orchestrator + run loop
+│   ├── loader.py                   AssetLoader (JSON → objects)
+│   ├── world.py                    Room, WorldObject, Material, WorldMap
+│   ├── entities.py                 Entity, Player, Enemy
+│   ├── commands.py                 CommandRegistry, CommandDefinition, modifiers
+│   ├── parser.py                   CommandParser (aliases, articles, costs)
+│   ├── combat.py                   CombatController, turn resolution
+│   ├── exploration.py              ExplorationController (movement, interaction)
+│   ├── dice.py                     DiceExpression parser/roller
+│   ├── effects.py                  StatusEffect, EffectRegistry, EffectManager
+│   ├── models.py                   Ability, EquippableItem, CharacterClass, etc.
+│   └── window.py                   Tkinter UI (art, status, log, input)
+│
+├── tests/
+│   ├── test_combat_balance.py      Combat simulation tests
+│   └── test_combat_targeting.py    Targeting and disambiguation tests
+│
+└── docs/
+    └── removed_components.md       Archive of previous design decisions
+
 ```
 
 ---
 
-## Data flow at startup
+## Current architecture
 
-```
-AssetLoader.load_all_items()       → item_catalog
-AssetLoader.load_all_enemy_templates() → enemy_templates
-AssetLoader.load_all_classes()     → class_catalog
-AssetLoader.load_commands_into(registry) → CommandRegistry populated
-AssetLoader.build_world_map(enemy_templates) → WorldMap (rooms wired + enemies spawned)
-
-CommandParser(registry)
-ExplorationController(parser, registry, player, world)
-CombatController(parser, registry, player, enemies)   ← created per encounter
+```text
+main.py
+  -> TextAdventureGame (game/game.py)
+      -> AssetLoader (game/loader.py)
+      -> CommandRegistry + Parser (game/commands.py, game/parser.py)
+      -> ExplorationController (game/exploration.py)
+      -> CombatController (game/combat.py)
+      -> Tk window UI (game/window.py)
 ```
 
----
-# Combat
-## AP cost rule (letter count system)
+### Key modules
 
-```
-ap_cost = len(raw_command.strip())
-        - player.ap_cost_reduction_for(intent)   # from equipped items
-minimum cost of command = 1 
-```
-
-**Example**
-
-| Typed | Letters | Item reduction                      | Final AP |
-|-------|---------|-------------------------------------|----------|
-| `attack the goblin` | 18 | 0                                   | 18 |
-| `block` | 5 | bronze blade: cost of letter b -= 1 | 4 |
-| `heavy attack a goblin` | 22 | 0                                   | 22 |
-| `smash the door` | 15 | 0                                   | 15 |
-
----
-## mp cost rule (special word count system)
-
-```
-
-```
-
-**Example**
-
-| Typed             | Letters | Item reduction | Final MP | Final AP |
-|-------------------|---------|----------------|----------|----------|
-| `heal the goblin` | 16      | 0              | 1        | 16       |
-| `heal me`         | 6       | 0              | 1        | 6        |
-| `heal`            | 4       | 1              | 4        | 4        |
-| `fireball`        | 9       | 2              | 8        | 9        |
-| `summon`          | 5       | 3              | 6        | 5        |
----
-## Combat turn order
-
-```
-Player turn:
-  player.current_ap = player.max_ap
-  while player.current_ap > 0:
-    read input → parse → validate AP → resolve action → spend AP
-    if enemy ap changes thanks to actions enenmy:
-        enemy.plan_turn(player)          # fills active_intents greedily
-        plan next round intents for all enemies (displayed as telegraphed intent)
-    if AP = 0 OR player types 'wait'/'end' → end_player_turn()
-
-Enemy turn (each enemy, in order):
-  for intent in active_intents:
-    resolve_enemy_intent(enemy, intent)
-    enemy.spend_ap(intent.ap_cost)
-
-round += 1
-enemy.plan_turn(player)          # fills active_intents greedily
-plan next round intents for all enemies (displayed as telegraphed intent)
-```
+- `game/game.py` — top-level orchestration and state transitions.
+- `game/loader.py` — JSON loaders and world assembly.
+- `game/world.py` — Room/Object/World graph, LOS, traversal, environmental interactions.
+- `game/exploration.py` — world commands (`go`, `look`, `take`, rule-driven interactions).
+- `game/combat.py` — encounter loop, AP/MP spend, targeting, enemy intents, outcomes.
+- `game/parser.py` — command parsing, aliasing, article handling, cost resolution.
+- `game/window.py` — UI panels (art, status, log, input).
 
 ---
 
-## Article / targeting rule
+## Running the game
 
-| Player types | ArticleType | Target selection | Damage  |
-|---|---|---|---------|
-| `attack` | NONE | random  | -2 flat |
-| `attack goblin` | NONE | random from matching enemies | base    |
-| `attack the goblin` | SPECIFIC | must resolve to 1 named target | +2 flat |
-| `attack a goblin` | GENERIC | random from matching enemies | +3 flat |
+### Requirements
+- Python 3.11+
 
-# Damage types
+### Start
 
-Damage has multiple types.
+```bash
+python main.py
+```
 
-Some enemies are resistant to some types of damage taking half the damage, 
-
-Some enemies are vulnerable to some types of damage taking double damage,
-
-Some are neither,
-
-The types of damage are the following:
-
-- bludgeoning
-- piercing
-- slashing
-- tearing 
-- fire
-- lightning
-- cold
-- flood
-- force
-- acid
-- poison 
-- necrotic 
-- radiant 
-- psychic 
-- sonic
-- force
-
-## aliases for combat commands
-
-Since the length of a combat command determines it's cost aliases can be very powerful,
-To amend this damage types are added for each command and each class.
-
-
-attack for soldier --> slashing
-strike for soldier --> half slashing + half bludgeoning
-hit for soldier --> half bludgeoning
+`main.py` currently starts with `DEBUG = True`, so debug logs are enabled by default.
 
 ---
 
-## Material interaction matrix for physics simulation
+## Combat model (current)
 
-Rooms and objects can be made up of diffrent materials and react diffrently to damage types.
-If you attack an enemy there is a chance based on the room type to apply an effect to the room.
-
-for example you attack a goblin with a lightning attack in a metal room there is a 90% chance that you get shocked and take damage too.
-for example you attack a goblin with a lightning attack and there is a metal object/item there is a 10% chance that it gets shocked (but if you aren't holding it you do not get shocked).
-
-Items and rooms that ignite burn over time and become charcoal. If you stand in a burning room you take fire damage.
-
-Not all results are permanent, some are temporary, some effects are negative for you some would be positive.
-
-| type \ material | Wood       | Metal                | Stone                | Water              | Glass                         | Ice        | Flesh              | Bone         | Cloth        | Crystal              | Sand         | Plant             |
-| --------------- | ---------- |----------------------| -------------------- | ------------------ | ----------------------------- | ---------- | ------------------ | ------------ | ------------ | -------------------- | ------------ | ----------------- |
-| **Fire**        | Ignites    | Heats                | —                    | Extinguished       | Cracks/shatters (heat stress) | Melts      | Burns              | Burns (slow) | Ignites fast | May fracture         | —            | Ignites rapidly   |
-| **Lightning**   | —          | Conducts (spreads)   | —                    | Conducts (spreads) | —                             | —          | Shocks             | —            | —            | Amplifies / refracts | —            | —                 |
-| **Cold**        | Brittle    | Brittle              | —                    | Freezes            | Becomes brittle               | Reinforces | Slows              | Brittle      | Stiffens     | Stabilizes           | Compacts     | Slows growth      |
-| **Flood**       | Floats     | Sinks                | Sinks                | —                  | Sinks                         | Floats     | Pushes             | Sinks        | Floats       | Sinks                | Saturates    | Uproots           |
-| **Slashing**    | Cuts       | —                    | Sparks → fire chance | —                  | Shatters                      | Cuts       | Lacerates          | Chips        | Tears        | Scratches            | Displaces    | Cuts              |
-| **Bludgeoning** | Cracks     | Dents (noise)        | Chips/cracks         | —                  | Shatters                      | Shatters   | Bruises            | Cracks       | —            | Cracks               | Compacts     | Crushes           |
-| **Piercing**    | Penetrates | —                    | —                    | —                  | Shatters                      | Pierces    | Impales            | Penetrates   | Pierces      | —                    | Pass-through | Pierces           |
-| **Tearing**     | Splinters  | —                    | —                    | —                  | —                             | —          | Severe trauma      | Splits       | Rips         | —                    | Disrupts     | Rips              |
-| **Acid**        | Corrodes   | Corrodes (slow/fast) | Erodes               | Dilutes            | Etches                        | Melts      | Dissolves          | Weakens      | Dissolves    | Etches               | Neutralizes  | Dissolves         |
-| **Poison**      | —          | —                    | —                    | Contaminates       | —                             | —          | Affects            | —            | —            | —                    | —            | Affects           |
-| **Necrotic**    | Decays     | —                    | —                    | Stagnates          | —                             | —          | Rot                | Weakens      | Rot          | —                    | —            | Wilts             |
-| **Radiant**     | Purifies   | Heats                | —                    | Purifies           | Refracts                      | Melts      | Burns/cleanses     | —            | Cleanses     | Amplifies            | —            | Stimulates growth |
-| **Psychic**     | —          | —                    | —                    | —                  | —                             | —          | Mental dmg         | —            | —            | Resonates            | —            | —                 |
-| **Sonic**       | Vibrates   | Resonates            | Cracks               | Ripples            | Shatters                      | Cracks     | Disorients         | —            | Tears        | Resonates strongly   | Displaces    | Rustles           |
-| **Force**       | Pushes     | Pushes               | Pushes               | Displaces          | Shatters                      | Shatters   | Impacts            | Impacts      | Pushes       | Shatters             | Scatters     | Pushes            |
+- **Action Points (AP)** are based on the **raw length of the typed command** (letters only, spaces ignored), reduced by equipment letter‑cost reductions. Minimum AP cost is 1.
+- **Magic Points (MP)** are based on the command’s `base_mp_cost` (or override) when `costs_mp` is true, reduced by equipment ability‑cost reductions.
+- **Targeting**:
+  - Supports indexed and name‑based targeting.
+  - Article parsing (`a/an/the`) influences target selection and damage bonus rules.
+- **Enemy AI**:
+  - Enemies pick intents greedily using AP and intent weights/conditions.
+- **Damage system**:
+  - Damage types are tag‑driven.
+  - Room material + enemy material + resist/vulnerability multipliers are applied.
 
 ---
 
-# Adding content checklist
+## Data-driven content
 
-**New room**: create `assets/rooms/<id>.json`, reference exits by room id.  
-**New item**: create `assets/items/<id>.json`, reference in class `starting_items` or loot table.  
-**New enemy**: create `assets/enemies/<id>.json`, reference in room `enemy_spawns`.  
-**New class**: create `assets/classes/<id>.json`, populate `level_unlocks`.  
-**New command**: add entry to `assets/commands/commands.json`.  
-**New status effect**: subclass `StatusEffect` in `game/effects.py`, register in `EffectRegistry`.  
-**New ability execute**: wire callback in `AbilityRegistry` (to be built in `game/abilities.py`).
+All gameplay content lives in `assets/` (see structure above).
+
+### Art assets
+
+Rooms and enemies can define:
+
+```json
+"art_asset": "assets/rooms/Tent/art/east_of_tent.txt"
+```
+
+This allows one ASCII file to be reused by multiple rooms/enemies.
+
+---
+
+## Authoring workflow
+
+### Add a room
+1. Create `assets/rooms/<zone>/<room>.json`.
+2. Add exits to existing rooms.
+3. Optionally add `line_of_sight`, objects, spawns, and `art_asset`.
+
+### Add an enemy template
+1. Create `assets/enemies/<enemy>.json`.
+2. Define stats and `intent_pool`.
+3. Reference it from room `enemy_spawns`.
+4. Optionally set `art_asset`.
+
+### Add commands/modifiers
+- Edit `assets/commands/commands.json`.
+- Use `base_ap_cost`, `base_mp_cost`, tags, aliases, unlock rules, and contexts.
+
+### Add class progression
+- Edit `assets/classes/<class>.json`.
+- Configure `base_stats`, `starting_items`, `level_unlocks`, `choice_unlocks`.
+
+---
+
+## Testing
+
+Run the current test suite:
+
+```bash
+pytest -q
+```
+
+---
+
+## Current scope / known gaps
+
+- The project is a strong engine scaffold and already playable, but some systems are intentionally lightweight (example: certain world interactions and advanced ability scripting).
+- Design direction is toward richer JSON‑defined combat/class/status behavior while keeping the engine maintainable.
+```
