@@ -299,6 +299,7 @@ class Enemy(Entity):
     # Vulnerabilities and resistances (damage type strings)
     vulnerabilities: list[str] = field(default_factory=list)
     resistances: list[str] = field(default_factory=list)
+    art_asset: str | None = None
 
     def __post_init__(self):
         super().__post_init__()

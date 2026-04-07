@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
 from game.dice import DiceExpression
-from game.effects import EffectTrigger, EffectCategory
+from game.effects import EffectTrigger, EffectCategory, StatusEffect
 from game.models import ParsedCommand, ArticleType
-from game.world import DamageType, coerce_damage_type, resolve_material_interaction
+from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction
 from game.window import window
 
 if TYPE_CHECKING:
@@ -150,7 +150,10 @@ class CombatController:
         if not parsed.valid:
             result.add(parsed.error or "Invalid command.")
             return result
-
+        else:
+            cmd = self.registry.get_command(parsed.intent)
+            raw_ap = cmd.base_ap_cost if cmd else 0
+            print(f"[DEBUG] Raw AP: {raw_ap}, Reduced AP: {parsed.ap_cost}")
         intent = parsed.intent or ""
 
         # Handle movement if command is "go"
@@ -181,7 +184,17 @@ class CombatController:
             self._resolve_block(parsed, result)
             action_performed = True
         elif intent in {"ability", "cast", "use"}:
-            self._resolve_ability(parsed, result)
+            # Spend AP/MP first (already checked they are sufficient)
+            self.player.spend_ap(parsed.ap_cost)
+            self.player.mana -= parsed.mp_cost
+            result.ap_spent = parsed.ap_cost
+            # Resolve ability (returns restoration amounts, adds any non‑restoration messages)
+            restore_ap, restore_mp = self._resolve_ability(parsed, result)
+            # Apply restoration silently (no messages)
+            if restore_ap > 0:
+                self.player.current_ap = min(self.player.total_ap, self.player.current_ap + restore_ap)
+            if restore_mp > 0:
+                self.player.mana = min(self.player.max_mana, self.player.mana + restore_mp)
             action_performed = True
         elif intent == "equip":
             self._resolve_equip(parsed, result)
@@ -193,9 +206,11 @@ class CombatController:
             result.add("That command has no combat resolver yet.")
 
         if result.outcome == CombatOutcome.ONGOING and action_performed:
-            self.player.spend_ap(parsed.ap_cost)
-            self.player.mana -= parsed.mp_cost
-            result.ap_spent = parsed.ap_cost
+            # For other commands that didn't already spend AP (attack, block, etc.)
+            if intent not in {"ability", "cast", "use"}:
+                self.player.spend_ap(parsed.ap_cost)
+                self.player.mana -= parsed.mp_cost
+                result.ap_spent = parsed.ap_cost
             for line in self.player.tick_effects(EffectTrigger.ON_ACTION):
                 result.add(line)
             self._refresh_combat_zone()
@@ -368,11 +383,9 @@ class CombatController:
             room = self.world.get_room(self.player_room_id)
             if room:
                 return room.material
-        from game.world import Material
         return Material.STONE
 
     def _material_from_str(self, mat_str: str) -> Material:
-        from game.world import Material
         try:
             return Material(mat_str.lower())
         except ValueError:
@@ -398,9 +411,11 @@ class CombatController:
         self.player.add_block(block)
         result.add(f"You gain {block} block.")
 
-    def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> None:
-        self._debug_log("_resolve_ability()")
+    def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:
+        """Returns (restore_ap, restore_mp) after resolving ability effects. No messages for restoration."""
         name = (parsed.item_name or parsed.target_name or "").lower()
+        restore_ap = 0
+        restore_mp = 0
         for item in self.player.equipped.values():
             for ability in item.abilities:
                 if name and name not in ability.name.lower() and name != ability.id.lower():
@@ -412,10 +427,25 @@ class CombatController:
                     if target:
                         dealt = target.receive_damage(dmg)
                         result.add(f"You use {ability.name} and deal {dealt} damage.")
+                        if ability.effect_on_hit:
+                            effect = StatusEffect(
+                                id=ability.effect_on_hit,
+                                name=ability.effect_on_hit.capitalize(),
+                                description="",
+                                trigger=EffectTrigger.ON_TURN_END,
+                                category=EffectCategory.DEBUFF,
+                                duration=ability.effect_duration,
+                                stacks=ability.effect_stacks,
+                            )
+                            result.add(target.apply_effect(effect))
                 else:
                     result.add(f"You use {ability.name}.")
-                return
+                # Collect restoration values (no messages added here)
+                restore_ap = int(ability.payload.get("restore_ap", 0) or 0)
+                restore_mp = int(ability.payload.get("restore_mp", 0) or 0)
+                return restore_ap, restore_mp
         result.add("No matching ability is equipped.")
+        return 0, 0
 
     def _resolve_equip(self, parsed: ParsedCommand, result: TurnResult) -> None:
         self._debug_log("_resolve_equip()")
@@ -469,7 +499,6 @@ class CombatController:
             dealt = self.player.receive_damage(dmg)
             result.add(f"{enemy.name} {intent.description} for {dealt} damage.")
             if intent.effect_on_hit:
-                from game.effects import StatusEffect, EffectTrigger, EffectCategory
                 effect = StatusEffect(
                     id=intent.effect_on_hit,
                     name=intent.effect_on_hit.capitalize(),

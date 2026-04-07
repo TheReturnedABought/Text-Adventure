@@ -3,13 +3,13 @@
 
   "id": "basic",
   "name": "Basic",
-  "description": "A test class with no special abilities, unlocks, or starting items.",
+  "description": "A test class with no special abilities, unlocks, or starting items. The game should be beatable with it but harder.",
 
   "base_stats": {
     "hp": 30,
     "attack": 5,
     "defense": 1,
-    "ap": 20
+    "ap": 40
   },
 
   "starting_items": [],

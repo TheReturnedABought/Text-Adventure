@@ -128,10 +128,10 @@
       "unlocked_by_default": false
     },
     {
-      "name": "flee",
-      "aliases": ["run", "escape", "retreat"],
-      "description": "Attempt to escape combat.",
-      "ap_cost_override": null,
+      "name": "wait",
+      "aliases": ["end", "skip", "pass"],
+      "description": "End your turn without taking any action.",
+      "ap_cost_override": 0,
       "base_dice": null,
       "unlock_class": null,
       "unlock_level": 0,
@@ -139,7 +139,7 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
+      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {

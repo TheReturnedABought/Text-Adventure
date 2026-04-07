@@ -188,6 +188,7 @@ class Room:
     description_snippets: dict[str, str] = field(default_factory=dict)   # object_id -> snippet
     interaction_rules: list[dict] = field(default_factory=list)
     combat_won_snippet: str = ""
+    art_asset: str | None = None
 
     def get_description(self, verbose: bool = False) -> str:
         # Substitute all placeholders (supports both {{key_desc}} and {{key}})
@@ -267,9 +268,11 @@ class Room:
             for obj in self.objects.values():
                 if getattr(obj, "reveal_on_combat_end", False):
                     obj.hidden = False
-            # Set the combat won snippet if provided
+            # Replace the entire description with the victory snippet if provided
             if self.combat_won_snippet:
-                self.description_snippets["combat_update"] = self.combat_won_snippet
+                self.description = self.combat_won_snippet
+                # Clear any leftover placeholders
+                self.description_snippets.clear()
 
 
 class WorldMap:
