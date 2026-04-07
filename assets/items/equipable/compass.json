@@ -1,0 +1,9 @@
+{
+  "id": "compass",
+  "name": "Compass",
+  "slot": "Compass",
+  "description": "A well‑crafted brass compass that always points north. It can be used to reveal nearby exits.",
+  "material": "metal",
+  "tier": 1,
+  "item_flags": ["compass"]
+}

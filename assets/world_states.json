@@ -2,6 +2,7 @@
   "flags": {
     "castle_gate_lever_pulled": false,
     "beast_tunnel_unlocked": false,
+    "compass_unlock_shown": false,
     "lyra_offering_made": false,
     "cave_passage_open": false,
     "hut_door_open": false,

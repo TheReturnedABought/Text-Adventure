@@ -366,6 +366,21 @@
       "world_use_hint": null,
       "base_ap_cost": 0,
       "unlocked_by_default": true
-    }
+    },
+    {
+      "name": "compass",
+      "aliases": ["direction", "exits"],
+      "description": "Use your compass to see available exits from the current room.",
+      "ap_cost_override": 0,
+      "base_dice": null,
+      "unlock_class": null,
+      "unlock_level": 0,
+      "valid_contexts": ["world"],
+      "modifiers_allowed": [],
+      "tags": ["meta", "utility"],
+      "world_use_hint": null,
+      "base_ap_cost": 0,
+      "unlocked_by_default": false
+   }
   ]
 }

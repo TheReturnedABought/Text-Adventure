@@ -79,6 +79,8 @@ class ExplorationController:
             self._resolve_help(result)
         elif intent == "read":
             self._resolve_read(parsed, result)
+        elif intent == "compass":
+            self._resolve_compass(result)
         elif self._resolve_data_rule(parsed, result):
             pass
         else:
@@ -202,6 +204,11 @@ class ExplorationController:
                 material=obj.material.value,
                 readable_text=obj.on_interact.get("read") or obj.on_interact.get("look"),
             )
+            if "compass" in item.item_flags:
+                if not self.puzzle_flags.get("compass_unlock_shown", False):
+                    self.puzzle_flags["compass_unlock_shown"] = True
+                    self.world.global_flags["compass_unlock_shown"] = True
+                    result.add("You now know how to use 'compass' (or 'exits') to check your bearings.")
             # Remove object from room
             del room.objects[obj.id]
             # Add to player inventory
@@ -371,3 +378,34 @@ class ExplorationController:
                 self.player.mana = min(self.player.max_mana, self.player.mana + 1)
                 if self.player.mana > before:
                     result.add("Arcane Cloak restores 1 MP.")
+
+
+    def _resolve_compass(self, result: ExplorationResult) -> None:
+        """Display available exits from current room using the compass."""
+        if not self._has_compass():
+            result.add("You don't have a compass.")
+            return
+
+        room = self.world.current_room()
+        if not room:
+            result.add("You are nowhere.")
+            return
+
+        exits = room.exits
+        if not exits:
+            result.add("Your compass spins aimlessly – there are no visible exits.")
+            return
+
+        dirs = sorted(exits.keys())
+        result.add(f"The compass needle points to: {', '.join(dirs)}.")
+
+
+def _has_compass(self) -> bool:
+    """Return True if player has any item with 'compass' flag."""
+    for item in self.player.inventory:
+        if "compass" in getattr(item, "item_flags", []):
+            return True
+    for item in self.player.equipped.values():
+        if "compass" in getattr(item, "item_flags", []):
+            return True
+    return False
