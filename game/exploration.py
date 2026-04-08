@@ -33,6 +33,7 @@ class ExplorationController:
         self.world = world
         self.puzzle_flags = puzzle_flags or {}
         self.item_catalog = item_catalog or {}
+        self.game = None  # will be set by game.py after creation
         self._handlers = {
             "go": self._go,
             "look": self._look,
@@ -52,7 +53,9 @@ class ExplorationController:
             "inventory": self._inventory,
             "help": self._help,
             "read": self._read,
-            "compass": self._compass
+            "compass": self._compass,
+            "save": self._save,
+            "load": self._load,
         }
 
     def player_input(self, raw: str) -> ExplorationResult:
@@ -61,7 +64,6 @@ class ExplorationController:
         if not parsed.valid:
             if not self._resolve_garnish_rule(raw, result):
                 result.add(parsed.error or "Invalid command.")
-            # Early return: do NOT process passives, enemy movement, or combat on invalid input
             return result
 
         intent = (parsed.intent or "").lower()
@@ -172,9 +174,10 @@ class ExplorationController:
         for key, value in obj.set_flags_on_interact.get(parsed.intent or "", {}).items():
             self.puzzle_flags[str(key)] = bool(value)
             self.world.global_flags[str(key)] = bool(value)
-        for new_obj in revealed:
-            room.add_object(new_obj)
-            result.add(f"Revealed: {new_obj.name}.")
+        for new_obj_id in revealed:
+            if new_obj_id in room.objects:
+                room.objects[new_obj_id].hidden = False
+                result.add(f"Revealed: {room.objects[new_obj_id].name}.")
 
     def _take(self, parsed: ParsedCommand, result: ExplorationResult):
         room = self.world.current_room()
@@ -205,6 +208,7 @@ class ExplorationController:
                 material=obj.material.value, readable_text=obj.on_interact.get("read") or obj.on_interact.get("look")
             )
             if "compass" in item.item_flags:
+                self.player.unlock_command("compass")
                 if not self.puzzle_flags.get("compass_unlock_shown", False):
                     self.puzzle_flags["compass_unlock_shown"] = True
                     self.world.global_flags["compass_unlock_shown"] = True
@@ -346,6 +350,20 @@ class ExplorationController:
             result.add("Your compass spins aimlessly – there are no visible exits.")
             return
         result.add(f"The compass needle points to: {', '.join(sorted(exits.keys()))}.")
+
+    def _save(self, parsed: ParsedCommand, result: ExplorationResult):
+        if self.game:
+            self.game.save()
+            result.add("Game saved.")
+        else:
+            result.add("Save system unavailable.")
+
+    def _load(self, parsed: ParsedCommand, result: ExplorationResult):
+        if self.game:
+            self.game.load()
+            result.add("Game loaded.")
+        else:
+            result.add("Load system unavailable.")
 
     def _resolve_data_rule(self, parsed: ParsedCommand, result: ExplorationResult) -> bool:
         room = self.world.current_room()

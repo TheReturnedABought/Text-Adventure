@@ -1,5 +1,5 @@
 {
-  "id": "tent_interieur",
+  "id": "tent_interior",
   "name": "Tent Interior",
   "description": "The inside of a worn canvas tent. A single lantern flickers on a small wooden crate.{{letter_desc}} The walls are patched in several places.",
   "material": "cloth",
@@ -107,7 +107,7 @@
       "text": "You close your eyes and offer a silent prayer to whatever gods might listen. The tent canvas rustles softly, as if in acknowledgment.",
       "requires": null
     },
-        {
+    {
       "commands": ["put", "deposit", "store"],
       "targets": ["cabinet", "chest", "cabinet in"],
       "text": "You put the {item} into the cabinet.",

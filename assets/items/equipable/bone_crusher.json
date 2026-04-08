@@ -5,6 +5,7 @@
   "description": "A brutal mace that splinters brittle foes.",
   "material": "metal",
   "tier": 2,
+  "value": 50,
   "stat_modifiers": {"attack": 2},
   "item_flags": ["bone_crusher"]
 }

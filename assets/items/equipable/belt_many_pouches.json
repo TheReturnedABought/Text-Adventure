@@ -5,5 +5,6 @@
   "description": "Extra pouches make stowing and retrieving items quick.",
   "material": "cloth",
   "tier": 1,
+  "value": 20,
   "item_flags": ["faster_take_put"]
 }

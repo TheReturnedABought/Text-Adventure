@@ -5,5 +5,6 @@
   "description": "A thin dagger that leaves venom in the blood.",
   "material": "metal",
   "tier": 2,
+  "value": 20,
   "item_flags": ["wasp_needle"]
 }

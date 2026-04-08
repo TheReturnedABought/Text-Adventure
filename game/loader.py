@@ -180,8 +180,9 @@ class AssetLoader:
     def _read_json(self, path: Path) -> dict:
         try:
             return json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:
-            raise ValueError(f"Failed to parse JSON at {path}: {e}")
+        except json.JSONDecodeError as e:
+            print(f"ERROR: Invalid JSON in {path}: {e}")
+            return {}
     def _glob_json(self, subfolder: str) -> List[Path]:
         base = self.assets_root / subfolder
         return list(base.rglob("*.json")) if base.exists() else []

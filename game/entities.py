@@ -294,7 +294,15 @@ class Enemy(Entity):
         drops = []
         for entry in self.loot_table:
             if random.random() <= entry.chance:
-                drops.append(entry.item_id)
+                count = 1
+                if entry.count_expression:
+                    try:
+                        from game.dice import DiceExpression
+                        count = DiceExpression.parse(entry.count_expression).roll()
+                    except Exception:
+                        count = 1
+                for _ in range(max(1, count)):
+                    drops.append(entry.item_id)
         return drops
 
     def intent_display(self) -> str:

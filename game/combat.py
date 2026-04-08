@@ -301,19 +301,22 @@ class CombatController:
 
     def _ability(self, parsed: ParsedCommand, result: TurnResult) -> bool:
         name = (parsed.item_name or parsed.target_name or "").lower()
-        restore_ap = restore_mp = 0
         for item in self.player.equipped.values():
             for ability in item.abilities:
                 if name and name not in ability.name.lower() and name != ability.id.lower():
                     continue
-                # Deduct AP/MP before executing
+                # Resolve target first
+                target = None
+                if ability.dice_expression:
+                    target = self._resolve_target(parsed, result)
+                    if target is None:
+                        return False
+                # Now deduct AP/MP
                 if not self.player.spend_ap(parsed.ap_cost):
                     result.add("Not enough AP.")
                     return False
                 if parsed.mp_cost > getattr(self.player, "mana", 0):
                     result.add("Not enough MP.")
-                    # Refund AP because we already spent it
-                    self.player.current_ap += parsed.ap_cost
                     return False
                 self.player.mana -= parsed.mp_cost
                 result.ap_spent = parsed.ap_cost
@@ -321,21 +324,19 @@ class CombatController:
                 if ability.dice_expression:
                     dice = DiceExpression.parse(ability.dice_expression)
                     dmg = dice.roll()
-                    target = self._resolve_target(parsed, result)
-                    if target:
-                        dealt = target.receive_damage(dmg)
-                        result.add(f"You use {ability.name} and deal {dealt} damage.")
-                        if ability.effect_on_hit:
-                            effect = StatusEffect(
-                                id=ability.effect_on_hit,
-                                name=ability.effect_on_hit.capitalize(),
-                                description="",
-                                trigger=EffectTrigger.ON_TURN_END,
-                                category=EffectCategory.DEBUFF,
-                                duration=ability.effect_duration,
-                                stacks=ability.effect_stacks
-                            )
-                            result.add(target.apply_effect(effect))
+                    dealt = target.receive_damage(dmg)
+                    result.add(f"You use {ability.name} and deal {dealt} damage.")
+                    if ability.effect_on_hit:
+                        effect = StatusEffect(
+                            id=ability.effect_on_hit,
+                            name=ability.effect_on_hit.capitalize(),
+                            description="",
+                            trigger=EffectTrigger.ON_TURN_END,
+                            category=EffectCategory.DEBUFF,
+                            duration=ability.effect_duration,
+                            stacks=ability.effect_stacks
+                        )
+                        result.add(target.apply_effect(effect))
                 else:
                     result.add(f"You use {ability.name}.")
                 restore_ap = int(ability.payload.get("restore_ap", 0) or 0)
@@ -406,6 +407,17 @@ class CombatController:
         self.player_room_id = target_id
         self.world.current_room_id = target_id
         self._refresh_combat_zone()
+
+        # Check if any enemy can still reach player; if not, auto-flee
+        reachable = any(
+            e.is_alive and (e.combat_room_id == self.player_room_id or self._ranged_possible(e))
+            for e in self.enemies
+        )
+        if not reachable:
+            result.add("You have escaped the combat zone.")
+            result.outcome = CombatOutcome.PLAYER_FLED
+            return True
+
         result.add(f"You move {direction} ({parsed.ap_cost} AP).")
         new_room = self.world.current_room()
         if new_room: result.add(new_room.get_description(verbose=False))
@@ -413,6 +425,15 @@ class CombatController:
             end = self.end_player_turn()
             result.lines.extend(end.lines); result.outcome = end.outcome
         return True
+
+    def _ranged_possible(self, enemy: Enemy) -> bool:
+        if not self.world: return False
+        room = self.world.get_room(self.player_room_id)
+        if room and enemy.combat_room_id in room.line_of_sight:
+            weapon = self.player.equipped.get("weapon")
+            if weapon and "ranged_attack" in weapon.item_flags:
+                return True
+        return False
 
     def _status(self, parsed: ParsedCommand, result: TurnResult) -> bool:
         result.add(self.player.status_line())

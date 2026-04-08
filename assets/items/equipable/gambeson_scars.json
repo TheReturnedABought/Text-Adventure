@@ -5,6 +5,7 @@
   "description": "Layered cloth and old stitches that harden after every hit.",
   "material": "cloth",
   "tier": 2,
+  "value": 30,
   "stat_modifiers": {"defense": 2},
   "item_flags": ["gambeson_scars"]
 }
