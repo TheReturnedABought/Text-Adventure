@@ -63,26 +63,40 @@ class CombatController:
     def _refresh_combat_zone(self) -> None:
         if not self.world:
             self.combat_zone = set()
+            self._log("No world, combat_zone cleared")
             return
         zone: set[str] = set()
         for e in self.enemies:
             if e.is_alive and e.combat_room_id:
                 zone |= self._zone_ids(e.combat_room_id)
         self.combat_zone = zone
+        self._log(f"Combat zone refreshed: {self.combat_zone}")
 
     def _enemy_in_zone(self, enemy: "Enemy") -> bool:
         rid = enemy.combat_room_id or self.player_room_id
-        return not self.combat_zone or rid in self.combat_zone
+        in_zone = not self.combat_zone or rid in self.combat_zone
+        self._log(f"Enemy {enemy.name} room={rid} in_zone={in_zone} (zone={self.combat_zone})")
+        return in_zone
 
     def _has_ranged_weapon(self) -> bool:
-        return any(i.slot == "weapon" and "ranged_attack" in i.item_flags
-                   for i in self.player.equipped.values())
+        """Return True if any equipped item has a ranged flag (regardless of slot)."""
+        for item in self.player.equipped.values():
+            flags = [f.lower() for f in getattr(item, "item_flags", [])]
+            if "ranged" in flags or "ranged_attack" in flags:
+                self._log(f"Ranged weapon detected: {item.name} (slot {item.slot}) with flags {flags}")
+                return True
+        self._log("No ranged weapon equipped.")
+        return False
 
     def _eligible_targets(self, ranged: bool) -> list["Enemy"]:
         living = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
+        self._log(f"Living enemies in zone: {[e.name for e in living]}")
         if ranged or self._has_ranged_weapon():
+            self._log(f"Ranged attack (ranged={ranged}, has_ranged={self._has_ranged_weapon()}) – all visible enemies eligible.")
             return living
-        return [e for e in living if e.combat_room_id == self.player_room_id]
+        same_room = [e for e in living if e.combat_room_id == self.player_room_id]
+        self._log(f"Melee only – eligible: {[e.name for e in same_room]}")
+        return same_room
 
     def _refresh_movement_hints(self) -> None:
         for enemy in self.enemies:
@@ -121,7 +135,7 @@ class CombatController:
             result.add(parsed.error or "Invalid command.")
             return result
 
-        print(f"[DEBUG] Raw AP: {raw}, Reduced AP: {parsed.ap_cost}")
+        self._log(f"Raw AP: {raw}, Reduced AP: {parsed.ap_cost}")
         intent = parsed.intent or ""
 
         if intent == "go":
@@ -179,6 +193,7 @@ class CombatController:
         elif intent == "equip":
             item_name = parsed.item_name or parsed.target_name
             result.add(self.player.equip(item_name) if item_name else "Equip what?")
+            self._refresh_combat_zone()
             action_performed = True
         elif intent == "flee":
             if random.random() < 0.5:
@@ -340,6 +355,7 @@ class CombatController:
         total, rolls, _ = dice.roll_with_breakdown()
 
         weapon = self._active_weapon(parsed.item_name)
+        base_attack = self.player.base_attack_value()
         if parsed.item_name:
             bonus = self.player.weapon_attack_bonus(parsed.item_name)
             if not bonus:
@@ -347,7 +363,7 @@ class CombatController:
                 return False
             total += bonus
         else:
-            total += self.player.base_attack_value()
+            total += base_attack
 
         room_mat = Material.STONE
         if self.world and self.player_room_id:
@@ -373,7 +389,11 @@ class CombatController:
             total += self.registry.article_rule.specific_flat_bonus
 
         dealt = target.receive_damage(total)
-        result.add(f"You hit {target.name} for {dealt} damage ({dice} -> {rolls} = {total}).")
+        # Clearer damage breakdown
+        if parsed.item_name:
+            result.add(f"You hit {target.name} for {dealt} damage (weapon bonus + {dice} -> {rolls} = {total}).")
+        else:
+            result.add(f"You hit {target.name} for {dealt} damage (base {base_attack} + {dice} -> {rolls} = {total}).")
         for line in self._weapon_on_hit_effects(weapon, target, dealt):
             result.add(line)
         if self.world and self.player_room_id:
@@ -583,7 +603,10 @@ class CombatController:
 
         if not living:
             if any(e.is_alive and self._enemy_in_zone(e) for e in self.enemies):
-                result.add("No enemies in this room. Try moving closer or using a ranged attack.")
+                if self._has_ranged_weapon():
+                    result.add("No enemies in range. (You have a ranged weapon equipped.)")
+                else:
+                    result.add("No enemies in range. Try moving closer or using a ranged attack.")
             else:
                 result.add("There are no enemies left.")
             return None
@@ -596,19 +619,25 @@ class CombatController:
 
         if parsed.target_name:
             matches = [e for e in living if parsed.target_name.lower() in e.name.lower()]
-            if len(matches)==1: return matches[0]
-            if not matches: result.add("No target matches that name."); return None
-            if parsed.article == ArticleType.GENERIC: return random.choice(matches)
+            if len(matches) == 1:
+                return matches[0]
+            if not matches:
+                result.add("No target matches that name.")
+                return None
+            if parsed.article == ArticleType.GENERIC:
+                return random.choice(matches)
             self._pending_disambiguation = matches
             result.add("Which one?")
-            for i,e in enumerate(matches,1): result.add(f"  {i}. {e.name}")
+            for i, e in enumerate(matches, 1):
+                result.add(f"  {i}. {e.name}")
             return None
 
         if len(living) == 1:
             return living[0]
         self._pending_disambiguation = living
         result.add("Which enemy?")
-        for i,e in enumerate(living,1): result.add(f"  {i}. {e.name}")
+        for i, e in enumerate(living, 1):
+            result.add(f"  {i}. {e.name}")
         return None
 
     def _resolve_disambiguation(self, raw: str, result: TurnResult) -> "Enemy | None":
@@ -616,7 +645,9 @@ class CombatController:
             result.add("Please enter a number.")
             return None
         idx = int(raw.strip())
-        if not (1 <= idx <= len(self._pending_disambiguation)): result.add("Number out of range."); return None
+        if not (1 <= idx <= len(self._pending_disambiguation)):
+            result.add("Number out of range.")
+            return None
         enemy = self._pending_disambiguation[idx-1]
         self._pending_disambiguation = None
         return enemy

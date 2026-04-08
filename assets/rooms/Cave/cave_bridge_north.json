@@ -16,6 +16,7 @@
     "up": "cave_entrance"
   },
   "line_of_sight": [
+    "cave_bridge_south",
     "guard_room"
   ],
   "objects": [],

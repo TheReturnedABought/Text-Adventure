@@ -16,6 +16,7 @@
     "east": "collapsed_passage"
   },
   "line_of_sight": [
+    "cave_bridge_north",
     "guard_room"
   ],
   "objects": [],

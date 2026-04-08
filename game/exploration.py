@@ -212,10 +212,17 @@ class ExplorationController:
         # Check moveable object
         obj = room.find_object(target)
         if obj and obj.is_moveable:
-            item = EquippableItem(
-                id=obj.id, name=obj.name, slot="misc", description=obj.description,
-                material=obj.material.value, readable_text=obj.on_interact.get("read") or obj.on_interact.get("look")
-            )
+            # First, try to find a matching catalog item by ID
+            if obj.id in self.item_catalog:
+                item = self.item_catalog[obj.id]
+                # Ensure the item's name matches object's name (optional)
+                item.name = obj.name  # override if needed
+            else:
+                # Create a generic item
+                item = EquippableItem(
+                    id=obj.id, name=obj.name, slot="misc", description=obj.description,
+                    material=obj.material.value, readable_text=obj.on_interact.get("read") or obj.on_interact.get("look")
+                )
             if "compass" in item.item_flags:
                 self.player.unlock_command("compass")
                 if not self.puzzle_flags.get("compass_unlock_shown", False):
