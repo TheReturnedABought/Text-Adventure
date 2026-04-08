@@ -26,6 +26,28 @@
     }
   ],
   "enemy_spawns": [
-    { "template_id": "skeleton", "count": 2 }
+    {
+      "template_id": "skeleton",
+      "count": 2
+    }
+  ],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
   ]
 }

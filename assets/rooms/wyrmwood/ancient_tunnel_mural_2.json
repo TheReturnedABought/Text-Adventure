@@ -24,8 +24,9 @@
       "on_interact": {
         "look": "The wyrm is gone. No body. No corpse.\n\nOnly a sword remains, embedded in stone.\n\nThe shape is unmistakable.",
         "read": "There are faint markings beneath it:\n\n\"The worthy bear no wicked words.\""
-      },
-          {
+      }
+    },
+    {
       "id": "hidden_alcove",
       "name": "alcove",
       "description": "A small recess carved into the wall, now visible.",
@@ -34,12 +35,33 @@
       "is_container": true,
       "hidden": true,
       "reveal_on_combat_end": false,
-      "items_inside": ["ancient_talisman"],
+      "items_inside": [
+        "ancient_talisman"
+      ],
       "on_interact": {
         "look": "The alcove contains a single item – a talisman carved from bone.",
         "take": "You reach into the alcove and retrieve the talisman."
       }
-    },
+    }
   ],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
+  ]
 }

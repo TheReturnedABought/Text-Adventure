@@ -13,8 +13,29 @@
   "exits": {
     "south": "foot_of_castle"
   },
-  "line_of_sight": ["foot_of_castle"],
+  "line_of_sight": [
+    "foot_of_castle"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
+  ]
 }

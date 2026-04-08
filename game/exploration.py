@@ -53,7 +53,16 @@ class ExplorationController:
         result = ExplorationResult()
         parsed = self.parser.parse(raw, self.player, CommandContext.WORLD)
         if not parsed.valid:
-            result.add(parsed.error or "Invalid command.")
+            handled = self._resolve_garnish_rule(raw, result)
+            if not handled:
+                result.add(parsed.error or "Invalid command.")
+            self._apply_turn_passives(result)
+            aggressors = self.world.enemies_visible_from_current()
+            if aggressors:
+                result.combat_triggered = True
+                result.aggressors = aggressors
+            else:
+                result.lines.extend(self.world.step_enemy_outside_combat(self.world.current_room_id))
             return result
 
         intent = (parsed.intent or "").lower()
@@ -235,16 +244,7 @@ class ExplorationController:
         if not rule:
             return False
 
-        req = rule.get("requires", {})
-        min_level = int(req.get("min_level", 0) or 0)
-        if self.player.level < min_level:
-            result.add(rule.get("blocked_text", f"You need to be level {min_level} to do that."))
-            return True
-
-        class_req = req.get("class")
-        class_id = getattr(getattr(self.player, "char_class", None), "id", None)
-        if class_req and class_id != class_req:
-            result.add(rule.get("blocked_text", "You are not trained for that."))
+        if not self._check_rule_requirements(rule, result):
             return True
 
         text = rule.get("text")
@@ -271,6 +271,53 @@ class ExplorationController:
             self.world.global_flags[str(key)] = bool(value)
 
         return True
+
+    def _check_rule_requirements(self, rule: dict, result: ExplorationResult) -> bool:
+        req = rule.get("requires", {}) or {}
+        min_level = int(req.get("min_level", 0) or 0)
+        if self.player.level < min_level:
+            result.add(rule.get("blocked_text", f"You need to be level {min_level} to do that."))
+            return False
+
+        class_req = req.get("class")
+        class_id = getattr(getattr(self.player, "char_class", None), "id", None)
+        if class_req and class_id != class_req:
+            result.add(rule.get("blocked_text", "You are not trained for that."))
+            return False
+        return True
+
+    def _resolve_garnish_rule(self, raw: str, result: ExplorationResult) -> bool:
+        room = self.world.current_room()
+        if not room:
+            return False
+
+        words = [w for w in str(raw or "").strip().lower().split() if w]
+        if not words:
+            return False
+        command = words[0]
+        ignored = {"the", "a", "an", "to", "at", "on", "with", "into"}
+        target_words = [w for w in words[1:] if w not in ignored]
+        target = " ".join(target_words).strip()
+        rule = room.find_matching_rule(command, target or None)
+        if rule:
+            if not self._check_rule_requirements(rule, result):
+                return True
+            text = str(rule.get("text") or "").strip()
+            if text:
+                result.add(text)
+            else:
+                result.add("Nothing remarkable happens.")
+            return True
+
+        if target:
+            obj = room.find_object(target)
+            if obj:
+                result.add(f"You try to {command} the {obj.name}, but nothing interesting happens.")
+                return True
+        elif command in {"pray", "sing", "dance", "kneel", "wave", "kiss"}:
+            result.add(f"You {command} for a moment. The world keeps its own counsel.")
+            return True
+        return False
 
     def _resolve_drop(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         self._debug_log("_resolve_drop()")

@@ -220,7 +220,7 @@ class AssetLoader:
                 continue
             for _ in range(int(spawn.get("count", 1))):
                 enemy = self.instantiate_enemy(tid, templates)
-                if enemy.guard_home is None and enemy.ai_profile is "guard":
+                if enemy.guard_home is None and enemy.ai_profile == "guard":
                     enemy.guard_home = room_id
                 enemy.current_zone = room_id
                 enemy.combat_room_id = room_id
@@ -273,58 +273,10 @@ class AssetLoader:
             enemies = self.instantiate_enemies_for_room(room.enemy_spawns, enemy_templates, room.id)
             for enemy in enemies:
                 room.add_enemy(enemy)
-                print(f"[DEBUG] Added {enemy.name} to room {room.id} with guard_home={enemy.guard_home}")
             world.add_room(room)
         if world.start_room_id:
             world.current_room_id = world.start_room_id
         return world
-    # ----------------------------------------------------------------------
-    # Validation (optional)
-    # ----------------------------------------------------------------------
-    def validate_room(self, data: dict) -> list[str]:
-        errors = []
-        for key in ("id", "name", "description"):
-            if key not in data:
-                errors.append(f"missing '{key}'")
-        return errors
-
-    def validate_item(self, data: dict) -> list[str]:
-        errors = []
-        for key in ("id", "name", "slot"):
-            if key not in data:
-                errors.append(f"missing '{key}'")
-        return errors
-
-    def validate_enemy(self, data: dict) -> list[str]:
-        errors = []
-        for key in ("id", "name", "max_hp"):
-            if key not in data:
-                errors.append(f"missing '{key}'")
-        return errors
-
-    def validate_class(self, data: dict) -> list[str]:
-        errors = []
-        for key in ("id", "name", "base_stats"):
-            if key not in data:
-                errors.append(f"missing '{key}'")
-        return errors
-
-    def validate_all(self) -> dict[str, list[str]]:
-        out = {}
-        validators = {
-            "rooms": self.validate_room,
-            "items": self.validate_item,
-            "enemies": self.validate_enemy,
-            "classes": self.validate_class,
-        }
-        for folder, fn in validators.items():
-            for p in self._glob_json(folder):
-                if p.name.startswith("_"):
-                    continue
-                errs = fn(self._read_json(p))
-                if errs:
-                    out[str(p)] = errs
-        return out
 
     # ----------------------------------------------------------------------
     # Internal helpers

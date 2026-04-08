@@ -7,14 +7,38 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 11,
-  "ambient": ["Birds chatter somewhere in the distance."],
+  "ambient": [
+    "Birds chatter somewhere in the distance."
+  ],
   "exits": {
     "north": "north_of_tent",
     "south": "south_of_tent",
     "east": "clearing1"
   },
-  "line_of_sight": ["north_of_tent", "south_of_tent"],
+  "line_of_sight": [
+    "north_of_tent",
+    "south_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
+  ]
 }

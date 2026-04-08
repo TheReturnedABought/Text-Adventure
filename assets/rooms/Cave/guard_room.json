@@ -13,7 +13,10 @@
   "exits": {
     "east": "cave_bridge_south"
   },
-  "line_of_sight": ["cave_bridge_north", "cave_bridge_south"],
+  "line_of_sight": [
+    "cave_bridge_north",
+    "cave_bridge_south"
+  ],
   "description_snippets": {
     "combat_update": ""
   },
@@ -39,6 +42,28 @@
   ],
   "items_on_ground": [],
   "enemy_spawns": [
-    { "template_id": "skeleton_archer", "count": 1 }
+    {
+      "template_id": "skeleton_archer",
+      "count": 1
+    }
+  ],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
   ]
 }

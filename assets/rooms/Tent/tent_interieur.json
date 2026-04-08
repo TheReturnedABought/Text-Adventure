@@ -51,5 +51,46 @@
   "enemy_spawns": [],
   "description_snippets": {
     "letter_desc": " A fancy letter lies on top of the crate."
-  }
+  },
+  "interaction_rules": [
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "smash",
+        "break"
+      ],
+      "targets": [
+        "crate",
+        "table"
+      ],
+      "text": "You raise your fist, but smashing the crate would serve no purpose. It's just a makeshift table.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "kiss"
+      ],
+      "targets": [
+        "letter"
+      ],
+      "text": "You press your lips to the parchment. It smells faintly of lavender and old secrets. You feel a bit silly.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and offer a silent prayer to whatever gods might listen. The tent canvas rustles softly, as if in acknowledgment.",
+      "requires": null
+    }
+  ]
 }

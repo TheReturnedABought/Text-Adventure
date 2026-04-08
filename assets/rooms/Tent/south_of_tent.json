@@ -6,13 +6,37 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 12,
-  "ambient": ["Insects buzz in the grass."],
+  "ambient": [
+    "Insects buzz in the grass."
+  ],
   "exits": {
     "east": "east_of_tent",
     "west": "west_of_tent"
   },
-  "line_of_sight": ["east_of_tent", "west_of_tent"],
+  "line_of_sight": [
+    "east_of_tent",
+    "west_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": [
+        "pray"
+      ],
+      "targets": [],
+      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "requires": null
+    },
+    {
+      "commands": [
+        "sing",
+        "hum"
+      ],
+      "targets": [],
+      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "requires": null
+    }
+  ]
 }

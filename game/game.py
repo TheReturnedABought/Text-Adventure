@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import random
 from enum import Enum, auto
 from pathlib import Path
-from types import SimpleNamespace
 
 from game.commands import CommandRegistry, UnlockTable
 from game.combat import CombatController, CombatOutcome
@@ -48,10 +46,6 @@ class TextAdventureGame:
         self.state: GameState = GameState.EXPLORING
         self._pending_level_up_choices: list[list[str]] = []
 
-        # Lightweight fallback runtime state for partially implemented subsystems.
-        self._rooms_raw: dict[str, dict] = {}
-        self._room_id: str | None = None
-        self._prev_room_id: str | None = None
         self.world_flags: dict[str, bool] = {}
 
     def _debug(self, msg: str) -> None:
@@ -65,23 +59,10 @@ class TextAdventureGame:
 
     def _load_assets(self) -> None:
         self._debug("_load_assets()")
-        def _load_folder(folder_name: str) -> dict[str, dict]:
-            data: dict[str, dict] = {}
-            base = self.ASSETS_ROOT / folder_name
-            if not base.exists():
-                return data
-            for path in sorted(base.rglob("*.json")):
-                if path.name.startswith("_"):
-                    continue
-                obj = json.loads(path.read_text(encoding="utf-8"))
-                obj_id = obj.get("id", path.stem)
-                data[obj_id] = obj
-            return data
 
         self.item_catalog = self.loader.load_all_items()
         self.enemy_templates = self.loader.load_all_enemy_templates()
         self.class_catalog = self.loader.load_all_classes()
-        self._rooms_raw = _load_folder("rooms")
         world_flags_file = self.ASSETS_ROOT / "world_states.json"
         if world_flags_file.exists():
             self.world_flags = json.loads(world_flags_file.read_text(encoding="utf-8")).get("flags", {})
@@ -95,9 +76,6 @@ class TextAdventureGame:
             except Exception as e:
                 window.append_log(f"ERROR loading commands: {e}")
 
-        starts = [rid for rid, r in self._rooms_raw.items() if r.get("is_start")]
-        self._room_id = starts[0] if starts else (next(iter(self._rooms_raw), None))
-
     def _build_subsystems(self) -> None:
         self._debug("_build_subsystems()")
         try:
@@ -106,43 +84,14 @@ class TextAdventureGame:
             window.append_log(f"Warning: Could not create parser: {e}")
             self.parser = None
 
-        # Always try to build world from asset loader if rooms exist
-        if self._rooms_raw and self.parser:
+        if self.parser:
             try:
-                # Load all rooms properly using the loader's world builder
                 self.world = self.loader.build_world_map(self.enemy_templates)
                 self.world.global_flags = dict(self.world_flags)
                 window.append_log(f"[DEBUG] Built world with {len(self.world.rooms)} rooms using asset loader")
             except Exception as e:
                 window.append_log(f"Warning: Could not build world map from loader: {e}")
                 self.world = None
-
-        # Fallback: build a minimal world from raw JSON (no objects)
-        if self.world is None and self._rooms_raw:
-            from game.world import WorldMap, Room, Material
-            self.world = WorldMap()
-            for room_id, room_data in self._rooms_raw.items():
-                material = Material(room_data.get("material", "stone"))
-                room = Room(
-                    id=room_id,
-                    name=room_data.get("name", room_id),
-                    description=room_data.get("description", ""),
-                    material=material,
-                    is_outdoor=room_data.get("is_outdoor", False),
-                    light_level=room_data.get("light_level", 10),
-                    exits=room_data.get("exits", {}),
-                    line_of_sight=room_data.get("line_of_sight", []),
-                    ambient=room_data.get("ambient", ""),
-                    is_start=room_data.get("is_start", False),
-                )
-                # Note: objects are NOT loaded in fallback – this is why you saw empty objects
-                self.world.add_room(room)
-                window.append_log(f"[DEBUG] Fallback room added: {room_id} (no objects)")
-            if self.world.start_room_id:
-                self.world.current_room_id = self.world.start_room_id
-            else:
-                self.world.current_room_id = next(iter(self._rooms_raw.keys()), None)
-            self.world.global_flags = dict(self.world_flags)
 
         self.exploration = None
         self.combat = None
@@ -217,8 +166,9 @@ class TextAdventureGame:
                 start_room.visited = True
                 window.set_explore(self.player, start_room)
                 window.append_log(start_room.get_description(verbose=True, turn_number=self.world.turn_counter if self.world else 0))
-        else:
-            self._print_room()
+        elif self.world is None:
+            window.append_log("No world loaded. Exiting.")
+            self.state = GameState.GAME_OVER
 
         while self.state not in (GameState.GAME_OVER, GameState.WIN):
             try:
@@ -228,21 +178,22 @@ class TextAdventureGame:
 
             if self.state == GameState.EXPLORING:
                 if not self.exploration:
-                    self._handle_exploration_fallback(raw)
-                else:
-                    result = self.exploration.player_input(raw)
-                    for line in result.lines:
-                        window.append_log(line)
-                    if result.combat_triggered:
-                        self._enter_combat(result.aggressors)
+                    window.append_log("Exploration system unavailable.")
+                    self.state = GameState.GAME_OVER
+                    continue
+                result = self.exploration.player_input(raw)
+                for line in result.lines:
+                    window.append_log(line)
+                if result.combat_triggered:
+                    self._enter_combat(result.aggressors)
 
-                    if self.world and self.player:
-                        current_room = self.world.current_room()
-                        if current_room:
-                            if self.state == GameState.COMBAT and self.combat:
-                                window.set_combat(self.player, current_room, self.combat.enemies)
-                            else:
-                                window.set_explore(self.player, current_room)
+                if self.world and self.player:
+                    current_room = self.world.current_room()
+                    if current_room:
+                        if self.state == GameState.COMBAT and self.combat:
+                            window.set_combat(self.player, current_room, self.combat.enemies)
+                        else:
+                            window.set_explore(self.player, current_room)
             elif self.state == GameState.COMBAT:
                 if not self.combat:
                     if raw.strip().lower() in {"flee", "run"}:
@@ -269,40 +220,6 @@ class TextAdventureGame:
                 self._handle_level_up_choice(raw)
 
         self._print_end_screen()
-
-    def _handle_exploration_fallback(self, raw: str) -> None:
-        self._debug("_handle_exploration_fallback()")
-        cmd = raw.strip().lower()
-        if not cmd:
-            return
-        if cmd in {"quit", "exit"}:
-            self.state = GameState.GAME_OVER
-            return
-        if cmd in {"look", "l"}:
-            self._print_room()
-            return
-        if cmd == "help":
-            window.append_log("Commands: look, go <direction>, where, win, quit")
-            return
-        if cmd == "where":
-            window.append_log(f"Current room: {self._room_id}")
-            return
-        if cmd in {"win", "victory"}:
-            self.state = GameState.WIN
-            return
-        if cmd.startswith("go "):
-            direction = cmd[3:].strip()
-            room = self._rooms_raw.get(self._room_id or "", {})
-            exits = room.get("exits", {})
-            next_room = exits.get(direction)
-            if not next_room:
-                window.append_log("You cannot go that way.")
-                return
-            self._prev_room_id = self._room_id
-            self._room_id = next_room
-            self._print_room()
-            return
-        window.append_log("Unknown command. Type 'help'.")
 
     def _enter_combat(self, aggressors: list[Enemy]) -> None:
         self._debug("_enter_combat()")
@@ -353,8 +270,6 @@ class TextAdventureGame:
 
     def _on_combat_fled(self) -> None:
         self._debug("_on_combat_fled()")
-        if self._prev_room_id:
-            self._room_id, self._prev_room_id = self._prev_room_id, self._room_id
         window.append_log("You fled combat.")
         self.combat = None
         self.state = GameState.EXPLORING
@@ -402,24 +317,6 @@ class TextAdventureGame:
             self.state = GameState.EXPLORING
             window.append_log("Level‑up complete. You continue your journey.")
 
-    def _print_room(self) -> None:
-        room = self._rooms_raw.get(self._room_id or "")
-        if not room:
-            window.append_log("No room loaded.")
-            return
-        window.append_log(f"\n== {room.get('name', self._room_id)} ==")
-        window.append_log(room.get("description", ""))
-        exits = room.get("exits", {})
-
-        if self.player is not None:
-            dummy_room = SimpleNamespace(
-                name=room.get("name", self._room_id),
-                description=room.get("description", ""),
-                enemies=[], relics=[], items=[], connections=exits,
-                locked_connections=set(), event=None, puzzle=None,
-            )
-            window.set_explore(self.player, dummy_room)
-
     def _print_end_screen(self) -> None:
         if self.state == GameState.WIN:
             window.append_log("\n*** VICTORY ***")
@@ -431,7 +328,7 @@ class TextAdventureGame:
         save_dir.mkdir(parents=True, exist_ok=True)
         payload = {
             "player": self._serialise_player(),
-            "room_id": self._room_id,
+            "room_id": self.world.current_room_id if self.world else None,
             "state": self.state.name,
         }
         if self.world:
@@ -443,7 +340,8 @@ class TextAdventureGame:
         path = Path("saves") / f"slot_{slot}.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         self.player = self._deserialise_player(data.get("player", {}))
-        self._room_id = data.get("room_id", self._room_id)
+        if self.world:
+            self.world.current_room_id = data.get("room_id", self.world.current_room_id)
         self.state = GameState[data.get("state", "EXPLORING")]
         if self.world and "world" in data:
             self.world.restore_snapshot(data["world"])
