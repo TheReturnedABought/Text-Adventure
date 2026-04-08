@@ -253,11 +253,6 @@ class GameWindow:
         else: y2+=8
         c.create_text(pad,y2+5,text=f"Lv {p.level}  XP {p.xp}  Gold {getattr(p,'gold',0)}",
                       fill=_P['gold'],font=_F['b'],anchor='w')
-        if self._state.world:
-            tn=self._state.world.turn_counter; self._state.turn=tn
-        tn=self._state.turn
-        c.create_text(W-pad,y2+5,text=f"Turn {tn} ({('dawn','day','dusk','night')[(tn//8)%4]})",
-                      fill=_P['dim'],font=_F['b'],anchor='e')
 
     # ── log ──────────────────────────────────────────────────────────────────
     def _append_log(self,line):

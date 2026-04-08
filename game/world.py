@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Tuple, Set
 from collections import deque, Counter
 
 from game.entities import Enemy, Player
+from game.models import EquippableItem
 
 
 class Material(Enum):
@@ -175,6 +176,7 @@ class Room:
     enemies: List[Enemy] = field(default_factory=list)
     objects: Dict[str, WorldObject] = field(default_factory=dict)
     items_on_ground: List[str] = field(default_factory=list)
+    custom_items: Dict[str, EquippableItem] = field(default_factory=dict)  # NEW: stores dynamically created items
     ambient: List = field(default_factory=list)
     is_start: bool = False
     visited: bool = False
@@ -200,10 +202,6 @@ class Room:
         for key, snippet in self.description_snippets.items():
             desc = desc.replace(f"{{{{{key}_desc}}}}", snippet).replace(f"{{{{{key}}}}}", snippet)
         lines = [self.name, desc]
-
-        if turn_number:
-            phase = ("dawn", "day", "dusk", "night")[((turn_number // 8) % 4)]
-            lines.append(f"The world feels like {phase} (turn {turn_number}).")
 
         if self.ambient and random.random() > 0.3:
             lines.append(random.choice(self.ambient))
@@ -289,6 +287,7 @@ class WorldMap:
         self.start_room_id: Optional[str] = None
         self.global_flags: Dict[str, bool] = {}
         self.turn_counter: int = 0
+        self.phase = 'dawn'
 
     def add_room(self, room: Room) -> None:
         self.rooms[room.id] = room
@@ -325,7 +324,7 @@ class WorldMap:
         new_room = self.current_room()
         was_visited = new_room.visited
         new_room.visited = True
-        return True, new_room.get_description(verbose=not was_visited, turn_number=self.turn_counter)
+        return True, new_room.get_description(verbose=not was_visited)
 
     def shortest_path(self, start: str, goal: str, blocked: Optional[Set[str]] = None) -> List[str]:
         if start == goal:
@@ -382,6 +381,8 @@ class WorldMap:
 
     def advance_turn(self) -> None:
         self.turn_counter += 1
+        if self.turn_counter:
+            self.phase = ("dawn", "day", "dusk", "night")[(( self.turn_counter // 80) % 4)]
 
     def snapshot(self) -> dict:
         return {
@@ -407,3 +408,23 @@ class WorldMap:
                     if oid in room.objects:
                         room.objects[oid].hidden = hidden
                 room.description_snippets.update(state.get("description_snippets", {}))
+
+
+def apply_turn_passives(player: Player, world: WorldMap, room_id: str) -> List[str]:
+    """Apply passive regeneration / effects each exploration turn."""
+    lines = []
+    room = world.get_room(room_id)
+    if not room or not player:
+        return lines
+
+    for item in player.equipped.values():
+        flags = getattr(item, "item_flags", [])
+        if "beasts_heart" in flags and (room_id.startswith("wyrmwood") or room.material.value == "flesh"):
+            if player.heal(1):
+                lines.append("Beast's Heart regenerates 1 HP.")
+        if "arcane_cloak" in flags:
+            before = player.mana
+            player.mana = min(player.max_mana, player.mana + 1)
+            if player.mana > before:
+                lines.append("Arcane Cloak restores 1 MP.")
+    return lines

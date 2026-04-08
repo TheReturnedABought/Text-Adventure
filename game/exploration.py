@@ -188,9 +188,17 @@ class ExplorationController:
         if not target:
             result.add("Take what?")
             return
-        # item on ground
-        for item_id in room.items_on_ground:
+
+        # Check for custom item first (from previous drops)
+        for item_id in list(room.items_on_ground):
             if target in item_id.lower():
+                if item_id in room.custom_items:
+                    item = room.custom_items.pop(item_id)
+                    room.items_on_ground.remove(item_id)
+                    self.player.pick_up(item)
+                    result.add(f"Picked up {item.name}.")
+                    return
+                # fallback to catalog
                 item = self.item_catalog.get(item_id)
                 if item:
                     room.items_on_ground.remove(item_id)
@@ -200,7 +208,8 @@ class ExplorationController:
                 else:
                     result.add(f"Unknown item: {item_id}")
                     return
-        # moveable object
+
+        # Check moveable object
         obj = room.find_object(target)
         if obj and obj.is_moveable:
             item = EquippableItem(
@@ -214,6 +223,8 @@ class ExplorationController:
                     self.world.global_flags["compass_unlock_shown"] = True
                     result.add("You now know how to use 'compass' (or 'exits') to check your bearings.")
             del room.objects[obj.id]
+            # Store in custom_items for future drops
+            room.custom_items[obj.id] = item
             self.player.inventory.append(item)
             result.add(f"Picked up {obj.name}.")
             for key in (obj.id, f"{obj.id}_desc"):
@@ -269,6 +280,9 @@ class ExplorationController:
         item, msg = self.player.drop(parsed.target_name)
         result.add(msg)
         if item:
+            # If the item isn't in the catalog (e.g., a custom letter), store it
+            if item.id not in self.item_catalog:
+                room.custom_items[item.id] = item
             room.items_on_ground.append(item.id)
 
     def _equip(self, parsed: ParsedCommand, result: ExplorationResult):
@@ -312,11 +326,13 @@ class ExplorationController:
                 return
         for item_id in room.items_on_ground:
             if target in item_id.lower():
-                item = self.item_catalog.get(item_id)
-                if item:
+                # Check custom_items first
+                if item_id in room.custom_items:
+                    item = room.custom_items[item_id]
                     text = getattr(item, "readable_text", None) or item.description
                 else:
-                    text = None
+                    item = self.item_catalog.get(item_id)
+                    text = getattr(item, "readable_text", None) or item.description if item else None
                 if text:
                     result.add(text)
                     return
