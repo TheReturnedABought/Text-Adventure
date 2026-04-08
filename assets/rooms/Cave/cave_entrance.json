@@ -8,7 +8,8 @@
   "light_level": 3,
   "ambient": [
     "Water drips somewhere in the darkness.",
-    "The wind whistles through the narrow entrance."
+    "The wind whistles through the narrow entrance.",
+    "A few pale roots dangle from the ceiling, motionless."
   ],
   "exits": {
     "down": "cave_bridge_north",
@@ -20,20 +21,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
+      "commands": ["shout", "call"],
       "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "text": "Your voice echoes down the tunnel, bouncing back as a distorted murmur.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["touch"],
+      "targets": ["root", "roots"],
+      "text": "The root is dry and brittle. It snaps off in your hand with a soft crack.",
       "requires": null
     }
   ]

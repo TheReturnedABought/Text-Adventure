@@ -23,20 +23,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["touch", "pick"],
+      "targets": ["mushroom", "mushrooms"],
+      "text": "You brush a mushroom. It releases a faint puff of white spores that drift toward the dark trees.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
+      "commands": ["sniff"],
       "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "text": "The air smells of crushed grass and damp earth, with a faint sweetness—honey?",
       "requires": null
     }
   ]

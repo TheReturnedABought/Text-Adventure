@@ -8,7 +8,7 @@
   "is_start": false,
   "light_level": 11,
   "ambient": [
-    "The stones are cool to the touch."
+    "The ground here is hard and gravelly."
   ],
   "exits": {
     "north": "north_of_tent",
@@ -23,20 +23,9 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
-      "requires": null
-    },
-    {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["lift", "move"],
+      "targets": ["stone", "rock"],
+      "text": "You strain to lift a large stone. Beneath it, the ground is damp and crawling with pillbugs.",
       "requires": null
     }
   ]

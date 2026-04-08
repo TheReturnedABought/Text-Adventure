@@ -7,7 +7,8 @@
   "light_level": 3,
   "ambient": [
     "The air is completely still.",
-    "A faint hum lingers — familiar, like something you've felt before."
+    "A faint hum lingers — familiar, like something you've felt before.",
+    "The floor here is polished smooth by ancient feet."
   ],
   "exits": {
     "south": "ancient_tunnel_mural_1"
@@ -47,20 +48,27 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
+      "commands": ["search"],
       "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "text": "You search the chamber carefully, running your hands over the cold stone. Your fingers find a subtle indentation—a hidden alcove, cleverly concealed in the wall.",
+      "reveal_objects": ["hidden_alcove"]
+    },
+    {
+      "commands": ["listen"],
+      "targets": [],
+      "text": "The hum seems to come from the mural itself—a low, resonant vibration.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
+      "commands": ["touch"],
+      "targets": ["floor", "polished floor"],
+      "text": "The stone is smooth as glass and cool to the touch. You feel a faint, rhythmic pulse beneath it.",
+      "requires": null
+    },
+    {
+      "commands": ["kneel"],
       "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "text": "You kneel in the center of the chamber. For a moment, the hum intensifies, then fades.",
       "requires": null
     }
   ]

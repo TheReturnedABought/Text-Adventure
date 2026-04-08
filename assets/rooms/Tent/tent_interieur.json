@@ -45,7 +45,24 @@
         "look": "The crate is sturdy, with a few splinters."
       },
       "required_commands": {}
+    },
+    {
+      "id": "cabinet",
+      "name": "cabinet",
+      "description": "A small wooden cabinet with a brass handle. It is used to store treasures.",
+      "material": "wood",
+      "is_container": true,
+      "is_moveable": false,
+      "is_locked": false,
+      "hidden": false,
+      "items_inside": [],
+      "on_interact": {
+        "look": "A sturdy cabinet. The brass handle is polished from use. Inside you see: {contents}.",
+        "open": "You open the cabinet. Inside you see: {contents}.",
+      },
+      "required_commands": {}
     }
+  ],
   ],
   "items_on_ground": [],
   "enemy_spawns": [],
@@ -64,8 +81,7 @@
     },
     {
       "commands": [
-        "smash",
-        "break"
+        "smash"
       ],
       "targets": [
         "crate",
@@ -81,7 +97,7 @@
       "targets": [
         "letter"
       ],
-      "text": "You press your lips to the parchment. It smells faintly of lavender and old secrets. You feel a bit silly.",
+      "text": "You press your lips to the parchment. It smells faintly of lavender. You feel a bit silly.",
       "requires": null
     },
     {
@@ -91,6 +107,13 @@
       "targets": [],
       "text": "You close your eyes and offer a silent prayer to whatever gods might listen. The tent canvas rustles softly, as if in acknowledgment.",
       "requires": null
+    },
+        {
+      "commands": ["put", "deposit", "store"],
+      "targets": ["cabinet", "chest", "cabinet in"],
+      "text": "You put the {item} into the cabinet.",
+      "blocked_text": "You have nothing to deposit.",
+      "deposit_item": true
     }
   ]
 }

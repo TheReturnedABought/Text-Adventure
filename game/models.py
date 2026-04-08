@@ -45,6 +45,12 @@ class EquippableItem:
     item_flags: list[str] = field(default_factory=list)
     on_hit_effects: dict = field(default_factory=dict)
     passive_effects: dict = field(default_factory=dict)
+    value: int = 0  # base score value
+
+    def __post_init__(self):
+        if self.value == 0:
+            self.value = self.tier * 10
+
 
 @dataclass
 class PassiveTrait:

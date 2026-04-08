@@ -8,7 +8,8 @@
   "light_level": 5,
   "ambient": [
     "Dust motes dance in the torchlight.",
-    "Somewhere behind the collapse, water drips steadily."
+    "Somewhere behind the collapse, water drips steadily.",
+    "A faint, stale breeze seeps through cracks in the rubble."
   ],
   "exits": {
     "west": "cave_bridge_south"
@@ -27,9 +28,7 @@
       "is_moveable": true,
       "is_container": false,
       "hidden": false,
-      "reveals": [
-        "hidden_lever"
-      ],
+      "reveals": ["hidden_lever"],
       "on_interact": {
         "move": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
         "look": "A rough stone, worn smooth on one side.",
@@ -62,44 +61,23 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "move"
-      ],
-      "targets": [
-        "loose stone"
-      ],
+      "commands": ["move"],
+      "targets": ["loose stone"],
       "text": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
-      "reveal_objects": [
-        "hidden_lever"
-      ]
+      "reveal_objects": ["hidden_lever"]
     },
     {
-      "commands": [
-        "pull"
-      ],
-      "targets": [
-        "hidden lever"
-      ],
+      "commands": ["pull"],
+      "targets": ["hidden lever"],
       "text": "You pull the lever. With a grinding rumble, distant stone shifts and a passage somewhere reconfigures.",
       "set_flags": {
         "cave_passage_open": true
       }
     },
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
-      "requires": null
-    },
-    {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["touch", "feel"],
+      "targets": ["torch", "wall"],
+      "text": "The torch is warm but not hot. The wall near it is stained with ancient soot.",
       "requires": null
     }
   ]

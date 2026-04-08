@@ -8,7 +8,8 @@
   "light_level": 7,
   "ambient": [
     "Dust drifts in pale shafts of light from arrow slits.",
-    "The stair groans softly under its own weight."
+    "The stair groans softly under its own weight.",
+    "A faint, sour smell rises from a dark corner."
   ],
   "exits": {
     "east": "foot_of_castle",
@@ -20,20 +21,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
+      "commands": ["sniff"],
       "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "text": "The smell is old guano and rotting leather. Something nested here long ago.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["scrape", "scratch"],
+      "targets": ["wall", "stone"],
+      "text": "You scratch the stone with your nail. It leaves a faint white line—soft limestone.",
       "requires": null
     }
   ]

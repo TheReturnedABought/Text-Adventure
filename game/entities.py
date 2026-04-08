@@ -80,7 +80,7 @@ class Entity:
 
 @dataclass
 class Player(Entity):
-    """Player character with inventory, equipment, AP, MP, XP."""
+    """Player character with inventory, equipment, AP, MP, XP, and score."""
     char_class: CharacterClass | None = None
     level: int = 1
     xp: int = 0
@@ -93,6 +93,7 @@ class Player(Entity):
     equipped: dict[str, EquippableItem] = field(default_factory=dict)
     unlocked_commands: set[str] = field(default_factory=set)
     combat_defense_bonus: int = 0
+    score: int = 0
 
     # Conversation memory (for pronoun resolution)
     turn_stack: list = field(default_factory=list)
@@ -118,6 +119,9 @@ class Player(Entity):
 
     def unlock_command(self, command_name: str) -> None:
         self.unlocked_commands.add(command_name)
+
+    def add_score(self, amount: int) -> None:
+        self.score += amount
 
     # Base attack (without weapon bonuses)
     def base_attack_value(self) -> int:

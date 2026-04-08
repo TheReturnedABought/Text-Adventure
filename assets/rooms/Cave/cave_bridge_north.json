@@ -8,7 +8,8 @@
   "light_level": 4,
   "ambient": [
     "The chasm below is pitch black. You hear nothing but the slow drip of water.",
-    "A draft carries the scent of old decay."
+    "A draft carries the scent of old decay.",
+    "The bridge stones feel loose underfoot."
   ],
   "exits": {
     "south": "cave_bridge_south",
@@ -22,20 +23,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["toss"],
+      "targets": ["stone", "pebble"],
+      "text": "You toss a small stone over the edge. Seconds pass. No sound returns.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["touch", "feel"],
+      "targets": ["bridge", "stones"],
+      "text": "The stone is cold and slick with condensation. Your hand comes away smelling of wet limestone.",
       "requires": null
     }
   ]

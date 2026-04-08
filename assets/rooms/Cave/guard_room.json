@@ -8,7 +8,8 @@
   "light_level": 5,
   "ambient": [
     "The air is thick with dust and the smell of old leather.",
-    "A quiver of arrows hangs on the wall, mostly empty."
+    "A quiver of arrows hangs on the wall, mostly empty.",
+    "Deep scratches mar the floor near the entrance."
   ],
   "exits": {
     "east": "cave_bridge_south"
@@ -49,20 +50,15 @@
   ],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["examine", "look at"],
+      "targets": ["scratches", "floor"],
+      "text": "The scratches are deep, as if something heavy was dragged across the stone.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["touch"],
+      "targets": ["quiver"],
+      "text": "The quiver is stiff with age. It crumbles slightly at your touch, releasing a puff of dust.",
       "requires": null
     }
   ]

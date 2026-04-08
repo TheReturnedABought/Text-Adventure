@@ -7,7 +7,9 @@
   "is_start": true,
   "light_level": 12,
   "ambient": [
-    "A cool breeze blows from the north."
+    "A cool breeze blows from the north.",
+    "The prints are clear in the soft earth.",
+    "A few wildflowers grow near the tent's canvas."
   ],
   "exits": {
     "north": "foot_of_mountain",
@@ -24,11 +26,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["examine", "look at"],
+      "targets": ["prints", "footprints"],
+      "text": "The prints are small—a child or a halfling—and lead from the tent to the mountain path. They look recent.",
+      "requires": null
+    },
+    {
+      "commands": ["touch", "pick"],
+      "targets": ["wildflower", "flower"],
+      "text": "You pluck a small blue flower. It smells faintly of rain.",
       "requires": null
     },
     {

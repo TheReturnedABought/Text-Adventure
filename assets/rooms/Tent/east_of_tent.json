@@ -8,7 +8,9 @@
   "is_start": false,
   "light_level": 11,
   "ambient": [
-    "Birds chatter somewhere in the distance."
+    "Birds chatter somewhere in the distance.",
+    "A few scattered feathers lie on the ground.",
+    "Thorns catch the light, sharp and glistening."
   ],
   "exits": {
     "north": "north_of_tent",
@@ -24,20 +26,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["touch", "examine"],
+      "targets": ["feather", "feathers"],
+      "text": "The feather is soft, barred brown and grey—a hawk's primary, shed recently.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["pick"],
+      "targets": ["thorn", "bush"],
+      "text": "You try to pluck a thorn. It pricks your finger, drawing a tiny bead of blood.",
       "requires": null
     }
   ]

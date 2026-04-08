@@ -44,20 +44,9 @@
   ],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
-      "requires": null
-    },
-    {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["touch", "examine"],
+      "targets": ["cobweb", "webs"],
+      "text": "Your fingers come away sticky. The webs are old; nothing has disturbed them in weeks.",
       "requires": null
     }
   ]

@@ -125,6 +125,7 @@ class WorldObject:
     set_flags_on_interact: dict[str, dict[str, bool]] = field(default_factory=dict)
     contents: list["WorldObject"] = field(default_factory=list)
     items_inside: list[str] = field(default_factory=list)
+    description_snippets: dict[str, str] = field(default_factory=dict)
 
     def can_interact_with(self, command_name: str, player: "Player") -> tuple[bool, str]:
         if self.hidden:
@@ -150,6 +151,9 @@ class WorldObject:
             self.is_locked = False
             return f"You unlock the {self.name}.", []
         narration = self.on_interact.get(command_name, f"You {command_name} the {self.name}.")
+        # Replace placeholder {contents} if present
+        if "{contents}" in narration and self.items_inside:
+            narration = narration.replace("{contents}", ", ".join(self.items_inside))
         revealed = []
         for obj_id in self.reveals:
             if obj_id in room.objects:
@@ -197,8 +201,10 @@ class Room:
             if living:
                 lines.append("Enemies: " + ", ".join(e.name for e in living))
             if self.items_on_ground:
-                for item in self.items_on_ground:
-                    lines.append(f"-{item}")
+                from collections import Counter
+                counts = Counter(self.items_on_ground)
+                items_str = ", ".join(f"{count} x {name}" if count > 1 else name for name, count in counts.items())
+                lines.append(f"-{items_str}")
             return "\n".join(lines)
 
         # First visit OR explicit 'look' command → full description
@@ -323,11 +329,8 @@ class WorldMap:
         self.current_room_id = target
         self.advance_turn()
         new_room = self.current_room()
-        # Capture visited state BEFORE marking it as visited
         was_visited = new_room.visited
         new_room.visited = True
-        # Optional debug (remove comment to see values)
-        print(f"[DEBUG] move_player: room={new_room.id}, was_visited={was_visited}, verbose={not was_visited}")
         return True, new_room.get_description(verbose=not was_visited, turn_number=self.turn_counter)
 
     def neighbors_of(self, room_id: str) -> list[str]:
@@ -368,13 +371,11 @@ class WorldMap:
         room = self.current_room()
         if not room:
             return []
-        print(f"[DEBUG] current room: {room.id}, enemies in room: {[e.name for e in room.enemies if e.is_alive]}")
         visible = list(room.living_enemies())
         for other_id in room.line_of_sight:
             other = self.get_room(other_id)
             if other:
                 visible.extend(other.enemies_visible_from(room))
-        print(f"[DEBUG] total visible enemies: {[e.name for e in visible]}")
         return visible
 
     def step_enemy_outside_combat(self, player_room_id: str | None) -> list[str]:

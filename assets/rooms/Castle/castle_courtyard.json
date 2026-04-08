@@ -8,7 +8,8 @@
   "light_level": 10,
   "ambient": [
     "A toppled statue lies broken in the grass.",
-    "Crows watch from the keep roof in uneasy silence."
+    "Crows watch from the keep roof in uneasy silence.",
+    "A faint smell of old iron and wet ash hangs in the air."
   ],
   "exits": {
     "south": "foot_of_castle"
@@ -21,20 +22,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["touch", "trace"],
+      "targets": ["statue", "broken statue"],
+      "text": "You run your fingers over the weathered stone. The carving is too worn to identify, but it feels colder than the air.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["kick"],
+      "targets": ["weeds"],
+      "text": "You kick at the weeds. A centipede scurries away, but nothing else changes.",
       "requires": null
     }
   ]

@@ -1,7 +1,8 @@
-"""Exploration controller – movement, object interaction, item pickup."""
+"""Exploration controller – movement, object interaction, item pickup, cabinet deposit."""
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from game.commands import CommandContext
@@ -136,7 +137,7 @@ class ExplorationController:
             return
         target = (parsed.target_name or "").strip().lower()
         if not target:
-            result.add(room.get_description(verbose=True))
+            result.add(room.get_description(verbose=True, turn_number=self.world.turn_counter))
             return
         if target in room.exits:
             adj = self.world.get_room(room.exits[target])
@@ -235,6 +236,58 @@ class ExplorationController:
             return
 
         result.add("No such item on the ground or moveable object here.")
+
+    def _resolve_put(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
+        """Put an item into a container (like the cabinet)."""
+        room = self.world.current_room()
+        if not room:
+            result.add("No room loaded.")
+            return
+
+        target = (parsed.target_name or "").strip().lower()
+        if not target:
+            result.add("Put what where?")
+            return
+
+        # Expect format: "item in container"
+        parts = re.split(r'\s+(?:in|into)\s+', target, maxsplit=1)
+        if len(parts) != 2:
+            result.add("Usage: put <item> in <container>")
+            return
+        item_name, container_name = parts[0].strip(), parts[1].strip()
+
+        # Find container object
+        container = room.find_object(container_name)
+        if not container or not container.is_container:
+            result.add(f"There is no container named '{container_name}' here.")
+            return
+
+        # Find item in inventory
+        item = self.player.find_in_inventory(item_name)
+        if not item:
+            result.add(f"You don't have '{item_name}'.")
+            return
+
+        # Deposit logic (special handling for cabinet)
+        if container.id == "cabinet":
+            # Add double score
+            self.player.add_score(item.value * 2)
+            result.add(f"You deposit {item.name} into the cabinet. +{item.value * 2} score!")
+            # Add to cabinet's items_inside list (for persistence)
+            if item.id not in container.items_inside:
+                container.items_inside.append(item.id)
+            # Remove from player inventory
+            self.player.inventory.remove(item)
+            # Update room description snippet to show cabinet contents
+            if container.items_inside:
+                contents_str = ", ".join(container.items_inside)
+                container.description_snippets["contents"] = contents_str
+            else:
+                container.description_snippets["contents"] = "nothing"
+            return
+
+        # Generic container handling
+        result.add(f"You put the {item.name} into the {container.name}, but nothing special happens.")
 
     def _resolve_data_rule(self, parsed: "ParsedCommand", result: ExplorationResult) -> bool:
         room = self.world.current_room()
@@ -353,10 +406,6 @@ class ExplorationController:
         self._debug_log("_resolve_inventory()")
         result.add(self.player.inventory_summary())
 
-    def _resolve_put(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        self._debug_log("_resolve_put()")
-        result.add("Put command not fully implemented yet.")
-
     def _resolve_help(self, result: ExplorationResult) -> None:
         self._debug_log("_resolve_help()")
         cmds = self.registry.available_for(self.player, CommandContext.WORLD)
@@ -386,7 +435,6 @@ class ExplorationController:
             if target in item_id.lower():
                 item = self.item_catalog.get(item_id)
                 if item:
-                    # Use readable_text if present, otherwise description
                     text = getattr(item, "readable_text", None) or item.description
                     if text:
                         result.add(text)
@@ -426,7 +474,6 @@ class ExplorationController:
                 if self.player.mana > before:
                     result.add("Arcane Cloak restores 1 MP.")
 
-
     def _resolve_compass(self, result: ExplorationResult) -> None:
         """Display available exits from current room using the compass."""
         if not self._has_compass():
@@ -446,13 +493,12 @@ class ExplorationController:
         dirs = sorted(exits.keys())
         result.add(f"The compass needle points to: {', '.join(dirs)}.")
 
-
-def _has_compass(self) -> bool:
-    """Return True if player has any item with 'compass' flag."""
-    for item in self.player.inventory:
-        if "compass" in getattr(item, "item_flags", []):
-            return True
-    for item in self.player.equipped.values():
-        if "compass" in getattr(item, "item_flags", []):
-            return True
-    return False
+    def _has_compass(self) -> bool:
+        """Return True if player has any item with 'compass' flag."""
+        for item in self.player.inventory:
+            if "compass" in getattr(item, "item_flags", []):
+                return True
+        for item in self.player.equipped.values():
+            if "compass" in getattr(item, "item_flags", []):
+                return True
+        return False

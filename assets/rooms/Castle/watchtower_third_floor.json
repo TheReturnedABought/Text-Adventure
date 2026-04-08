@@ -8,7 +8,8 @@
   "light_level": 10,
   "ambient": [
     "The wind whistles through the arrow slits.",
-    "You can see smoke rising from the village to the southwest."
+    "You can see smoke rising from the village to the southwest.",
+    "A bird of prey circles high above the forest."
   ],
   "exits": {
     "down": "watchtower_second_floor"
@@ -37,20 +38,21 @@
   },
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
-      "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "commands": ["gaze", "look out"],
+      "targets": ["forest", "village", "swamp"],
+      "text": "You lean out an arrow slit. The forest is a dark green sea; the swamp glimmers with stagnant pools.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
+      "commands": ["whistle"],
       "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "text": "Your whistle is snatched away by the wind. The circling hawk doesn't react.",
+      "requires": null
+    },
+    {
+      "commands": ["touch"],
+      "targets": ["parapet", "stone"],
+      "text": "The stone is warm from the sun. You can feel the vibrations of the tower shifting slightly in the wind.",
       "requires": null
     }
   ]

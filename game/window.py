@@ -6,7 +6,7 @@ GameWindow — standalone Tkinter window, 4 panels.
 │  Combat: enemies SIDE-BY-SIDE in monospace cols   │
 │  Explore: room art                                │
 ├─ STATUS ──────────────────────────────────────────┤
-│  HP / AP / MP bars  ·  xp level ·  commands       │
+│  HP / AP / MP bars  ·  xp level ·  score · turn   │
 ├─ LOG ─────────────────────────────────────────────┤
 │  Scrolling story / combat output                  │
 ├─ INPUT ───────────────────────────────────────────┤
@@ -69,24 +69,27 @@ def _is_stunned(entity):
 
 # ---------- UIState ----------
 class UIState:
-    __slots__ = ('player', 'room', 'enemies', 'mode')
+    __slots__ = ('player', 'room', 'enemies', 'mode', 'turn_number')
     def __init__(self):
         self.player = None
         self.room = None
         self.enemies = []
         self.mode = 'explore'
+        self.turn_number = 0
 
-    def set_explore(self, player, room):
+    def set_explore(self, player, room, turn_number=0):
         self.player = player
         self.room = room
         self.mode = 'explore'
         self.enemies = []
+        self.turn_number = turn_number
 
-    def set_combat(self, player, room, enemies):
+    def set_combat(self, player, room, enemies, turn_number=0):
         self.player = player
         self.room = room
         self.mode = 'combat'
         self.enemies = list(enemies)
+        self.turn_number = turn_number
 
 # ---------- GameWindow ----------
 class GameWindow:
@@ -116,7 +119,7 @@ class GameWindow:
     FONT_SM  = ('Courier New', 6)       # ART panel in explore mode
     FONT_COMBAT = ('Courier New', 10, 'bold')  # ART panel in combat mode for readability
     FONT_LOG = ('Courier New', 12)      # LOG panel - larger
-    FONT_XS  = ('Courier New', 9)       # STATUS panel
+    FONT_XS  = ('Courier New', 7)       # STATUS panel - smaller (was 9)
 
     _TAGS = {
         'bold':    {'font': ('Courier New', 9, 'bold')},
@@ -149,13 +152,13 @@ class GameWindow:
         self._art_cache: dict[str, str] = {}
 
     # Public API ------------------------------------------------------------
-    def set_explore(self, player, room):
-        self._state.set_explore(player, room)
+    def set_explore(self, player, room, turn_number=0):
+        self._state.set_explore(player, room, turn_number)
         self._schedule(self._refresh_art)
         self._schedule(self._refresh_hud)
 
-    def set_combat(self, player, room, enemies):
-        self._state.set_combat(player, room, enemies)
+    def set_combat(self, player, room, enemies, turn_number=0):
+        self._state.set_combat(player, room, enemies, turn_number)
         self._schedule(self._refresh_art)
         self._schedule(self._refresh_hud)
 
@@ -208,11 +211,9 @@ class GameWindow:
         root = tk.Tk()
         root.title('Text Adventure')
         root.configure(bg=self.C_BG)
-        # Smaller default geometry, will be overridden by zoomed state
         root.geometry('800x600')
         root.minsize(720, 540)
         root.protocol('WM_DELETE_WINDOW', self._on_close)
-        # Auto full screen (maximized)
         try:
             root.state('zoomed')
         except tk.TclError:
@@ -266,7 +267,6 @@ class GameWindow:
 
         self._status_hdr = self._hdr(frm, 0, 'STATUS', self.C_GREEN)
 
-        # Increased height to accommodate larger status font
         self._hud_canvas = tk.Canvas(
             frm, height=80, bg=self.C_PANEL,
             bd=0, relief='flat', highlightthickness=0,
@@ -284,7 +284,6 @@ class GameWindow:
 
         self._log_hdr = self._hdr(frm, 0, 'LOG', self.C_BLUE)
 
-        # Use the larger FONT_LOG for the log text widget
         self._log_txt = tk.Text(
             frm, bg=self.C_PANEL, fg=self.C_TEXT,
             font=self.FONT_LOG, bd=0, relief='flat',
@@ -561,8 +560,9 @@ class GameWindow:
         _bar(pad + step,   'AP', p.current_ap, getattr(p, 'total_ap', 20), self.C_AP)
         _bar(pad + step*2, 'MP', getattr(p, 'mana', 0), getattr(p, 'max_mana', 0), self.C_MP)
 
+        # Show level, XP, gold, score, turn number
         c.create_text(W - pad, y1 + bar_h // 2,
-                      text=f'Lv{p.level}  XP {p.xp}  Gold {getattr(p, "gold", 0)}',
+                      text=f'Lv{p.level}  XP {p.xp}  Gold {getattr(p, "gold", 0)}  Score {p.score}  Turn {self._state.turn_number}',
                       fill=self.C_GOLD, font=font_size, anchor='e')
 
         y2 = y1 + bar_h + 8

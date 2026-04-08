@@ -9,7 +9,8 @@
   "ambient": [
     "The wind moans through cracks in the battlements.",
     "You hear chains clinking somewhere above.",
-    "The moat bubbles sporadically."
+    "The moat bubbles sporadically.",
+    "A patch of slick moss glistens on the wall near the waterline."
   ],
   "exits": {
     "down": "foot_of_mountain",
@@ -28,20 +29,15 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": [
-        "pray"
-      ],
+      "commands": ["shout", "yell"],
       "targets": [],
-      "text": "You close your eyes and murmur a quiet prayer. For a heartbeat, the room feels still enough to listen.",
+      "text": "Your voice echoes off the stone, then dies. A few pebbles rattle down from the wall.",
       "requires": null
     },
     {
-      "commands": [
-        "sing",
-        "hum"
-      ],
-      "targets": [],
-      "text": "Your voice drifts through the area and fades into the distance. No one applauds, but it lifts your spirits.",
+      "commands": ["peer", "look into", "look"],
+      "targets": ["moat", "water"],
+      "text": "The water is murky and still. You see nothing but your own wavering reflection.",
       "requires": null
     }
   ]
