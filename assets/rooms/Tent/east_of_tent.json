@@ -7,14 +7,35 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 11,
-  "ambient": ["Birds chatter somewhere in the distance."],
+  "ambient": [
+    "Birds chatter somewhere in the distance.",
+    "A few scattered feathers lie on the ground.",
+    "Thorns catch the light, sharp and glistening."
+  ],
   "exits": {
     "north": "north_of_tent",
     "south": "south_of_tent",
     "east": "clearing1"
   },
-  "line_of_sight": ["north_of_tent", "south_of_tent"],
+  "line_of_sight": [
+    "north_of_tent",
+    "south_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["touch", "examine"],
+      "targets": ["feather", "feathers"],
+      "text": "The feather is soft, barred brown and grey—a hawk's primary, shed recently.",
+      "requires": null
+    },
+    {
+      "commands": ["pick"],
+      "targets": ["thorn", "bush"],
+      "text": "You try to pluck a thorn. It pricks your finger, drawing a tiny bead of blood.",
+      "requires": null
+    }
+  ]
 }

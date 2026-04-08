@@ -8,7 +8,8 @@
   "light_level": 10,
   "ambient": [
     "The wind whistles through the arrow slits.",
-    "You can see smoke rising from the village to the southwest."
+    "You can see smoke rising from the village to the southwest.",
+    "A bird of prey circles high above the forest."
   ],
   "exits": {
     "down": "watchtower_second_floor"
@@ -34,5 +35,25 @@
   "enemy_spawns": [],
   "description_snippets": {
     "shortbow_desc": " A shortbow lies upon a parapet."
-  }
+  },
+  "interaction_rules": [
+    {
+      "commands": ["gaze", "look out"],
+      "targets": ["forest", "village", "swamp"],
+      "text": "You lean out an arrow slit. The forest is a dark green sea; the swamp glimmers with stagnant pools.",
+      "requires": null
+    },
+    {
+      "commands": ["whistle"],
+      "targets": [],
+      "text": "Your whistle is snatched away by the wind. The circling hawk doesn't react.",
+      "requires": null
+    },
+    {
+      "commands": ["touch"],
+      "targets": ["parapet", "stone"],
+      "text": "The stone is warm from the sun. You can feel the vibrations of the tower shifting slightly in the wind.",
+      "requires": null
+    }
+  ]
 }

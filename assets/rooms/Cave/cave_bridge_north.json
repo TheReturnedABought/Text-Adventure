@@ -8,14 +8,31 @@
   "light_level": 4,
   "ambient": [
     "The chasm below is pitch black. You hear nothing but the slow drip of water.",
-    "A draft carries the scent of old decay."
+    "A draft carries the scent of old decay.",
+    "The bridge stones feel loose underfoot."
   ],
   "exits": {
     "south": "cave_bridge_south",
     "up": "cave_entrance"
   },
-  "line_of_sight": ["guard_room"],
+  "line_of_sight": [
+    "guard_room"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["toss"],
+      "targets": ["stone", "pebble"],
+      "text": "You toss a small stone over the edge. Seconds pass. No sound returns.",
+      "requires": null
+    },
+    {
+      "commands": ["touch", "feel"],
+      "targets": ["bridge", "stones"],
+      "text": "The stone is cold and slick with condensation. Your hand comes away smelling of wet limestone.",
+      "requires": null
+    }
+  ]
 }

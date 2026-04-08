@@ -5,6 +5,7 @@
   "description": "Polished to a shine that bends light and hostile energies.",
   "material": "metal",
   "tier": 3,
+  "value": 60,
   "stat_modifiers": {"defense": 2},
   "item_flags": ["mirror_shield"]
 }

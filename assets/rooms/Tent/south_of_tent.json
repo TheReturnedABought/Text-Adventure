@@ -6,13 +6,34 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 12,
-  "ambient": ["Insects buzz in the grass."],
+  "ambient": [
+    "Insects buzz in the grass.",
+    "A patch of flattened grass suggests someone sat here recently.",
+    "The canvas back wall shows a small, stitched repair."
+  ],
   "exits": {
     "east": "east_of_tent",
     "west": "west_of_tent"
   },
-  "line_of_sight": ["east_of_tent", "west_of_tent"],
+  "line_of_sight": [
+    "east_of_tent",
+    "west_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["touch", "feel"],
+      "targets": ["grass", "flattened grass"],
+      "text": "The grass is cool and springy. The flattened patch is still slightly warm.",
+      "requires": null
+    },
+    {
+      "commands": ["examine"],
+      "targets": ["stitch", "repair"],
+      "text": "The stitching is neat but done with a heavy, dark thread—almost like sinew.",
+      "requires": null
+    }
+  ]
 }

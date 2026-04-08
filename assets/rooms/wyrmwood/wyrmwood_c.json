@@ -3,6 +3,7 @@
   "name": "Wyrmwood",
   "description": "Twisted branches interlock overhead, blotting out the sky. Every direction looks much the same. You are not sure you have not been here before.",
   "material": "wood",
+  "art_asset": "assets/rooms/wyrmwood/art/wyrmwood_common.txt",
   "is_outdoor": true,
   "is_start": false,
   "light_level": 3,
@@ -19,5 +20,6 @@
   "line_of_sight": [],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }

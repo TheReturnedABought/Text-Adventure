@@ -20,7 +20,9 @@
       "blocked_text": "The door is closed. You need to open it first."
     }
   },
-  "line_of_sight": ["wyrmwood_b"],
+  "line_of_sight": [
+    "wyrmwood_b"
+  ],
   "objects": [
     {
       "id": "hut_door",
@@ -56,14 +58,23 @@
   "enemy_spawns": [],
   "interaction_rules": [
     {
-      "commands": ["put", "place"],
-      "targets": ["flower", "wildflower", "lyra flower"],
+      "commands": [
+        "put",
+        "place"
+      ],
+      "targets": [
+        "flower",
+        "wildflower",
+        "lyra flower"
+      ],
       "text": "You gently place the flower into the hollow at the base of the gravestone. A faint shimmer runs through the stone, and a small needle wrapped in wasp silk materialises at your feet.",
       "requires": {
         "min_level": 1
       },
       "blocked_text": "Nothing happens.",
-      "spawn_items": ["wasp_needle"],
+      "spawn_items": [
+        "wasp_needle"
+      ],
       "set_flags": {
         "lyra_offering_made": true
       }

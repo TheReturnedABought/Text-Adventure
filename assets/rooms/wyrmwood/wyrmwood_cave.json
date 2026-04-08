@@ -31,5 +31,6 @@
   },
   "line_of_sight": [],
   "objects": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }

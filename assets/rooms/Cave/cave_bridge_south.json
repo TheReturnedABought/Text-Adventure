@@ -15,8 +15,24 @@
     "west": "guard_room",
     "east": "collapsed_passage"
   },
-  "line_of_sight": ["guard_room"],
+  "line_of_sight": [
+    "guard_room"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["smell", "sniff"],
+      "targets": [],
+      "text": "The air carries a faint, acrid tang—old smoke and something metallic.",
+      "requires": null
+    },
+    {
+      "commands": ["examine", "look at"],
+      "targets": ["rubble", "collapse"],
+      "text": "The rubble is a jumble of jagged rocks. Some look recent, others ancient and fused together.",
+      "requires": null
+    }
+  ]
 }

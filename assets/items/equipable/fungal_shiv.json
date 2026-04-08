@@ -5,5 +5,6 @@
   "description": "A pitted dagger packed with toxic spores.",
   "material": "metal",
   "tier": 2,
+  "value": 20,
   "item_flags": ["fungal_shiv"]
 }

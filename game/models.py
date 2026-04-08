@@ -1,30 +1,21 @@
-"""Data models for abilities, items, classes, enemy intents, loot, and parsed commands."""
-
-from __future__ import annotations
-
+# game/models.py
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import Callable, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from game.dice import DiceExpression
-    from game.effects import StatusEffect
-
+from typing import Callable, List, Dict, Optional
 
 @dataclass
 class Ability:
     id: str
     name: str
     description: str
-    ap_cost: int | None = None
-    dice_expression: str | None = None
-    effect_on_hit: str | None = None
+    ap_cost: Optional[int] = None
+    dice_expression: Optional[str] = None
+    effect_on_hit: Optional[str] = None
     effect_duration: int = 1
     effect_stacks: int = 1
-    tags: list[str] = field(default_factory=list)
-    payload: dict = field(default_factory=dict)
-    execute: Callable[["BattleContext"], str] | None = None
-
+    tags: List[str] = field(default_factory=list)
+    payload: Dict = field(default_factory=dict)
+    execute: Optional[Callable[["BattleContext"], str]] = None
 
 @dataclass
 class EquippableItem:
@@ -35,36 +26,38 @@ class EquippableItem:
     material: str = "metal"
     rarity: str = "common"
     tier: int = 1
-    stat_modifiers: dict[str, int] = field(default_factory=dict)
-    letter_cost_reductions: dict[str, int] = field(default_factory=dict)
-    ability_cost_reductions: dict[str, int] = field(default_factory=dict)
-    abilities: list[Ability] = field(default_factory=list)
-    equip_requirements: dict = field(default_factory=dict)
-    upgrade_path: str | None = None
-    readable_text: str | None = None
-    item_flags: list[str] = field(default_factory=list)
-    on_hit_effects: dict = field(default_factory=dict)
-    passive_effects: dict = field(default_factory=dict)
+    stat_modifiers: Dict[str, int] = field(default_factory=dict)
+    letter_cost_reductions: Dict[str, int] = field(default_factory=dict)
+    ability_cost_reductions: Dict[str, int] = field(default_factory=dict)
+    abilities: List[Ability] = field(default_factory=list)
+    equip_requirements: Dict = field(default_factory=dict)
+    upgrade_path: Optional[str] = None
+    readable_text: Optional[str] = None
+    item_flags: List[str] = field(default_factory=list)
+    on_hit_effects: Dict = field(default_factory=dict)
+    passive_effects: Dict = field(default_factory=dict)
+    value: int = 0
+
+    def __post_init__(self):
+        if self.value == 0: self.value = self.tier * 10
 
 @dataclass
 class PassiveTrait:
     id: str
     name: str
     description: str
-    stat_bonuses: dict[str, int] = field(default_factory=dict)
-
+    stat_bonuses: Dict[str, int] = field(default_factory=dict)
 
 @dataclass
 class CharacterClass:
     id: str
     name: str
     description: str
-    base_stats: dict[str, int] = field(default_factory=dict)
-    starting_items: list[EquippableItem] = field(default_factory=list)
-    passive_traits: list[PassiveTrait] = field(default_factory=list)
-    level_unlocks: dict[int, list[str]] = field(default_factory=dict)
-    choice_unlocks: dict[int, list[list[str]]] = field(default_factory=dict)
-
+    base_stats: Dict[str, int] = field(default_factory=dict)
+    starting_items: List[EquippableItem] = field(default_factory=list)
+    passive_traits: List[PassiveTrait] = field(default_factory=list)
+    level_unlocks: Dict[int, List[str]] = field(default_factory=dict)
+    choice_unlocks: Dict[int, List[List[str]]] = field(default_factory=dict)
 
 class IntentType(Enum):
     ATTACK = auto()
@@ -74,20 +67,18 @@ class IntentType(Enum):
     FLEE = auto()
     WAIT = auto()
 
-
 @dataclass
 class EnemyIntent:
     id: str
     intent_type: IntentType
     description: str
-    dice_expression: str | None = None
+    dice_expression: Optional[str] = None
     ap_cost: int = 6
     weight: int = 1
-    condition: str | None = None
-    effect_on_hit: str | None = None
+    condition: Optional[str] = None
+    effect_on_hit: Optional[str] = None
     effect_duration: int = 1
-    tags: list[str] = field(default_factory=list)
-
+    tags: List[str] = field(default_factory=list)
 
 @dataclass
 class LootEntry:
@@ -95,32 +86,29 @@ class LootEntry:
     chance: float
     count_expression: str = "1"
 
-
 class ArticleType(Enum):
     SPECIFIC = auto()
     GENERIC = auto()
     NONE = auto()
 
-
 @dataclass
 class ParsedCommand:
-    intent: str | None
+    intent: Optional[str]
     raw: str = ""
-    target_name: str | None = None
-    target_index: int | None = None
+    target_name: Optional[str] = None
+    target_index: Optional[int] = None
     article: ArticleType = ArticleType.NONE
-    modifiers: list[str] = field(default_factory=list)
-    item_name: str | None = None
+    modifiers: List[str] = field(default_factory=list)
+    item_name: Optional[str] = None
     ap_cost: int = 0
     mp_cost: int = 0
     valid: bool = True
-    error: str | None = None
-
+    error: Optional[str] = None
 
 @dataclass
 class BattleContext:
     actor_name: str
-    target_name: str | None
+    target_name: Optional[str]
     actor_attack: int
     actor_defense: int
     actor_block: int = 0
@@ -128,7 +116,7 @@ class BattleContext:
     target_hp: int = 0
     target_max_hp: int = 0
     target_block: int = 0
-    active_effects_on_actor: list[str] = field(default_factory=list)
-    active_effects_on_target: list[str] = field(default_factory=list)
-    roll_result: int | None = None
+    active_effects_on_actor: List[str] = field(default_factory=list)
+    active_effects_on_target: List[str] = field(default_factory=list)
+    roll_result: Optional[int] = None
     is_critical: bool = False

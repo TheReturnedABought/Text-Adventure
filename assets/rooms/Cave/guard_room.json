@@ -8,12 +8,16 @@
   "light_level": 5,
   "ambient": [
     "The air is thick with dust and the smell of old leather.",
-    "A quiver of arrows hangs on the wall, mostly empty."
+    "A quiver of arrows hangs on the wall, mostly empty.",
+    "Deep scratches mar the floor near the entrance."
   ],
   "exits": {
     "east": "cave_bridge_south"
   },
-  "line_of_sight": ["cave_bridge_north", "cave_bridge_south"],
+  "line_of_sight": [
+    "cave_bridge_north",
+    "cave_bridge_south"
+  ],
   "description_snippets": {
     "combat_update": ""
   },
@@ -39,6 +43,23 @@
   ],
   "items_on_ground": [],
   "enemy_spawns": [
-    { "template_id": "skeleton_archer", "count": 1 }
+    {
+      "template_id": "skeleton_archer",
+      "count": 1
+    }
+  ],
+  "interaction_rules": [
+    {
+      "commands": ["examine", "look at"],
+      "targets": ["scratches", "floor"],
+      "text": "The scratches are deep, as if something heavy was dragged across the stone.",
+      "requires": null
+    },
+    {
+      "commands": ["touch"],
+      "targets": ["quiver"],
+      "text": "The quiver is stiff with age. It crumbles slightly at your touch, releasing a puff of dust.",
+      "requires": null
+    }
   ]
 }

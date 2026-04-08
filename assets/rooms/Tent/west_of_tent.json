@@ -7,13 +7,26 @@
   "is_outdoor": true,
   "is_start": false,
   "light_level": 11,
-  "ambient": ["The stones are cool to the touch."],
+  "ambient": [
+    "The ground here is hard and gravelly."
+  ],
   "exits": {
     "north": "north_of_tent",
     "south": "south_of_tent"
   },
-  "line_of_sight": ["north_of_tent", "south_of_tent"],
+  "line_of_sight": [
+    "north_of_tent",
+    "south_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["lift", "move"],
+      "targets": ["stone", "rock"],
+      "text": "You strain to lift a large stone. Beneath it, the ground is damp and crawling with pillbugs.",
+      "requires": null
+    }
+  ]
 }

@@ -8,43 +8,24 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass, field
 from enum import Enum, auto
-from typing import TYPE_CHECKING
+from typing import List, Optional, Set
 
-from game.commands import CommandContext
+from game.commands import CommandContext, CommandDefinition
 from game.dice import DiceExpression
 from game.effects import EffectTrigger, EffectCategory, StatusEffect
+from game.entities import Enemy, Player
 from game.models import ParsedCommand, ArticleType
 from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction
 
-if TYPE_CHECKING:
-    from game.entities import Enemy, Player
-    from game.parser import CommandParser
-    from game.commands import CommandRegistry, CommandDefinition
-    from game.world import WorldMap
-
-
 class CombatOutcome(Enum):
-    ONGOING = auto()
-    PLAYER_WON = auto()
-    PLAYER_FLED = auto()
-    PLAYER_DEFEATED = auto()
-
+    ONGOING = auto(); PLAYER_WON = auto(); PLAYER_FLED = auto(); PLAYER_DEFEATED = auto()
 
 @dataclass
 class TurnResult:
-    lines: list[str] = field(default_factory=list)
-    ap_spent: int = 0
-    outcome: CombatOutcome = CombatOutcome.ONGOING
-
-    def add(self, line: str) -> None:
-        self.lines.append(line)
-
-    def is_finished(self) -> bool:
-        return self.outcome != CombatOutcome.ONGOING
-
-    def display(self) -> str:
-        return "\n".join(self.lines)
-
+    lines: List[str] = field(default_factory=list); ap_spent: int = 0; outcome: CombatOutcome = CombatOutcome.ONGOING
+    def add(self, line: str) -> None: self.lines.append(line)
+    def is_finished(self) -> bool: return self.outcome != CombatOutcome.ONGOING
+    def display(self) -> str: return "\n".join(self.lines)
 
 class CombatController:
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
@@ -66,6 +47,8 @@ class CombatController:
         self._pending_attack_parsed: ParsedCommand | None = None
         self._debug = debug
         self._refresh_combat_zone()
+        self.player.combat_defense_bonus = 0
+        for e in enemies: e.reset_ap(); e.plan_turn(player)
 
     def _log(self, msg: str) -> None:
         if self._debug:
@@ -120,12 +103,10 @@ class CombatController:
 
     def player_input(self, raw: str) -> TurnResult:
         result = TurnResult()
-
         if self._pending_disambiguation:
             target = self._resolve_disambiguation(raw, result)
-            if target is None:
-                return result
-            if self._pending_attack_parsed is not None:
+            if target is None: return result
+            if self._pending_attack_parsed:
                 parsed = self._pending_attack_parsed
                 self._pending_attack_parsed = None
                 if self._resolve_attack(parsed, result, forced_target=target):
@@ -248,8 +229,7 @@ class CombatController:
                 result.outcome = enemy_result.outcome
                 return result
         self.round += 1
-        if self.world:
-            self.world.advance_turn()
+        if self.world: self.world.advance_turn()
         self.player.reset_ap()
         for e in self.enemies:
             e.reset_ap()
@@ -411,6 +391,22 @@ class CombatController:
             for ability in item.abilities:
                 if name and name not in ability.name.lower() and name != ability.id.lower():
                     continue
+                # Resolve target first
+                target = None
+                if ability.dice_expression:
+                    target = self._resolve_target(parsed, result)
+                    if target is None:
+                        return (0, 0)
+                # Now deduct AP/MP
+                if not self.player.spend_ap(parsed.ap_cost):
+                    result.add("Not enough AP.")
+                    return (0, 0)
+                if parsed.mp_cost > getattr(self.player, "mana", 0):
+                    result.add("Not enough MP.")
+                    return (0, 0)
+                self.player.mana -= parsed.mp_cost
+                result.ap_spent = parsed.ap_cost
+
                 if ability.dice_expression:
                     target = self._resolve_target(parsed, result)
                     if target:
@@ -431,7 +427,7 @@ class CombatController:
                 return (int(ability.payload.get("restore_ap", 0) or 0),
                         int(ability.payload.get("restore_mp", 0) or 0))
         result.add("No matching ability is equipped.")
-        return 0, 0
+        return (0, 0)
 
     # --- Enemy turns ---
 
@@ -477,7 +473,7 @@ class CombatController:
     def _enemy_can_reach(self, enemy: "Enemy", intent) -> bool:
         if not self.world:
             return True
-        enemy_room = enemy.combat_room_id or self.player_room_id
+        enemy_room = enemy.combat_room_id
         if enemy_room == self.player_room_id:
             return True
         return "ranged" in getattr(intent, "tags", []) and self.player_room_id in self._zone_ids(enemy_room)
@@ -600,25 +596,19 @@ class CombatController:
 
         if parsed.target_name:
             matches = [e for e in living if parsed.target_name.lower() in e.name.lower()]
-            if len(matches) == 1:
-                return matches[0]
-            if not matches:
-                result.add("No target matches that name.")
-                return None
-            if parsed.article == ArticleType.GENERIC:
-                return random.choice(matches)
+            if len(matches)==1: return matches[0]
+            if not matches: result.add("No target matches that name."); return None
+            if parsed.article == ArticleType.GENERIC: return random.choice(matches)
             self._pending_disambiguation = matches
             result.add("Which one?")
-            for i, e in enumerate(matches, 1):
-                result.add(f"  {i}. {e.name}")
+            for i,e in enumerate(matches,1): result.add(f"  {i}. {e.name}")
             return None
 
         if len(living) == 1:
             return living[0]
         self._pending_disambiguation = living
         result.add("Which enemy?")
-        for i, e in enumerate(living, 1):
-            result.add(f"  {i}. {e.name}")
+        for i,e in enumerate(living,1): result.add(f"  {i}. {e.name}")
         return None
 
     def _resolve_disambiguation(self, raw: str, result: TurnResult) -> "Enemy | None":
@@ -626,10 +616,8 @@ class CombatController:
             result.add("Please enter a number.")
             return None
         idx = int(raw.strip())
-        if not (1 <= idx <= len(self._pending_disambiguation)):
-            result.add("Number out of range.")
-            return None
-        enemy = self._pending_disambiguation[idx - 1]
+        if not (1 <= idx <= len(self._pending_disambiguation)): result.add("Number out of range."); return None
+        enemy = self._pending_disambiguation[idx-1]
         self._pending_disambiguation = None
         return enemy
 
@@ -665,7 +653,7 @@ class CombatController:
             if next_room:
                 next_dir = next((d for d, t in next_room.exits.items() if t == path[2]), None)
                 if next_dir:
-                    return f"{direction} \u2192 {next_dir}"
+                    return f"{direction} → {next_dir}"
         return direction
 
     # --- Dice helpers ---

@@ -37,6 +37,17 @@
   ],
   "items_on_ground": [],
   "enemy_spawns": [
-    { "template_id": "skeleton", "count": 1 }
-    ]
+    {
+      "template_id": "skeleton",
+      "count": 1
+    }
+  ],
+  "interaction_rules": [
+    {
+      "commands": ["touch", "examine"],
+      "targets": ["cobweb", "webs"],
+      "text": "Your fingers come away sticky. The webs are old; nothing has disturbed them in weeks.",
+      "requires": null
+    }
+  ]
 }

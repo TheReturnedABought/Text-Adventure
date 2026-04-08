@@ -8,7 +8,8 @@
   "light_level": 5,
   "ambient": [
     "Dust motes dance in the torchlight.",
-    "Somewhere behind the collapse, water drips steadily."
+    "Somewhere behind the collapse, water drips steadily.",
+    "A faint, stale breeze seeps through cracks in the rubble."
   ],
   "exits": {
     "west": "cave_bridge_south"
@@ -65,13 +66,19 @@
       "text": "You shove the stone aside. A small metal lever is revealed, set into a crack in the wall.",
       "reveal_objects": ["hidden_lever"]
     },
-      {
-        "commands": ["pull"],
-        "targets": ["hidden lever"],
-        "text": "You pull the lever. With a grinding rumble, distant stone shifts and a passage somewhere reconfigures.",
-        "set_flags": {
-          "cave_passage_open": true
-        }
+    {
+      "commands": ["pull"],
+      "targets": ["hidden lever"],
+      "text": "You pull the lever. With a grinding rumble, distant stone shifts and a passage somewhere reconfigures.",
+      "set_flags": {
+        "cave_passage_open": true
       }
+    },
+    {
+      "commands": ["touch", "feel"],
+      "targets": ["torch", "wall"],
+      "text": "The torch is warm but not hot. The wall near it is stained with ancient soot.",
+      "requires": null
+    }
   ]
 }

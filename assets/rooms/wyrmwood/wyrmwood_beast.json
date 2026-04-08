@@ -37,5 +37,6 @@
     }
   ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }

@@ -28,5 +28,6 @@
       }
     }
   ],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }

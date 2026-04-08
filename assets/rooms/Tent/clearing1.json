@@ -15,8 +15,24 @@
     "east": "wyrmwood_entry",
     "north": "foot_of_mountain"
   },
-  "line_of_sight": ["east_of_tent"],
+  "line_of_sight": [
+    "east_of_tent"
+  ],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["touch", "pick"],
+      "targets": ["mushroom", "mushrooms"],
+      "text": "You brush a mushroom. It releases a faint puff of white spores that drift toward the dark trees.",
+      "requires": null
+    },
+    {
+      "commands": ["sniff"],
+      "targets": [],
+      "text": "The air smells of crushed grass and damp earth, with a faint sweetness—honey?",
+      "requires": null
+    }
+  ]
 }

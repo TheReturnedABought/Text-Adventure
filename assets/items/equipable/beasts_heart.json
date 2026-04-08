@@ -5,5 +5,6 @@
   "description": "A pulsing organ that knits flesh in wild places.",
   "material": "flesh",
   "tier": 3,
+  "value": 130,
   "item_flags": ["beasts_heart"]
 }

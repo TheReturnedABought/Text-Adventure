@@ -31,7 +31,9 @@
       "key_item_id": "ancient_talisman",
       "hidden": false,
       "reveals": [],
-      "items_inside": ["beasts_heart"],
+      "items_inside": [
+        "beasts_heart"
+      ],
       "on_interact": {
         "look": "The recess is roughly hand‑sized, with worn edges. Something was clearly meant to be placed here.",
         "unlock": "You press the ancient talisman into the recess. It fits perfectly. With a wet, sucking sound, the flesh around it contracts and releases a hidden compartment.",
@@ -42,5 +44,6 @@
     }
   ],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }

@@ -8,7 +8,8 @@
   "light_level": 3,
   "ambient": [
     "Water drips somewhere in the darkness.",
-    "The wind whistles through the narrow entrance."
+    "The wind whistles through the narrow entrance.",
+    "A few pale roots dangle from the ceiling, motionless."
   ],
   "exits": {
     "down": "cave_bridge_north",
@@ -17,5 +18,19 @@
   "line_of_sight": [],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["shout", "call"],
+      "targets": [],
+      "text": "Your voice echoes down the tunnel, bouncing back as a distorted murmur.",
+      "requires": null
+    },
+    {
+      "commands": ["touch"],
+      "targets": ["root", "roots"],
+      "text": "The root is dry and brittle. It snaps off in your hand with a soft crack.",
+      "requires": null
+    }
+  ]
 }

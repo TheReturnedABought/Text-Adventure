@@ -3,6 +3,7 @@
   "name": "Wyrmwood",
   "description": "The forest swallows the light. Gnarled trunks close in from every side, bark dark with moss and age. The trees thicken into something worse.",
   "material": "wood",
+  "art_asset": "assets/rooms/wyrmwood/art/wyrmwood_common.txt",
   "is_outdoor": true,
   "is_start": false,
   "light_level": 5,
@@ -19,5 +20,6 @@
   "line_of_sight": [],
   "objects": [],
   "items_on_ground": [],
-  "enemy_spawns": []
+  "enemy_spawns": [],
+  "interaction_rules": []
 }
