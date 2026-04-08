@@ -99,6 +99,7 @@ class TextAdventureGame:
         if self.world and self.parser:
             self.exploration = ExplorationController(self.parser, self.registry, self.player, self.world,
                                                      puzzle_flags=dict(self.world.global_flags), item_catalog=self.item_catalog)
+            self.exploration.game = self   # <-- ADD THIS LINE (needed for save/load)
             start_room = self.world.current_room()
             if start_room:
                 start_room.visited = True
@@ -150,7 +151,17 @@ class TextAdventureGame:
 
     def _on_combat_won(self):
         window.append_log("You won the encounter.")
-        total_xp = sum(e.xp_reward for e in self.combat.enemies if not e.is_alive)
+        total_xp = 0
+        for enemy in self.combat.enemies:
+            if not enemy.is_alive:
+                total_xp += enemy.xp_reward
+                # ---- LOOT DROPS ----
+                loot_ids = enemy.roll_loot()
+                for item_id in loot_ids:
+                    if item_id in self.item_catalog:
+                        item = self.item_catalog[item_id]
+                        self.player.pick_up(item)
+                        window.append_log(f"Looted: {item.name}")
         lines, choices = self.player.gain_xp(total_xp)
         for line in lines: window.append_log(line)
         if choices:
@@ -205,6 +216,9 @@ class TextAdventureGame:
         else: window.append_log("\n*** GAME OVER ***")
 
     def save(self, slot=0):
+        if self.state == GameState.COMBAT:
+            window.append_log("Cannot save during combat.")
+            return
         save_dir = Path("saves"); save_dir.mkdir(parents=True, exist_ok=True)
         payload = {"player": self._serialise_player(), "room_id": self.world.current_room_id if self.world else None,
                    "state": self.state.name}
