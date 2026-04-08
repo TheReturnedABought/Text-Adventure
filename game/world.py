@@ -209,9 +209,6 @@ class Room:
             desc = desc.replace(f"{{{{{key}}}}}", snippet)
 
         lines = [self.name, desc]
-        if turn_number:
-            phase = ("dawn", "day", "dusk", "night")[((turn_number // 8) % 4)]
-            lines.append(f"The world feels like {phase} (turn {turn_number}).")
         if self.ambient and random.random() > 0.3:
             lines.append(random.choice(self.ambient))
         living = self.living_enemies()
@@ -323,11 +320,8 @@ class WorldMap:
         self.current_room_id = target
         self.advance_turn()
         new_room = self.current_room()
-        # Capture visited state BEFORE marking it as visited
         was_visited = new_room.visited
         new_room.visited = True
-        # Optional debug (remove comment to see values)
-        print(f"[DEBUG] move_player: room={new_room.id}, was_visited={was_visited}, verbose={not was_visited}")
         return True, new_room.get_description(verbose=not was_visited, turn_number=self.turn_counter)
 
     def neighbors_of(self, room_id: str) -> list[str]:
@@ -368,13 +362,11 @@ class WorldMap:
         room = self.current_room()
         if not room:
             return []
-        print(f"[DEBUG] current room: {room.id}, enemies in room: {[e.name for e in room.enemies if e.is_alive]}")
         visible = list(room.living_enemies())
         for other_id in room.line_of_sight:
             other = self.get_room(other_id)
             if other:
                 visible.extend(other.enemies_visible_from(room))
-        print(f"[DEBUG] total visible enemies: {[e.name for e in visible]}")
         return visible
 
     def step_enemy_outside_combat(self, player_room_id: str | None) -> list[str]:

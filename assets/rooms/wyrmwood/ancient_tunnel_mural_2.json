@@ -24,8 +24,9 @@
       "on_interact": {
         "look": "The wyrm is gone. No body. No corpse.\n\nOnly a sword remains, embedded in stone.\n\nThe shape is unmistakable.",
         "read": "There are faint markings beneath it:\n\n\"The worthy bear no wicked words.\""
-      },
-          {
+      }
+    },
+    {
       "id": "hidden_alcove",
       "name": "alcove",
       "description": "A small recess carved into the wall, now visible.",
@@ -39,7 +40,7 @@
         "look": "The alcove contains a single item – a talisman carved from bone.",
         "take": "You reach into the alcove and retrieve the talisman."
       }
-    },
+    }
   ],
   "enemy_spawns": []
 }

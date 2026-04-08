@@ -6,7 +6,7 @@
   "description": "A test class with no special abilities, unlocks, or starting items. The game should be beatable with it but harder.",
 
   "base_stats": {
-    "hp": 30,
+    "hp": 40,
     "attack": 5,
     "defense": 1,
     "ap": 40

@@ -1,656 +1,301 @@
 # game/window.py
-"""
-GameWindow — standalone Tkinter window, 4 panels.
-
-┌─ ART ─────────────────────────────────────────────┐
-│  Combat: enemies SIDE-BY-SIDE in monospace cols   │
-│  Explore: room art                                │
-├─ STATUS ──────────────────────────────────────────┤
-│  HP / AP / MP bars  ·  xp level ·  commands       │
-├─ LOG ─────────────────────────────────────────────┤
-│  Scrolling story / combat output                  │
-├─ INPUT ───────────────────────────────────────────┤
-│  > _                                              │
-└──────────────────────────────────────────────────┘
-"""
-
-import re
-import sys
-import traceback
-import threading
-import tkinter as tk
+"""GameWindow — Tkinter 4-panel UI: ART / STATUS / LOG / INPUT"""
+import re, sys, traceback, threading, tkinter as tk
 from pathlib import Path
 from collections import deque, Counter
 
-# ---------- ANSI helpers ----------
-_ANSI_RE = re.compile(r'\x1b\[([0-9;]*)m')
+_ANSI_RE    = re.compile(r'\x1b\[[0-9;]*m')
 _ANSI_SPLIT = re.compile(r'(\x1b\[[0-9;]*m)')
+_CODE_TAG   = {'31':'red','32':'green','33':'yellow','34':'blue',
+               '35':'magenta','36':'cyan','37':'white','90':'gray','94':'blue'}
 
-def _strip(s: str) -> str:
-    return _ANSI_RE.sub('', str(s))
+def _strip(s):          return _ANSI_RE.sub('', str(s))
+def _bar(v,mx,w,f='█',e='░'): n=int(round(v/max(mx,1)*w)) if mx else 0; return f*n+e*(w-n)
+def _stacked(items):    return [f"{n} x {k}" if n>1 else k for k,n in Counter(items).items()]
+def _stunned(e):        return hasattr(e,'effects') and e.effects.has("stunned")
+def _statuses(e):
+    return ", ".join(f"{x.name}({x.duration if x.duration>=0 else '∞'})"
+                     for x in (e.effects.get_all() if hasattr(e,'effects') else []))
 
-def _stacked_items(items):
-    counts = Counter(items)
-    return [f"{count} x {name}" if count > 1 else name for name, count in counts.items()]
+_P = dict(bg='#000000',panel='#111111',border='#222222',sep='#1a1a1a',
+          text='#cccccc',dim='#666666',gold='#ffcc44',ap='#4488ff',mp='#aa44ff',
+          red='#ff4444',green='#44ff88',yellow='#ffcc44',blue='#4488ff',
+          cyan='#44ffcc',magenta='#ff44cc',gray='#666666',white='#cccccc')
+_F = {'n':('Courier New',9),'b':('Courier New',9,'bold'),'sm':('Courier New',6),
+      'com':('Courier New',10,'bold'),'log':('Courier New',12),'xs':('Courier New',11)}
 
-def _move_hint(move):
-    hint = getattr(move, "intent_hint", "")
-    return f" {hint}" if hint else ""
+_TAG_DEFS = [('bold',None,True),('dim','#666666',False),('red','#ff4444',False),
+             ('green','#44ff88',False),('yellow','#ffcc44',False),('blue','#4488ff',False),
+             ('magenta','#ff44cc',False),('cyan','#44ffcc',False),('gray','#666666',False),
+             ('white','#cccccc',False),('input','#ffcc44',False),('ap','#4488ff',False),
+             ('mp','#aa44ff',False),('hp_good','#44ff88',False),('hp_mid','#ffcc44',False),
+             ('hp_low','#ff4444',False)]
 
-# ANSI colour code mapping
-_CODE_TAG = {
-    '31': 'red',    '32': 'green',   '33': 'yellow',
-    '34': 'blue',   '35': 'magenta', '36': 'cyan',
-    '37': 'white',  '90': 'gray',    '94': 'blue',
-}
+def _apply_tags(w):
+    for name,fg,bold in _TAG_DEFS:
+        opts=({'font':_F['b']} if bold else {})
+        if fg: opts['foreground']=fg
+        w.tag_configure(name,**opts)
 
-# ---------- simple bar helper ----------
-def _make_bar(cur, max_val, width, fill='█', empty='░'):
-    if max_val <= 0:
-        return empty * width
-    filled = int(round((cur / max_val) * width))
-    return fill * filled + empty * (width - filled)
-
-# ---------- simple status effect formatter ----------
-def _format_statuses(entity):
-    if not hasattr(entity, 'effects') or not entity.effects:
-        return ""
-    active = entity.effects.get_all()
-    if not active:
-        return ""
-    parts = []
-    for eff in active:
-        dur = "∞" if eff.duration < 0 else str(eff.duration)
-        parts.append(f"{eff.name}({dur})")
-    return ", ".join(parts)
-
-def _is_stunned(entity):
-    return hasattr(entity, 'effects') and entity.effects.has("stunned")
-
-# ---------- UIState ----------
 class UIState:
-    __slots__ = ('player', 'room', 'enemies', 'mode')
-    def __init__(self):
-        self.player = None
-        self.room = None
-        self.enemies = []
-        self.mode = 'explore'
+    __slots__ = ('player','room','enemies','mode','world','turn')
+    def __init__(self):     self.player=self.room=self.world=None; self.enemies=[]; self.mode='explore'; self.turn=0
+    def set_explore(self,p,r,w=None): self.player,self.room,self.mode,self.enemies,self.world=p,r,'explore',[],w
+    def set_combat(self,p,r,es,w=None): self.player,self.room,self.mode,self.enemies,self.world=p,r,'combat',list(es),w
 
-    def set_explore(self, player, room):
-        self.player = player
-        self.room = room
-        self.mode = 'explore'
-        self.enemies = []
-
-    def set_combat(self, player, room, enemies):
-        self.player = player
-        self.room = room
-        self.mode = 'combat'
-        self.enemies = list(enemies)
-
-# ---------- GameWindow ----------
 class GameWindow:
-    # Black palette
-    C_BG      = '#000000'
-    C_PANEL   = '#111111'
-    C_BORDER  = '#222222'
-    C_SEP     = '#1a1a1a'
-    C_TEXT    = '#cccccc'
-    C_DIM     = '#666666'
-    C_HP      = '#ff4444'
-    C_AP      = '#4488ff'
-    C_MP      = '#aa44ff'
-    C_GOLD    = '#ffcc44'
-    C_RED     = '#ff4444'
-    C_GREEN   = '#44ff88'
-    C_YELLOW  = '#ffcc44'
-    C_BLUE    = '#4488ff'
-    C_CYAN    = '#44ffcc'
-    C_MAGENTA = '#ff44cc'
-    C_GRAY    = '#666666'
-    C_WHITE   = '#cccccc'
-
-    # Fonts: separate sizes for different panels
-    FONT     = ('Courier New', 9)       # input, general
-    FONT_B   = ('Courier New', 9, 'bold')
-    FONT_SM  = ('Courier New', 6)       # ART panel in explore mode
-    FONT_COMBAT = ('Courier New', 10, 'bold')  # ART panel in combat mode for readability
-    FONT_LOG = ('Courier New', 12)      # LOG panel - larger
-    FONT_XS  = ('Courier New', 9)       # STATUS panel
-
-    _TAGS = {
-        'bold':    {'font': ('Courier New', 9, 'bold')},
-        'dim':     {'foreground': '#666666'},
-        'red':     {'foreground': '#ff4444'},
-        'green':   {'foreground': '#44ff88'},
-        'yellow':  {'foreground': '#ffcc44'},
-        'blue':    {'foreground': '#4488ff'},
-        'magenta': {'foreground': '#ff44cc'},
-        'cyan':    {'foreground': '#44ffcc'},
-        'gray':    {'foreground': '#666666'},
-        'white':   {'foreground': '#cccccc'},
-        'input':   {'foreground': '#ffcc44'},
-        'ap':      {'foreground': '#4488ff'},
-        'mp':      {'foreground': '#aa44ff'},
-        'hp_good': {'foreground': '#44ff88'},
-        'hp_mid':  {'foreground': '#ffcc44'},
-        'hp_low':  {'foreground': '#ff4444'},
-    }
-
     def __init__(self):
-        self._state = UIState()
-        self._log = deque(maxlen=600)
-        self._input_event = threading.Event()
-        self._input_result = ''
-        self._active = False
-        self._root = None
-        self._char_width = None   # will be computed lazily
-        self._art_font_mode = None
-        self._art_cache: dict[str, str] = {}
+        self._state=UIState(); self._log=deque(maxlen=600)
+        self._input_event=threading.Event(); self._input_result=''
+        self._root=self._char_width=self._art_font_mode=None; self._art_cache={}
 
-    # Public API ------------------------------------------------------------
-    def set_explore(self, player, room):
-        self._state.set_explore(player, room)
-        self._schedule(self._refresh_art)
-        self._schedule(self._refresh_hud)
-
-    def set_combat(self, player, room, enemies):
-        self._state.set_combat(player, room, enemies)
-        self._schedule(self._refresh_art)
-        self._schedule(self._refresh_hud)
-
-    def refresh(self):
-        self._schedule(self._refresh_art)
-        self._schedule(self._refresh_hud)
-
-    def update_art(self, content: str):
-        """Manually replace content in the ART panel."""
-        self._schedule(lambda c=content: self._set_art_text(c))
-
-    def update_status(self):
-        """Refresh current player/room status."""
-        self._schedule(self._refresh_hud)
-
-    def append_log(self, text: str):
-        """Append text to the LOG panel."""
-        for line in str(text).splitlines():
-            self._log.append(line)
-            self._schedule(lambda ln=line: self._append_log(ln))
-
-    def get_input(self, prompt: str = '') -> str:
-        """Get input from the INPUT panel."""
-        self._input_event.clear()
-        self._input_result = ''
-        clean = _strip(prompt).strip()
+    # ── public API ───────────────────────────────────────────────────────────
+    def set_explore(self,p,r,w=None):   self._state.set_explore(p,r,w);   self._redraw()
+    def set_combat(self,p,r,es,w=None): self._state.set_combat(p,r,es,w); self._redraw()
+    def refresh(self):                  self._redraw()
+    def set_turn(self,n):               self._state.turn=n; self._schedule(self._refresh_hud)
+    def update_status(self):            self._schedule(self._refresh_hud)
+    def update_art(self,content):
+        def _do(c=content):
+            self._art_txt.configure(state='normal'); self._art_txt.delete('1.0','end')
+            self._art_txt.insert('end',c,'white'); self._art_txt.configure(state='disabled')
+        self._schedule(_do)
+    def append_log(self,text):
+        for ln in str(text).splitlines():
+            self._log.append(ln); self._schedule(lambda l=ln: self._append_log(l))
+    def get_input(self,prompt=''):
+        self._input_event.clear(); self._input_result=''
         self._schedule(lambda: self._prompt_lbl.configure(
-            text=f'  {clean}  ' if clean else '>  '))
-        self._schedule(self._refresh_hud)
-        self._input_event.wait()
-        result = self._input_result
-        if result.strip():
-            self._schedule(lambda r=result: (
-                self._log_txt.configure(state='normal'),
-                self._log_txt.insert('end', f'  › {r}\n', ('input',)),
-                self._log_txt.configure(state='disabled'),
-                self._log_txt.see('end'),
-            ))
-        return result
-
-    def run_game(self, game_fn):
-        """Run the game loop."""
+            text=f'  {_strip(prompt).strip()}  ' if prompt.strip() else '>  '))
+        self._schedule(self._refresh_hud); self._input_event.wait()
+        r=self._input_result
+        if r.strip():
+            self._schedule(lambda v=r: (self._log_txt.configure(state='normal'),
+                self._log_txt.insert('end',f'  › {v}\n',('input',)),
+                self._log_txt.configure(state='disabled'), self._log_txt.see('end')))
+        return r
+    def run_game(self,fn):
         self._build_window()
-        t = threading.Thread(target=self._game_thread, args=(game_fn,), daemon=True)
-        t.start()
+        threading.Thread(target=self._game_thread,args=(fn,),daemon=True).start()
         self._root.mainloop()
 
-    # Window construction ----------------------------------------------------
+    # ── build ────────────────────────────────────────────────────────────────
     def _build_window(self):
-        root = tk.Tk()
-        root.title('Text Adventure')
-        root.configure(bg=self.C_BG)
-        # Smaller default geometry, will be overridden by zoomed state
-        root.geometry('800x600')
-        root.minsize(720, 540)
-        root.protocol('WM_DELETE_WINDOW', self._on_close)
-        # Auto full screen (maximized)
-        try:
-            root.state('zoomed')
+        r=tk.Tk(); r.title('Text Adventure'); r.configure(bg=_P['bg'])
+        r.geometry('800x600'); r.minsize(720,540)
+        r.protocol('WM_DELETE_WINDOW',self._on_close)
+        try: r.state('zoomed')
         except tk.TclError:
-            try:
-                root.attributes('-fullscreen', True)
-            except tk.TclError:
-                pass
-        self._root = root
+            try: r.attributes('-fullscreen',True)
+            except tk.TclError: pass
+        self._root=r; r.columnconfigure(0,weight=1)
+        for i,w in enumerate([2,0,1,0]): r.rowconfigure(i,weight=w)
 
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=2)
-        root.rowconfigure(1, weight=0)
-        root.rowconfigure(2, weight=1)
-        root.rowconfigure(3, weight=0)
+        def hdr(f,row,txt,col):
+            l=tk.Label(f,text=f'  {txt}',bg=_P['border'],fg=col,font=_F['b'],anchor='w',padx=6,pady=6)
+            l.grid(row=row,column=0,columnspan=2,sticky='ew'); return l
+        def panel(row,pad=(2,0)):
+            f=tk.Frame(r,bg=_P['bg']); f.grid(row=row,column=0,sticky='nsew',padx=4,pady=pad)
+            f.columnconfigure(0,weight=1); return f
 
-        self._build_art(root)
-        self._build_status(root)
-        self._build_log(root)
-        self._build_input(root)
+        f=panel(0,(4,0)); self._art_hdr=hdr(f,0,'EXPLORE',_P['cyan'])
+        self._art_txt=tk.Text(f,height=49,bg=_P['panel'],fg=_P['text'],font=_F['sm'],
+                              bd=0,state='disabled',wrap='none',cursor='arrow')
+        self._art_txt.grid(row=1,column=0,sticky='nsew'); _apply_tags(self._art_txt)
+        self._art_txt.bind('<Configure>',lambda _:self._schedule(self._refresh_art))
 
-    def _hdr(self, parent, row, text, color):
-        lbl = tk.Label(parent, text=f'  {text}',
-                       bg=self.C_BORDER, fg=color,
-                       font=self.FONT_B, anchor='w', padx=6, pady=2)
-        lbl.grid(row=row, column=0, columnspan=2, sticky='ew')
-        return lbl
+        f=panel(1); hdr(f,0,'STATUS',_P['green'])
+        self._hud_canvas=tk.Canvas(f,height=130,bg=_P['panel'],bd=0,highlightthickness=0)
+        self._hud_canvas.grid(row=1,column=0,sticky='ew')
+        self._hud_canvas.bind('<Configure>',lambda _:self._schedule(self._refresh_hud))
 
-    # Panel 1 — ART ---------------------------------------------------------
-    def _build_art(self, root):
-        frm = tk.Frame(root, bg=self.C_BG)
-        frm.grid(row=0, column=0, sticky='nsew', padx=4, pady=(4, 0))
-        frm.columnconfigure(0, weight=1)
-
-        self._art_hdr = self._hdr(frm, 0, 'EXPLORE', self.C_CYAN)
-
-        self._art_txt = tk.Text(
-            frm, height=49, bg=self.C_PANEL, fg=self.C_TEXT,
-            font=self.FONT_SM, bd=0, relief='flat',
-            state='disabled', wrap='none', cursor='arrow',
-        )
-        self._art_txt.grid(row=1, column=0, sticky='nsew')
-        self._apply_tags(self._art_txt)
-        self._art_txt.bind('<Configure>',
-                           lambda _: self._schedule(self._refresh_art))
-
-    # Panel 2 — STATUS ------------------------------------------------------
-    def _build_status(self, root):
-        frm = tk.Frame(root, bg=self.C_BG)
-        frm.grid(row=1, column=0, sticky='nsew', padx=4, pady=(2, 0))
-        frm.columnconfigure(0, weight=1)
-
-        self._status_hdr = self._hdr(frm, 0, 'STATUS', self.C_GREEN)
-
-        # Increased height to accommodate larger status font
-        self._hud_canvas = tk.Canvas(
-            frm, height=80, bg=self.C_PANEL,
-            bd=0, relief='flat', highlightthickness=0,
-        )
-        self._hud_canvas.grid(row=1, column=0, sticky='ew')
-        self._hud_canvas.bind('<Configure>',
-                              lambda _: self._schedule(self._refresh_hud))
-
-    # Panel 3 — LOG ---------------------------------------------------------
-    def _build_log(self, root):
-        frm = tk.Frame(root, bg=self.C_BG)
-        frm.grid(row=2, column=0, sticky='nsew', padx=4, pady=(2, 0))
-        frm.columnconfigure(0, weight=1)
-        frm.rowconfigure(1, weight=1)
-
-        self._log_hdr = self._hdr(frm, 0, 'LOG', self.C_BLUE)
-
-        # Use the larger FONT_LOG for the log text widget
-        self._log_txt = tk.Text(
-            frm, bg=self.C_PANEL, fg=self.C_TEXT,
-            font=self.FONT_LOG, bd=0, relief='flat',
-            state='disabled', wrap='word',
-        )
-        sb = tk.Scrollbar(frm, command=self._log_txt.yview,
-                          bg=self.C_BORDER, troughcolor=self.C_SEP,
-                          relief='flat', bd=0)
+        f=panel(2); f.rowconfigure(1,weight=1); hdr(f,0,'LOG',_P['blue'])
+        self._log_txt=tk.Text(f,bg=_P['panel'],fg=_P['text'],font=_F['log'],
+                              bd=0,state='disabled',wrap='word')
+        sb=tk.Scrollbar(f,command=self._log_txt.yview,bg=_P['border'],
+                        troughcolor=_P['sep'],relief='flat',bd=0)
         self._log_txt.configure(yscrollcommand=sb.set)
-        self._log_txt.grid(row=1, column=0, sticky='nsew')
-        sb.grid(row=1, column=1, sticky='ns')
-        self._apply_tags(self._log_txt)
+        self._log_txt.grid(row=1,column=0,sticky='nsew'); sb.grid(row=1,column=1,sticky='ns')
+        _apply_tags(self._log_txt)
 
-    # Panel 4 — INPUT -------------------------------------------------------
-    def _build_input(self, root):
-        frm = tk.Frame(root, bg=self.C_BG)
-        frm.grid(row=3, column=0, sticky='nsew', padx=4, pady=(2, 4))
-        frm.columnconfigure(1, weight=1)
+        f=panel(3,(2,4)); f.columnconfigure(0,weight=0); f.columnconfigure(1,weight=1); hdr(f,0,'INPUT',_P['magenta'])
+        self._prompt_lbl=tk.Label(f,text='>  ',bg=_P['panel'],fg=_P['gold'],font=_F['b'],padx=6)
+        self._prompt_lbl.grid(row=1,column=0,sticky='w')
+        self._input_var=tk.StringVar()
+        self._input_ent=tk.Entry(f,textvariable=self._input_var,bg=_P['panel'],fg=_P['text'],
+                                 insertbackground=_P['text'],font=_F['n'],relief='flat',bd=4)
+        self._input_ent.grid(row=1,column=1,sticky='ew',padx=(0,6),pady=4)
+        self._input_ent.bind('<Return>',self._on_enter); self._input_ent.focus_set()
 
-        self._input_hdr = self._hdr(frm, 0, 'INPUT', self.C_MAGENTA)
+    # ── art ──────────────────────────────────────────────────────────────────
+    def _redraw(self): self._schedule(self._refresh_art); self._schedule(self._refresh_hud)
 
-        self._prompt_lbl = tk.Label(
-            frm, text='>  ', bg=self.C_PANEL, fg=self.C_GOLD,
-            font=self.FONT_B, padx=6,
-        )
-        self._prompt_lbl.grid(row=1, column=0, sticky='w')
-
-        self._input_var = tk.StringVar()
-        self._input_ent = tk.Entry(
-            frm, textvariable=self._input_var,
-            bg=self.C_PANEL, fg=self.C_TEXT,
-            insertbackground=self.C_TEXT,
-            font=self.FONT, relief='flat', bd=4,
-        )
-        self._input_ent.grid(row=1, column=1, sticky='ew', padx=(0, 6), pady=4)
-        self._input_ent.bind('<Return>', self._on_enter)
-        self._input_ent.focus_set()
-
-    def _apply_tags(self, w):
-        for name, opts in self._TAGS.items():
-            w.tag_configure(name, **opts)
-
-    # ART panel -------------------------------------------------------------
     def _refresh_art(self):
-        t = self._art_txt
-        t.configure(state='normal')
-        t.delete('1.0', 'end')
-        s = self._state
-        if s.mode == 'combat':
-            self._set_art_font(self.FONT_COMBAT, mode='combat')
-            self._art_hdr.configure(text='  ⚔  COMBAT', fg=self.C_YELLOW)
-            self._draw_combat(t, s)
+        t,s=self._art_txt,self._state; t.configure(state='normal'); t.delete('1.0','end')
+        if s.mode=='combat':
+            if self._art_font_mode!='combat':
+                t.configure(font=_F['com']); self._char_width=None; self._art_font_mode='combat'
+            self._art_hdr.configure(text='  ⚔  COMBAT',fg=_P['yellow']); self._draw_combat(t,s)
         else:
-            self._set_art_font(self.FONT_SM, mode='explore')
-            name = s.room.name if s.room else '…'
-            self._art_hdr.configure(text=f'  {name}', fg=self.C_CYAN)
-            self._draw_explore(t, s)
+            if self._art_font_mode!='explore':
+                t.configure(font=_F['sm']); self._char_width=None; self._art_font_mode='explore'
+            self._art_hdr.configure(text=f'  {s.room.name if s.room else "…"}',fg=_P['cyan'])
+            self._draw_explore(t,s)
         t.configure(state='disabled')
 
-    def _set_art_font(self, font, mode: str):
-        """Apply a font to ART panel and reset cached width if changed."""
-        if self._art_font_mode != mode:
-            self._art_txt.configure(font=font)
-            self._char_width = None
-            self._art_font_mode = mode
-
-    def _set_art_text(self, content: str):
-        """Internal: Set raw art text."""
-        t = self._art_txt
-        t.configure(state='normal')
-        t.delete('1.0', 'end')
-        t.insert('end', content, 'white')
-        t.configure(state='disabled')
-
-    # SIDE-BY-SIDE combat ---------------------------------------------------
-    def _get_char_width(self):
-        """Return pixel width of a monospace character in the art Text widget."""
+    def _char_px(self):
         if self._char_width is None:
-            import tkinter.font as tkfont
-            font_obj = tkfont.Font(font=self._art_txt['font'])
-            self._char_width = font_obj.measure('0')
-            if self._char_width <= 0:
-                self._char_width = 5   # fallback
+            import tkinter.font as tkf
+            self._char_width=tkf.Font(font=self._art_txt['font']).measure('0') or 5
         return self._char_width
 
-    def _draw_combat(self, t, s):
-        alive = [e for e in s.enemies if e.is_alive and not getattr(e, 'fled', False)]
-        if not alive:
-            t.insert('end', '\n  ✦ All enemies defeated!\n', 'green')
-            return
+    def _draw_combat(self,t,s):
+        alive=[e for e in s.enemies if e.is_alive and not getattr(e,'fled',False)]
+        if not alive: t.insert('end','\n  ✦ All enemies defeated!\n','green'); return
+        n=len(alive); col=max(26,(max(t.winfo_width(),480)//self._char_px()-4-2*(n-1))//n)
+        cards=[self._enemy_card(i,e,col) for i,e in enumerate(alive,1)]
+        h=max(len(c) for c in cards)
+        for c in cards:
+            while len(c)<h: c.append([(' '*col,'')])
+        t.insert('end','\n')
+        for ri in range(h):
+            t.insert('end','  ')
+            for ci,card in enumerate(cards):
+                used=0
+                for txt,tag in card[ri]:
+                    t.insert('end',txt,(tag,) if tag else ()); used+=len(txt)
+                if max(0,col-used): t.insert('end',' '*(col-used))
+                if ci<n-1: t.insert('end','  ')
+            t.insert('end','\n')
 
-        n = len(alive)
-        ch_px = self._get_char_width()
-        px_w = max(t.winfo_width(), 480)
-        total = px_w // ch_px - 4
-        gap = 2
-        col_w = max(26, (total - gap * (n - 1)) // n)
-
-        cards = [self._enemy_card_rows(i, e, col_w) for i, e in enumerate(alive, start=1)]
-        height = max(len(c) for c in cards)
-
-        for card in cards:
-            while len(card) < height:
-                card.append([(' ' * col_w, '')])
-
-        t.insert('end', '\n')
-        for ri in range(height):
-            t.insert('end', '  ')
-            for ci, card in enumerate(cards):
-                used = 0
-                for text, tag in card[ri]:
-                    t.insert('end', text, (tag,) if tag else ())
-                    used += len(text)
-                pad = max(0, col_w - used)
-                if pad:
-                    t.insert('end', ' ' * pad)
-                if ci < n - 1:
-                    t.insert('end', ' ' * gap)
-            t.insert('end', '\n')
-
-    def _enemy_card_rows(self, idx, enemy, col_w):
-        rows = []
-
-        hpct = enemy.current_hp / max(enemy.max_hp, 1)
-        hcol = 'hp_good' if hpct > 0.5 else ('hp_mid' if hpct > 0.25 else 'hp_low')
-        bw = max(6, min(12, col_w - 15))
-        hp_bar = _make_bar(enemy.current_hp, enemy.max_hp, bw)
-        ap_bar = _make_bar(getattr(enemy, 'current_ap', 0), getattr(enemy, 'total_ap', 18), 6, '◆', '◇')
-
-        def row(*segs):
-            return list(segs)
-
-        def txt(s, tag='', width=col_w):
-            return (s[:width].ljust(width), tag)
-
-        # Intent display
-        if _is_stunned(enemy):
-            intent, itag = '→ ⚡STUNNED', 'yellow'
-        elif hasattr(enemy, 'active_intents') and enemy.active_intents:
-            m0 = enemy.active_intents[0]
-            extra = f'+{len(enemy.active_intents)-1}' if len(enemy.active_intents) > 1 else ''
-            intent, itag = f'→{m0.id}({m0.ap_cost}){_move_hint(m0)}{extra}', 'red'
-        else:
-            intent, itag = '→ ???', 'dim'
-
-        st = _strip(_format_statuses(enemy))
-
-        crest = ""
-        if getattr(enemy, "art_asset", None):
-            art = self._load_room_art(enemy.template_id or enemy.name.lower(), enemy.art_asset)
-            if art:
-                crest = art.splitlines()[0].strip()[:8]
-        title = f'[{idx}] {enemy.name}'
-        if crest:
-            title = f"{title} {crest}"
-
-        # Build card rows in desired order
-        rows.append(row(txt(title, 'bold')))
-        rows.append(row(txt(intent, itag)))
-        rows.append(row(txt(f'HP[{hp_bar}] {enemy.current_hp}/{enemy.max_hp}', hcol)))
-        rows.append(row(txt(f'AP[{ap_bar}] {getattr(enemy, "current_ap", 0)}/{getattr(enemy, "total_ap", 18)}', 'ap')))
-
-        # Room and movement hint go AFTER the AP line
-        room_name = getattr(enemy, "combat_room_id", "unknown")
-        hint = getattr(enemy, "movement_hint", "?")
-        rows.append(row(txt(f"Room: {room_name}", 'dim')))
-        rows.append(row(txt(f"Move: {hint}", 'cyan')))
-
-        if st:
-            rows.append(row(txt(f'[{st}]', 'yellow')))
-
+    def _enemy_card(self,idx,e,col):
+        hpct=e.current_hp/max(e.max_hp,1)
+        hcol='hp_good' if hpct>0.5 else('hp_mid' if hpct>0.25 else 'hp_low')
+        bw=max(6,min(12,col-15)); row=lambda s,tg='':[(s[:col].ljust(col),tg)]
+        hp_b=_bar(e.current_hp,e.max_hp,bw)
+        ap_b=_bar(getattr(e,'current_ap',0),getattr(e,'total_ap',18),6,'◆','◇')
+        if _stunned(e): intent,itag='→ ⚡STUNNED','yellow'
+        elif hasattr(e,'active_intents') and e.active_intents:
+            m=e.active_intents[0]; hint=getattr(m,'intent_hint','')
+            extra=f'+{len(e.active_intents)-1}' if len(e.active_intents)>1 else ''
+            intent,itag=f'→{m.id}({m.ap_cost}){" "+hint if hint else ""}{extra}','red'
+        else: intent,itag='→ ???','dim'
+        crest=''
+        if getattr(e,'art_asset',None):
+            art=self._load_art(getattr(e,'template_id',None) or e.name.lower(),e.art_asset)
+            if art: crest=art.splitlines()[0].strip()[:8]
+        title=f'[{idx}] {e.name}'+(' '+crest if crest else ''); st=_strip(_statuses(e))
+        rows=[row(title,'bold'),row(intent,itag),
+              row(f'HP[{hp_b}] {e.current_hp}/{e.max_hp}',hcol),
+              row(f'AP[{ap_b}] {getattr(e,"current_ap",0)}/{getattr(e,"total_ap",18)}','ap'),
+              row(f"Room: {getattr(e,'combat_room_id','unknown')}",'dim'),
+              row(f"Move: {getattr(e,'movement_hint','?')}",'cyan')]
+        if st: rows.append(row(f'[{st}]','yellow'))
         return rows
 
-    # Explore art -----------------------------------------------------------
-    def _load_room_art(self, room_id: str, art_asset: str | None = None) -> str | None:
+    def _load_art(self,room_id,art_asset=None):
         if art_asset:
-            path = Path(art_asset)
-            if not path.is_absolute():
-                path = Path.cwd() / path
-            key = str(path.resolve())
-            if key in self._art_cache:
-                return self._art_cache[key]
-            if path.is_file():
-                try:
-                    art = path.read_text(encoding="utf-8").rstrip("\n")
-                    self._art_cache[key] = art
-                    return art
-                except OSError:
-                    return None
-            return None
-        base = Path("assets") / "rooms"
-        for path in base.rglob(f"{room_id}.txt"):
-            if path.is_file():
-                try:
-                    art = path.read_text(encoding="utf-8").rstrip("\n")
-                    self._art_cache[str(path.resolve())] = art
-                    return art
-                except OSError:
-                    return None
+            p=Path(art_asset) if Path(art_asset).is_absolute() else Path.cwd()/art_asset
+            k=str(p.resolve())
+            if k not in self._art_cache and p.is_file():
+                try: self._art_cache[k]=p.read_text('utf-8').rstrip('\n')
+                except OSError: pass
+            return self._art_cache.get(k)
+        for p in (Path('assets')/'rooms').rglob(f'{room_id}.txt'):
+            k=str(p.resolve())
+            if k not in self._art_cache:
+                try: self._art_cache[k]=p.read_text('utf-8').rstrip('\n')
+                except OSError: pass
+            return self._art_cache.get(k)
         return None
 
-    def _draw_explore(self, t, s):
-        # top panel room art --> only art not description that is in logs
-        room = s.room
-        if not room:
-            return
-
-        art = self._load_room_art(room.id, getattr(room, "art_asset", None))
+    def _draw_explore(self,t,s):
+        room=s.room
+        if not room: return
+        art=self._load_art(room.id,getattr(room,'art_asset',None))
         if art:
-            for line in art.splitlines():
-                t.insert('end', f'  {line}\n', 'white')
-            t.insert('end', '\n')
+            for ln in art.splitlines(): t.insert('end',f'  {ln}\n','white')
+            t.insert('end','\n')
         else:
-            desc = str(getattr(room, "description", "")).strip()
-            if desc:
-                for ln in desc.splitlines()[:3]:
-                    t.insert('end', f'  {ln}\n', 'white')
-                t.insert('end', '\n')
-
-        alive = [e for e in getattr(room, 'enemies', []) if e.is_alive]
+            desc=str(getattr(room,'description','')).strip()
+            for ln in desc.splitlines()[:3]: t.insert('end',f'  {ln}\n','white')
+            if desc: t.insert('end','\n')
+        alive=[e for e in getattr(room,'enemies',[]) if e.is_alive]
         if alive:
-            t.insert('end', '  Enemies:  ', 'bold')
-            t.insert('end', ', '.join(e.name for e in alive) + '\n', 'red')
-        if hasattr(room, 'items_on_ground') and room.items_on_ground:
-            t.insert('end', '  Items:    ', 'bold')
-            t.insert('end', ', '.join(_stacked_items(room.items_on_ground)) + '\n', 'white')
-        if hasattr(room, 'objects') and room.objects:
-            visible = [obj.name for obj in room.objects.values() if not obj.hidden]
-            if visible:
-                t.insert('end', '  Objects:  ', 'bold')
-                t.insert('end', ', '.join(visible) + '\n', 'cyan')
+            t.insert('end','  Enemies:  ','bold'); t.insert('end',', '.join(e.name for e in alive)+'\n','red')
+        if getattr(room,'items_on_ground',None):
+            t.insert('end','  Items:    ','bold'); t.insert('end',', '.join(_stacked(room.items_on_ground))+'\n','white')
+        if getattr(room,'objects',None):
+            vis=[o.name for o in room.objects.values() if not o.hidden]
+            if vis:
+                t.insert('end','  Objects:  ','bold'); t.insert('end',', '.join(vis)+'\n','cyan')
 
-    # STATUS / HUD ----------------------------------------------------------
+    # ── hud ──────────────────────────────────────────────────────────────────
     def _refresh_hud(self):
-        c = self._hud_canvas
-        c.delete('all')
-        p = self._state.player
-        if not p:
-            return
+        c,p=self._hud_canvas,self._state.player; c.delete('all')
+        if not p: return
+        W,pad,y0,bh=max(c.winfo_width(),700),8,6,10; bw,lw=400,30
+        chunk=lw+bw+50; gap=max(10,(W-2*pad-3*chunk)//2)
+        xs=[pad+i*(chunk+gap) for i in range(3)]
+        def bar(x,lbl,cur,mx,col):
+            c.create_text(x,y0+bh//2,text=lbl,fill=_P['dim'],font=_F['xs'],anchor='w')
+            bx=x+lw; c.create_rectangle(bx,y0,bx+bw,y0+bh,fill=_P['sep'],outline='')
+            fw=max(0,int(cur/max(mx,1)*bw))
+            if fw: c.create_rectangle(bx,y0,bx+fw,y0+bh,fill=col,outline='')
+            c.create_text(bx+bw+3,y0+bh//2,text=f'{cur}/{mx}',fill=col,font=_F['xs'],anchor='w')
+        hpct=p.current_hp/max(p.max_hp,1)
+        bar(xs[0],'HP',p.current_hp,p.max_hp,_P['green'] if hpct>0.5 else(_P['yellow'] if hpct>0.25 else _P['red']))
+        bar(xs[1],'AP',p.current_ap,getattr(p,'total_ap',20),_P['ap'])
+        bar(xs[2],'MP',getattr(p,'mana',0),getattr(p,'max_mana',0),_P['mp'])
+        y2=y0+bh+8
+        mid='  '.join(filter(None,[_strip(_statuses(p)),'  ·  '.join(getattr(p,'relics',[]))]))
+        if mid: c.create_text(pad,y2+5,text=mid[:120],fill=_P['dim'],font=_F['n'],anchor='w'); y2+=20
+        else: y2+=8
+        c.create_text(pad,y2+5,text=f"Lv {p.level}  XP {p.xp}  Gold {getattr(p,'gold',0)}",
+                      fill=_P['gold'],font=_F['b'],anchor='w')
+        if self._state.world:
+            tn=self._state.world.turn_counter; self._state.turn=tn
+        tn=self._state.turn
+        c.create_text(W-pad,y2+5,text=f"Turn {tn} ({('dawn','day','dusk','night')[(tn//8)%4]})",
+                      fill=_P['dim'],font=_F['b'],anchor='e')
 
-        W = max(c.winfo_width(), 700)
-        pad = 8
-        y1 = 8
-        bar_h = 14
+    # ── log ──────────────────────────────────────────────────────────────────
+    def _append_log(self,line):
+        t=self._log_txt; t.configure(state='normal'); self._insert_ansi(t,line+'\n')
+        t.configure(state='disabled'); t.see('end')
 
-        label_w = 24
-        value_w = 42
-        min_bar = 65
-        min_step = label_w + min_bar + value_w
-        available = max(min_step * 3, W - pad * 2 - 12)
-        step = available // 3
-        bar_w = max(min_bar, step - label_w - value_w)
-        font_size = self.FONT_XS
-
-        def _bar(x, label, cur, mx, fill_col, txt_col=None):
-            txt_col = txt_col or fill_col
-            c.create_text(x, y1 + bar_h // 2, text=label,
-                          fill=self.C_DIM, font=font_size, anchor='w')
-            bx = x + 24
-            c.create_rectangle(bx, y1, bx + bar_w, y1 + bar_h,
-                               fill=self.C_SEP, outline='')
-            fw = max(0, int((cur / max(mx, 1)) * bar_w))
-            if fw:
-                c.create_rectangle(bx, y1, bx + fw, y1 + bar_h,
-                                   fill=fill_col, outline='')
-            c.create_text(bx + bar_w + 3, y1 + bar_h // 2,
-                          text=f'{cur}/{mx}', fill=txt_col,
-                          font=font_size, anchor='w')
-
-        hpct = p.current_hp / max(p.max_hp, 1)
-        hfil = self.C_GREEN if hpct > 0.5 else (self.C_YELLOW if hpct > 0.25 else self.C_RED)
-
-        _bar(pad,          'HP', p.current_hp, p.max_hp, hfil)
-        _bar(pad + step,   'AP', p.current_ap, getattr(p, 'total_ap', 20), self.C_AP)
-        _bar(pad + step*2, 'MP', getattr(p, 'mana', 0), getattr(p, 'max_mana', 0), self.C_MP)
-
-        c.create_text(W - pad, y1 + bar_h // 2,
-                      text=f'Lv{p.level}  XP {p.xp}  Gold {getattr(p, "gold", 0)}',
-                      fill=self.C_GOLD, font=font_size, anchor='e')
-
-        y2 = y1 + bar_h + 8
-        st = _strip(_format_statuses(p))
-        rls = '  ·  '.join(getattr(p, 'relics', []))
-        mid = '  '.join(filter(None, [st, rls]))
-        if mid:
-            c.create_text(pad, y2 + 5, text=mid[:120],
-                          fill=self.C_DIM, font=font_size, anchor='w')
-
-        y3 = y2 + 16
-        base = "attack heal block"
-        if hasattr(p, 'unlocked_commands') and p.unlocked_commands:
-            cmds = sorted(p.unlocked_commands)[:10]
-            base += '  │  ' + ' '.join(cmds[:8])
-        c.create_text(pad, y3 + 5, text=base[:150],
-                      fill=self.C_DIM, font=font_size, anchor='w')
-
-    # LOG -------------------------------------------------------------------
-    def _append_log(self, line: str):
-        t = self._log_txt
-        t.configure(state='normal')
-        self._insert_ansi(t, line + '\n')
-        t.configure(state='disabled')
-        t.see('end')
-
-    def _insert_ansi(self, widget, text: str):
-        parts = _ANSI_SPLIT.split(text)
-        active = []
-        for part in parts:
-            m = re.fullmatch(r'\x1b\[([0-9;]*)m', part)
+    def _insert_ansi(self,w,text):
+        active=[]
+        for part in _ANSI_SPLIT.split(text):
+            m=re.fullmatch(r'\x1b\[([0-9;]*)m',part)
             if m:
-                codes = m.group(1).split(';') if m.group(1) else ['0']
-                for code in codes:
-                    if code in ('0', ''):
-                        active = []
-                    elif code == '1':
-                        if 'bold' not in active:
-                            active.append('bold')
-                    elif code == '2':
-                        if 'dim' not in active:
-                            active.append('dim')
+                for code in (m.group(1).split(';') if m.group(1) else ['0']):
+                    if code in('0',''): active=[]
+                    elif code=='1' and 'bold' not in active: active.append('bold')
+                    elif code=='2' and 'dim'  not in active: active.append('dim')
                     elif code in _CODE_TAG:
-                        active = [t for t in active if t not in _CODE_TAG.values()]
+                        active=[x for x in active if x not in _CODE_TAG.values()]
                         active.append(_CODE_TAG[code])
-            elif part:
-                widget.insert('end', part, tuple(active) if active else ())
+            elif part: w.insert('end',part,tuple(active) if active else())
 
-    # Input -----------------------------------------------------------------
-    def _on_enter(self, _event=None):
-        val = self._input_var.get()
-        self._input_var.set('')
-        self._input_result = val
-        self._input_event.set()
-        self._input_ent.focus_set()
-        return 'break'
-
-    # Misc ------------------------------------------------------------------
-    def _schedule(self, fn):
-        if self._root:
-            self._root.after(0, fn)
-
-    def _game_thread(self, game_fn):
-        try:
-            game_fn()
-        except SystemExit:
-            pass
+    # ── lifecycle ─────────────────────────────────────────────────────────────
+    def _on_enter(self,_=None):
+        self._input_result=self._input_var.get(); self._input_var.set('')
+        self._input_event.set(); self._input_ent.focus_set(); return 'break'
+    def _schedule(self,fn):
+        if self._root: self._root.after(0,fn)
+    def _game_thread(self,fn):
+        try: fn()
+        except SystemExit: pass
         except Exception:
-            tb_str = traceback.format_exc()
-            last_frame = traceback.extract_tb(sys.exc_info()[2])[-1]
-            exc = sys.exc_info()[1]
-            short = (
-                f"{type(exc).__name__}: {exc}\n"
-                f"  File: {last_frame.filename}, "
-                f"Line {last_frame.lineno}: {last_frame.line}"
-            )
-            self._schedule(lambda msg=short: self._append_log(f'\n  [Error]\n  {msg}'))
-            print(tb_str, file=sys.stderr)
-        finally:
-            self._input_result = ''
-            self._input_event.set()
-
+            tb=traceback.format_exc(); frm=traceback.extract_tb(sys.exc_info()[2])[-1]; exc=sys.exc_info()[1]
+            msg=f"{type(exc).__name__}: {exc}\n  File: {frm.filename}, Line {frm.lineno}: {frm.line}"
+            self._schedule(lambda m=msg: self._append_log(f'\n  [Error]\n  {m}'))
+            print(tb,file=sys.stderr)
+        finally: self._input_result=''; self._input_event.set()
     def _on_close(self):
-        self._input_result = ''
-        self._input_event.set()
-        if self._root:
-            self._root.destroy()
+        self._input_result=''; self._input_event.set()
+        if self._root: self._root.destroy()
         sys.exit(0)
 
-# Global instance
-window = GameWindow()
+window=GameWindow()
