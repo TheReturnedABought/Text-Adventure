@@ -1,10 +1,4 @@
-"""Dice expression parser and roller.
-
-Supports expressions like '3d6+2', '1d4-1', flat numbers.
-"""
-
-from __future__ import annotations
-
+# game/dice.py
 import math
 import random
 import re
@@ -12,10 +6,8 @@ from dataclasses import dataclass
 
 _DICE_RE = re.compile(r"^\s*(\d+)d(\d+)([+-]\d+)?\s*$", re.I)
 
-
 @dataclass
 class DiceExpression:
-    """Represents a parsed dice expression."""
     count: int
     sides: int
     modifier: int = 0
@@ -40,25 +32,10 @@ class DiceExpression:
         total, _, _ = self.roll_with_breakdown()
         return total
 
-    def roll_with_breakdown(self) -> tuple[int, list[int], int]:
+    def roll_with_breakdown(self):
         rolls = [random.randint(1, self.sides) for _ in range(max(0, self.count))]
         total = sum(rolls) + self.modifier
         return total, rolls, self.modifier
-
-    def min_value(self) -> int:
-        if self.count <= 0:
-            return self.modifier
-        return self.count + self.modifier
-
-    def max_value(self) -> int:
-        if self.count <= 0:
-            return self.modifier
-        return self.count * self.sides + self.modifier
-
-    def average(self) -> float:
-        if self.count <= 0:
-            return float(self.modifier)
-        return self.count * (self.sides + 1) / 2 + self.modifier
 
     def multiply_count(self, factor: float) -> "DiceExpression":
         new_count = max(0, int(math.ceil(self.count * float(factor))))
@@ -68,9 +45,7 @@ class DiceExpression:
         return DiceExpression(self.count, self.sides, self.modifier + int(bonus), self.raw)
 
     def __str__(self) -> str:
-        if self.count <= 0:
-            return str(self.modifier)
-        if self.modifier == 0:
-            return f"{self.count}d{self.sides}"
+        if self.count <= 0: return str(self.modifier)
+        if self.modifier == 0: return f"{self.count}d{self.sides}"
         sign = "+" if self.modifier > 0 else ""
         return f"{self.count}d{self.sides}{sign}{self.modifier}"

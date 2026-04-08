@@ -3,6 +3,5 @@
   "name": "wildflower",
   "slot": "misc",
   "description": "A small, pale blue flower. It seems to glow faintly in the dark.",
-  "material": "flesh",
-  "readable_text": "The petals are soft and cool. It smells of rain and old stone."
+  "material": "Plant"
 }
