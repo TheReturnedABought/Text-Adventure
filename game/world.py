@@ -108,6 +108,34 @@ def coerce_damage_type(raw: str) -> DamageType | None:
     return next((dt for dt in DamageType if dt.value == text), None)
 
 
+# ----------------------------------------------------------------------
+# Shared utility: apply passive effects from equipped items
+# ----------------------------------------------------------------------
+def apply_turn_passives(player: "Player", world_map: "WorldMap", current_room_id: str) -> list[str]:
+    """Apply passive effects from equipped items (Beast's Heart, Arcane Cloak).
+    Returns a list of log lines to be displayed.
+    """
+    lines = []
+    room = world_map.get_room(current_room_id)
+    if not room:
+        return lines
+
+    for item in player.equipped.values():
+        if "beasts_heart" in item.item_flags and (room.id.startswith("wyrmwood") or room.material.value == "flesh"):
+            healed = player.heal(1)
+            if healed:
+                lines.append("Beast's Heart regenerates 1 HP.")
+        if "arcane_cloak" in item.item_flags:
+            before = player.mana
+            player.mana = min(player.max_mana, player.mana + 1)
+            if player.mana > before:
+                lines.append("Arcane Cloak restores 1 MP.")
+    return lines
+
+
+# ----------------------------------------------------------------------
+# WorldObject and Room classes
+# ----------------------------------------------------------------------
 @dataclass
 class WorldObject:
     id: str
@@ -336,9 +364,6 @@ class WorldMap:
     def neighbors_of(self, room_id: str) -> list[str]:
         room = self.get_room(room_id)
         return [rid for rid in room.exits.values() if rid in self.rooms] if room else []
-
-    def neighbor_rooms(self, room_id: str) -> list[str]:
-        return self.neighbors_of(room_id)
 
     def shortest_path(self, start: str, goal: str, blocked: set[str] | None = None) -> list[str]:
         if start == goal:

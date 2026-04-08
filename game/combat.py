@@ -15,7 +15,7 @@ from game.commands import CommandContext
 from game.dice import DiceExpression
 from game.effects import EffectTrigger, EffectCategory, StatusEffect
 from game.models import ParsedCommand, ArticleType
-from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction
+from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction, apply_turn_passives  # CHANGED: import shared function
 from game.window import window
 
 if TYPE_CHECKING:
@@ -187,13 +187,10 @@ class CombatController:
             self._resolve_block(parsed, result)
             action_performed = True
         elif intent in {"ability", "cast", "use"}:
-            # Spend AP/MP first (already checked they are sufficient)
             self.player.spend_ap(parsed.ap_cost)
             self.player.mana -= parsed.mp_cost
             result.ap_spent = parsed.ap_cost
-            # Resolve ability (returns restoration amounts, adds any non‑restoration messages)
             restore_ap, restore_mp = self._resolve_ability(parsed, result)
-            # Apply restoration silently (no messages)
             if restore_ap > 0:
                 self.player.current_ap = min(self.player.total_ap, self.player.current_ap + restore_ap)
             if restore_mp > 0:
@@ -209,7 +206,6 @@ class CombatController:
             result.add("That command has no combat resolver yet.")
 
         if result.outcome == CombatOutcome.ONGOING and action_performed:
-            # For other commands that didn't already spend AP (attack, block, etc.)
             if intent not in {"ability", "cast", "use"}:
                 self.player.spend_ap(parsed.ap_cost)
                 self.player.mana -= parsed.mp_cost
@@ -234,7 +230,8 @@ class CombatController:
             result.add(line)
         for line in self._tick_enemy_damage_over_time():
             result.add(line)
-        for line in self._apply_turn_passives():
+        # CHANGED: replaced duplicate method with shared utility
+        for line in apply_turn_passives(self.player, self.world, self.player_room_id):
             result.add(line)
 
         for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
@@ -305,7 +302,6 @@ class CombatController:
 
         if will_flee:
             result.add("You try to flee, but enemies react!")
-            # Enemies get a full turn before you leave
             for enemy in [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]:
                 enemy.reset_ap()
                 enemy.plan_turn(self.player)
@@ -316,7 +312,6 @@ class CombatController:
                     return result
 
             if self.player.is_alive:
-                # Reset AP to full instead of spending
                 self.player.current_ap = self.player.total_ap
                 result.ap_spent = 0
                 self.player_room_id = target_room_id
@@ -331,7 +326,6 @@ class CombatController:
                 result.outcome = CombatOutcome.PLAYER_DEFEATED
             return result
 
-        # Normal move (staying in combat zone) – spend AP as usual
         self.player.spend_ap(ap_cost)
         result.ap_spent = ap_cost
         self.player_room_id = target_room_id
@@ -363,7 +357,6 @@ class CombatController:
         dice = self._build_attack_dice(cmd, parsed)
         total, rolls, mod = dice.roll_with_breakdown()
 
-        # Determine if we are using a specific weapon
         weapon_bonus = 0
         if parsed.item_name:
             weapon_bonus = self.player.weapon_attack_bonus(parsed.item_name)
@@ -372,10 +365,8 @@ class CombatController:
                 return False
             total += weapon_bonus
         else:
-            # Use base attack (no weapon bonuses)
             total += self.player.base_attack_value()
 
-        # Apply material interactions
         room_material = self._current_room_material()
         interaction = resolve_material_interaction(damage_type, room_material)
         total = int(total * interaction.damage_multiplier)
@@ -384,7 +375,6 @@ class CombatController:
         target_interaction = resolve_material_interaction(damage_type, target_material)
         total = int(total * target_interaction.damage_multiplier)
 
-        # Apply enemy-specific vulnerabilities and resistances
         vuln_mult = 2.0 if damage_type.value in target.vulnerabilities else 1.0
         resist_mult = 0.5 if damage_type.value in target.resistances else 1.0
         total = int(total * vuln_mult * resist_mult)
@@ -392,18 +382,17 @@ class CombatController:
         if used_weapon and "bone_crusher" in used_weapon.item_flags and "skeleton" in target.template_id:
             total += 2
 
-        # Article bonus
         if parsed.article == ArticleType.GENERIC:
             total += self.registry.article_rule.generic_flat_bonus
         elif parsed.article == ArticleType.SPECIFIC:
             total += self.registry.article_rule.specific_flat_bonus
 
         dealt = target.receive_damage(total)
-        result.add(f"You hit {target.name} for {dealt} damage ({self._format_roll(dice, rolls, total)}).")
+        # CHANGED: inline _format_roll
+        result.add(f"You hit {target.name} for {dealt} damage (rolled {dice} -> {rolls} = {total}).")
         for line in self._apply_weapon_on_hit_effects(used_weapon, target, dealt):
             result.add(line)
 
-        # Environmental reaction
         env_lines = self._apply_environmental_reaction(damage_type, target)
         for line in env_lines:
             result.add(line)
@@ -452,7 +441,6 @@ class CombatController:
         result.add(f"You brace yourself, gaining {block_value} block.")
 
     def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:
-        """Returns (restore_ap, restore_mp) after resolving ability effects. No messages for restoration."""
         name = (parsed.item_name or parsed.target_name or "").lower()
         restore_ap = 0
         restore_mp = 0
@@ -480,7 +468,6 @@ class CombatController:
                             result.add(target.apply_effect(effect))
                 else:
                     result.add(f"You use {ability.name}.")
-                # Collect restoration values (no messages added here)
                 restore_ap = int(ability.payload.get("restore_ap", 0) or 0)
                 restore_mp = int(ability.payload.get("restore_mp", 0) or 0)
                 return restore_ap, restore_mp
@@ -517,7 +504,6 @@ class CombatController:
             result.add("No combat commands available.")
             return
         for cmd in sorted(cmds, key=lambda c: c.name):
-            # AP cost for display only – we don't recalc here
             result.add(f"{cmd.name} - {cmd.description}")
 
     # ----------------------------------------------------------------------
@@ -644,25 +630,9 @@ class CombatController:
         self.player.combat_defense_bonus += 1
         result.add("Gambeson of Scars hardens. Defense +1 (combat).")
 
-    def _apply_turn_passives(self) -> list[str]:
-        lines: list[str] = []
-        if self.world and self.player_room_id:
-            room = self.world.get_room(self.player_room_id)
-            if room:
-                for item in self.player.equipped.values():
-                    if "beasts_heart" in item.item_flags and (self.player_room_id.startswith("wyrmwood") or room.material.value == "flesh"):
-                        healed = self.player.heal(1)
-                        if healed:
-                            lines.append("Beast's Heart regenerates 1 HP.")
-                    if "arcane_cloak" in item.item_flags:
-                        before = self.player.mana
-                        self.player.mana = min(self.player.max_mana, self.player.mana + 1)
-                        if self.player.mana > before:
-                            lines.append("Arcane Cloak restores 1 MP.")
-        return lines
+    # CHANGED: removed duplicate _apply_turn_passives method
 
     def _enemy_step_toward_player(self, enemy: "Enemy") -> bool:
-        # Guard AI never moves from its home room
         if getattr(enemy, "ai_profile", "") == "guard" and enemy.guard_home:
             return False
         if not self.world or not self.player_room_id:
@@ -748,7 +718,6 @@ class CombatController:
     # Movement hints
     # ----------------------------------------------------------------------
     def _direction_hint_to_enemy(self, enemy: "Enemy") -> str:
-        """Return a string like 'south' or 'south → east' to reach the enemy's room."""
         if not self.world or not self.player_room_id:
             return "?"
         enemy_room = enemy.combat_room_id or getattr(enemy, "current_zone", None)
@@ -798,9 +767,6 @@ class CombatController:
             if mod.flat_bonus:
                 out = out.add_modifier(mod.flat_bonus)
         return out
-
-    def _format_roll(self, expr: DiceExpression, rolls: list[int], total: int) -> str:
-        return f"rolled {expr} -> {rolls} = {total}"
 
     def _has_ranged_weapon(self) -> bool:
         for item in self.player.equipped.values():

@@ -1,4 +1,4 @@
-# game/parser.py (corrected)
+# game/parser.py (corrected) – only the dead methods removed
 
 from __future__ import annotations
 
@@ -258,8 +258,6 @@ class CommandParser:
         if not valid:
             return self._make_error(raw, error_msg, article)
 
-        # AP and MP costs are command-definition driven so encounters can be tuned in data.
-        # If an override exists we use it; otherwise base cost minus equipment reductions.
         if cmd_def.ap_cost_override is not None:
             ap_cost = max(0, int(cmd_def.ap_cost_override))
         else:
@@ -320,23 +318,7 @@ class CommandParser:
         joined = " ".join(tokens)
         return (joined or None), None
 
-    def needs_disambiguation(self, target_name: str | None, candidates: list) -> bool:
-        if not target_name or not candidates:
-            return False
-        fragment = target_name.lower()
-        matches = [c for c in candidates if fragment in str(c).lower()]
-        return len(matches) > 1
-
-    def build_disambiguation_prompt(self, candidates: list) -> str:
-        lines = ["Which one?"]
-        for i, candidate in enumerate(candidates, start=1):
-            lines.append(f"  {i}. {candidate}")
-        return "\n".join(lines)
-
-    def resolve_target_by_index(self, index: int, candidates: list):
-        if 1 <= index <= len(candidates):
-            return candidates[index - 1]
-        return None
+    # DELETED: needs_disambiguation, build_disambiguation_prompt, resolve_target_by_index
 
     def validate_command(self, intent: str, player: "Player", context: CommandContext) -> tuple[bool, str]:
         cmd_def = self.registry.get_command(intent)

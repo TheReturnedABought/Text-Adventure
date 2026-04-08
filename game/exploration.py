@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from game.commands import CommandContext
 from game.window import window
 from game.models import EquippableItem
+from game.world import apply_turn_passives   # CHANGED: import shared function
+
 if TYPE_CHECKING:
     from game.entities import Player, Enemy
     from game.models import ParsedCommand, EquippableItem
@@ -57,7 +59,9 @@ class ExplorationController:
             handled = self._resolve_garnish_rule(raw, result)
             if not handled:
                 result.add(parsed.error or "Invalid command.")
-            self._apply_turn_passives(result)
+            # CHANGED: replaced duplicate method with shared utility
+            for line in apply_turn_passives(self.player, self.world, self.world.current_room_id):
+                result.add(line)
             aggressors = self.world.enemies_visible_from_current()
             if aggressors:
                 result.combat_triggered = True
@@ -96,9 +100,10 @@ class ExplorationController:
         else:
             result.add("Nothing happens.")
 
-        self._apply_turn_passives(result)
+        # CHANGED: replaced duplicate method with shared utility
+        for line in apply_turn_passives(self.player, self.world, self.world.current_room_id):
+            result.add(line)
 
-        # Check for combat trigger
         aggressors = self.world.enemies_visible_from_current()
         if aggressors:
             result.combat_triggered = True
@@ -107,6 +112,9 @@ class ExplorationController:
             result.lines.extend(self.world.step_enemy_outside_combat(self.world.current_room_id))
         return result
 
+    # ----------------------------------------------------------------------
+    # Rest of the class unchanged (only the duplicate method removed)
+    # ----------------------------------------------------------------------
     def _resolve_go(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
         direction = (parsed.target_name or "").strip().lower()
         if not direction:
@@ -186,7 +194,6 @@ class ExplorationController:
             result.add("Take what?")
             return
 
-        # First check items on ground
         matching_id = None
         for item_id in room.items_on_ground:
             if target in item_id.lower():
@@ -202,10 +209,8 @@ class ExplorationController:
             result.add(f"Picked up {item_obj.name}.")
             return
 
-        # Then check moveable objects
         obj = room.find_object(target)
         if obj and obj.is_moveable:
-            # Convert object to a simple misc item
             item = EquippableItem(
                 id=obj.id,
                 name=obj.name,
@@ -219,13 +224,9 @@ class ExplorationController:
                     self.puzzle_flags["compass_unlock_shown"] = True
                     self.world.global_flags["compass_unlock_shown"] = True
                     result.add("You now know how to use 'compass' (or 'exits') to check your bearings.")
-            # Remove object from room
             del room.objects[obj.id]
-            # Add to player inventory
             self.player.inventory.append(item)
             result.add(f"Picked up {obj.name}.")
-
-            # Remove the description snippet so the placeholder becomes empty
             for key in (obj.id, f"{obj.id}_desc"):
                 if key in room.description_snippets:
                     room.description_snippets[key] = ""
@@ -238,7 +239,6 @@ class ExplorationController:
         result.add("No such item on the ground or moveable object here.")
 
     def _resolve_put(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        """Put an item into a container (like the cabinet)."""
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -249,36 +249,28 @@ class ExplorationController:
             result.add("Put what where?")
             return
 
-        # Expect format: "item in container"
         parts = re.split(r'\s+(?:in|into)\s+', target, maxsplit=1)
         if len(parts) != 2:
             result.add("Usage: put <item> in <container>")
             return
         item_name, container_name = parts[0].strip(), parts[1].strip()
 
-        # Find container object
         container = room.find_object(container_name)
         if not container or not container.is_container:
             result.add(f"There is no container named '{container_name}' here.")
             return
 
-        # Find item in inventory
         item = self.player.find_in_inventory(item_name)
         if not item:
             result.add(f"You don't have '{item_name}'.")
             return
 
-        # Deposit logic (special handling for cabinet)
         if container.id == "cabinet":
-            # Add double score
             self.player.add_score(item.value * 2)
             result.add(f"You deposit {item.name} into the cabinet. +{item.value * 2} score!")
-            # Add to cabinet's items_inside list (for persistence)
             if item.id not in container.items_inside:
                 container.items_inside.append(item.id)
-            # Remove from player inventory
             self.player.inventory.remove(item)
-            # Update room description snippet to show cabinet contents
             if container.items_inside:
                 contents_str = ", ".join(container.items_inside)
                 container.description_snippets["contents"] = contents_str
@@ -286,7 +278,6 @@ class ExplorationController:
                 container.description_snippets["contents"] = "nothing"
             return
 
-        # Generic container handling
         result.add(f"You put the {item.name} into the {container.name}, but nothing special happens.")
 
     def _resolve_data_rule(self, parsed: "ParsedCommand", result: ExplorationResult) -> bool:
@@ -415,7 +406,6 @@ class ExplorationController:
         result.add("Available commands: " + ", ".join(sorted(c.name for c in cmds)))
 
     def _resolve_read(self, parsed: "ParsedCommand", result: ExplorationResult) -> None:
-        """Read a readable object in the room (object, ground item, inventory, equipped)."""
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -459,23 +449,9 @@ class ExplorationController:
 
         result.add("You don't see that here.")
 
-    def _apply_turn_passives(self, result: ExplorationResult) -> None:
-        room = self.world.current_room()
-        if not room:
-            return
-        for item in self.player.equipped.values():
-            if "beasts_heart" in item.item_flags and (room.id.startswith("wyrmwood") or room.material.value == "flesh"):
-                healed = self.player.heal(1)
-                if healed:
-                    result.add("Beast's Heart regenerates 1 HP.")
-            if "arcane_cloak" in item.item_flags:
-                before = self.player.mana
-                self.player.mana = min(self.player.max_mana, self.player.mana + 1)
-                if self.player.mana > before:
-                    result.add("Arcane Cloak restores 1 MP.")
+    # CHANGED: removed duplicate _apply_turn_passives method
 
     def _resolve_compass(self, result: ExplorationResult) -> None:
-        """Display available exits from current room using the compass."""
         if not self._has_compass():
             result.add("You don't have a compass.")
             return
@@ -494,7 +470,6 @@ class ExplorationController:
         result.add(f"The compass needle points to: {', '.join(dirs)}.")
 
     def _has_compass(self) -> bool:
-        """Return True if player has any item with 'compass' flag."""
         for item in self.player.inventory:
             if "compass" in getattr(item, "item_flags", []):
                 return True
