@@ -58,11 +58,10 @@
       "items_inside": [],
       "on_interact": {
         "look": "A sturdy cabinet. The brass handle is polished from use. Inside you see: {contents}.",
-        "open": "You open the cabinet. Inside you see: {contents}.",
+        "open": "You open the cabinet. Inside you see: {contents}."
       },
       "required_commands": {}
     }
-  ],
   ],
   "items_on_ground": [],
   "enemy_spawns": [],

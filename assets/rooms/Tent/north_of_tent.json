@@ -13,7 +13,7 @@
   ],
   "exits": {
     "north": "foot_of_mountain",
-    "south": "tent_interieur",
+    "south": "tent_interior",
     "east": "east_of_tent",
     "west": "west_of_tent"
   },
