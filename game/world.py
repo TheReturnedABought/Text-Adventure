@@ -180,13 +180,20 @@ class Room:
     def add_enemy(self, enemy: Enemy) -> None:
         enemy.current_zone = self.id; enemy.combat_room_id = self.id
         self.enemies.append(enemy)
+
     def remove_enemy(self, enemy: Enemy) -> None:
         self.enemies = [e for e in self.enemies if e is not enemy]
+
+    def living_enemies(self) -> List[Enemy]:
+        """Return all enemies in this room that are still alive."""
+        return [e for e in self.enemies if e.is_alive]
+
     def find_object(self, name: str) -> Optional[WorldObject]:
         needle = name.lower()
         for obj in self.objects.values():
             if not obj.hidden and needle in obj.name.lower(): return obj
         return None
+
     def find_matching_rule(self, intent: str, target_name: Optional[str] = None) -> Optional[dict]:
         command = (intent or "").strip().lower()
         target = (target_name or "").strip().lower()
@@ -197,10 +204,12 @@ class Room:
             if targets and target not in targets: continue
             return rule
         return None
+
     def enemies_visible_from(self, from_room: "Room") -> List[Enemy]:
         if self.light_level <= 1: return []
         if from_room.id not in self.line_of_sight and self.id not in from_room.line_of_sight: return []
         return [e for e in self.enemies if e.is_alive]
+
     def apply_elemental_effect(self, effect_type: str, source) -> List[str]:
         dt = coerce_damage_type(effect_type)
         if not dt: return [f"The {effect_type} energy dissipates."]
@@ -210,6 +219,7 @@ class Room:
         if interaction.spreads: lines.append("The effect spreads through the environment.")
         if interaction.applies_status: lines.append(f"Nearby entities risk becoming {interaction.applies_status}.")
         return lines
+
     def update_after_combat(self) -> None:
         if not [e for e in self.enemies if e.is_alive]:
             for obj in self.objects.values():
@@ -230,8 +240,11 @@ class WorldMap:
         self.rooms[room.id] = room
         if room.is_start and not self.start_room_id: self.start_room_id = room.id
         if not self.current_room_id: self.current_room_id = room.id
+
     def current_room(self) -> Optional[Room]: return self.rooms.get(self.current_room_id)
+
     def get_room(self, room_id: str) -> Optional[Room]: return self.rooms.get(room_id)
+
     def neighbors_of(self, room_id: str) -> List[str]:
         room = self.get_room(room_id)
         return [rid for rid in room.exits.values() if rid in self.rooms] if room else []

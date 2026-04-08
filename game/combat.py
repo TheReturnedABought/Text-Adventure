@@ -94,18 +94,22 @@ class CombatController:
         if parsed.mp_cost > getattr(self.player, "mana", 0): result.add("Not enough MP."); return result
 
         handler = {
-            "attack": self._attack, "block": self._block, "ability": self._ability, "equip": self._equip,
-            "flee": self._flee, "go": self._go, "status": self._status, "help": self._help, "wait": self._wait
+            "attack": self._attack, "block": self._block, "ability": self._ability,
+            "equip": self._equip, "flee": self._flee, "go": self._go,
+            "status": self._status, "help": self._help, "wait": self._wait
         }.get(parsed.intent)
         if handler:
             action = handler(parsed, result)
-            if result.outcome == CombatOutcome.ONGOING and action:
-                if parsed.intent not in {"ability","cast","use"}:
-                    self.player.spend_ap(parsed.ap_cost); self.player.mana -= parsed.mp_cost
-                    result.ap_spent = parsed.ap_cost
+            # Deduct resources only for non‑ability commands (abilities deduct inside _ability)
+            if parsed.intent not in {"ability","cast","use"} and action:
+                self.player.spend_ap(parsed.ap_cost)
+                self.player.mana -= parsed.mp_cost
+                result.ap_spent = parsed.ap_cost
+            if action:
                 for line in self.player.tick_effects(EffectTrigger.ON_ACTION): result.add(line)
                 self._refresh_combat_zone()
-        else: result.add("That command has no combat resolver yet.")
+        else:
+            result.add("That command has no combat resolver yet.")
         result.outcome = self.check_outcome() if result.outcome == CombatOutcome.ONGOING else result.outcome
         if result.outcome == CombatOutcome.ONGOING and self.player.current_ap <= 0:
             end = self.end_player_turn()
@@ -300,7 +304,20 @@ class CombatController:
         restore_ap = restore_mp = 0
         for item in self.player.equipped.values():
             for ability in item.abilities:
-                if name and name not in ability.name.lower() and name != ability.id.lower(): continue
+                if name and name not in ability.name.lower() and name != ability.id.lower():
+                    continue
+                # Deduct AP/MP before executing
+                if not self.player.spend_ap(parsed.ap_cost):
+                    result.add("Not enough AP.")
+                    return False
+                if parsed.mp_cost > getattr(self.player, "mana", 0):
+                    result.add("Not enough MP.")
+                    # Refund AP because we already spent it
+                    self.player.current_ap += parsed.ap_cost
+                    return False
+                self.player.mana -= parsed.mp_cost
+                result.ap_spent = parsed.ap_cost
+
                 if ability.dice_expression:
                     dice = DiceExpression.parse(ability.dice_expression)
                     dmg = dice.roll()
@@ -309,14 +326,21 @@ class CombatController:
                         dealt = target.receive_damage(dmg)
                         result.add(f"You use {ability.name} and deal {dealt} damage.")
                         if ability.effect_on_hit:
-                            effect = StatusEffect(id=ability.effect_on_hit, name=ability.effect_on_hit.capitalize(), description="",
-                                                  trigger=EffectTrigger.ON_TURN_END, category=EffectCategory.DEBUFF,
-                                                  duration=ability.effect_duration, stacks=ability.effect_stacks)
+                            effect = StatusEffect(
+                                id=ability.effect_on_hit,
+                                name=ability.effect_on_hit.capitalize(),
+                                description="",
+                                trigger=EffectTrigger.ON_TURN_END,
+                                category=EffectCategory.DEBUFF,
+                                duration=ability.effect_duration,
+                                stacks=ability.effect_stacks
+                            )
                             result.add(target.apply_effect(effect))
-                else: result.add(f"You use {ability.name}.")
+                else:
+                    result.add(f"You use {ability.name}.")
                 restore_ap = int(ability.payload.get("restore_ap", 0) or 0)
                 restore_mp = int(ability.payload.get("restore_mp", 0) or 0)
-                if restore_ap>0 or restore_mp>0:
+                if restore_ap > 0 or restore_mp > 0:
                     self.player.current_ap = min(self.player.total_ap, self.player.current_ap + restore_ap)
                     self.player.mana = min(self.player.max_mana, self.player.mana + restore_mp)
                 return True
