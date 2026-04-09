@@ -49,7 +49,6 @@
       "modifiers_allowed": ["heavy", "quick"],
       "tags": ["melee", "single-target"],
       "world_use_hint": null,
-      "base_ap_cost": 6,
       "unlocked_by_default": false
     },
     {
@@ -64,7 +63,6 @@
       "modifiers_allowed": ["heavy"],
       "tags": ["defense", "block"],
       "world_use_hint": null,
-      "base_ap_cost": 5,
       "unlocked_by_default": false
     },
     {
@@ -79,7 +77,6 @@
       "modifiers_allowed": ["heavy"],
       "tags": ["melee", "single-target", "destructive"],
       "world_use_hint": "You smash the __.",
-      "base_ap_cost": 5,
       "unlocked_by_default": false
     },
     {
@@ -94,7 +91,6 @@
       "modifiers_allowed": [],
       "tags": ["inventory"],
       "world_use_hint": null,
-      "base_ap_cost": 5,
       "unlocked_by_default": true
     },
     {
@@ -109,7 +105,6 @@
       "modifiers_allowed": [],
       "tags": ["inventory"],
       "world_use_hint": null,
-      "base_ap_cost": 7,
       "unlocked_by_default": true
     },
     {
@@ -124,7 +119,6 @@
       "modifiers_allowed": [],
       "tags": ["ability"],
       "world_use_hint": null,
-      "base_ap_cost": 7,
       "unlocked_by_default": false
     },
     {
@@ -139,7 +133,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {
@@ -154,7 +147,6 @@
       "modifiers_allowed": [],
       "tags": ["movement"],
       "world_use_hint": null,
-      "base_ap_cost": 2,
       "unlocked_by_default": true
     },
     {
@@ -169,7 +161,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -184,7 +175,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 2,
       "unlocked_by_default": true
     },
     {
@@ -199,7 +189,6 @@
       "modifiers_allowed": [],
       "tags": ["interaction", "puzzle"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -214,7 +203,6 @@
       "modifiers_allowed": [],
       "tags": ["interaction"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -229,7 +217,6 @@
       "modifiers_allowed": [],
       "tags": ["interaction"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -244,7 +231,6 @@
       "modifiers_allowed": [],
       "tags": ["interaction"],
       "world_use_hint": "You move the __.",
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -259,7 +245,6 @@
       "modifiers_allowed": [],
       "tags": ["inventory"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -274,7 +259,6 @@
       "modifiers_allowed": [],
       "tags": ["inventory"],
       "world_use_hint": null,
-      "base_ap_cost": 4,
       "unlocked_by_default": true
     },
     {
@@ -289,7 +273,6 @@
       "modifiers_allowed": [],
       "tags": ["inventory"],
       "world_use_hint": null,
-      "base_ap_cost": 3,
       "unlocked_by_default": true
     },
     {
@@ -304,7 +287,6 @@
       "modifiers_allowed": [],
       "tags": ["interaction"],
       "world_use_hint": null,
-      "base_ap_cost": 5,
       "unlocked_by_default": true
     },
     {
@@ -319,7 +301,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {
@@ -334,7 +315,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {
@@ -349,7 +329,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {
@@ -364,7 +343,6 @@
       "modifiers_allowed": [],
       "tags": ["meta"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": true
     },
     {
@@ -379,7 +357,6 @@
       "modifiers_allowed": [],
       "tags": ["meta", "utility"],
       "world_use_hint": null,
-      "base_ap_cost": 0,
       "unlocked_by_default": false
    }
   ]

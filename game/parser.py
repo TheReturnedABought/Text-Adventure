@@ -90,16 +90,10 @@ class CommandParser:
         return True
 
     def _compute_costs(self, cmd_def, player, raw_text: str) -> Tuple[int, int]:
-        if cmd_def.ap_cost_override is not None:
-            ap = max(0, int(cmd_def.ap_cost_override))
-        else:
-            reduction = player.ap_cost_reduction_for_text(raw_text)
-            ap = max(1, cmd_def.base_ap_cost - reduction)
-        if cmd_def.name in {"take", "put"}:
-            for item in player.equipped.values():
-                if "faster_take_put" in item.item_flags:
-                    ap = max(0, ap - 1)
-                    break
+        base_ap = max(1, len(raw_text.strip()))
+        reduction = player.ap_cost_reduction_for_text(raw_text)
+        ap = max(1, base_ap - reduction)
+
         if cmd_def.costs_mp:
             if cmd_def.mp_cost_override is not None:
                 mp = max(0, int(cmd_def.mp_cost_override))

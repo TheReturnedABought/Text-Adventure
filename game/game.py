@@ -137,17 +137,28 @@ class TextAdventureGame:
         self._print_end_screen()
 
     def _enter_combat(self, aggressors: list[Enemy]):
-        if not self.world or not self.parser: window.append_log("Combat system not available."); return
+        if not self.world or not self.parser:
+            window.append_log("Combat system not available.")
+            return
+        # Reset player AP for combat
+        self.player.current_ap = self.player.total_ap
+        self.player.mana = self.player.max_mana  # also reset MP if desired
         for e in aggressors:
             rid = getattr(e, "combat_room_id", self.world.current_room_id)
             room = self.world.get_room(rid)
-            if room and e not in room.enemies: room.add_enemy(e)
-        self.combat = CombatController(self.parser, self.registry, self.player, aggressors,
-                                       self.world, self.world.current_room_id, self.exploration.puzzle_flags if self.exploration else {}, debug=self.debug)
+            if room and e not in room.enemies:
+                room.add_enemy(e)
+        self.combat = CombatController(
+            self.parser, self.registry, self.player, aggressors,
+            self.world, self.world.current_room_id,
+            self.exploration.puzzle_flags if self.exploration else {},
+            debug=self.debug
+        )
         window.append_log(self.combat.start_encounter())
         self.state = GameState.COMBAT
         cur_room = self.world.current_room()
-        if cur_room: window.set_combat(self.player, cur_room, self.combat.enemies)
+        if cur_room:
+            window.set_combat(self.player, cur_room, self.combat.enemies)
 
     def _on_combat_won(self):
         window.append_log("You won the encounter.")
