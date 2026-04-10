@@ -1,0 +1,35 @@
+{
+  "id": "cave_side_chamber",
+  "name": "Narrow Side Chamber",
+  "description": "A cramped chamber opens to the east, its low ceiling forcing you to stoop. The walls glisten with moisture, and the air here feels still and heavy, as if undisturbed for a long time.",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 2,
+  "ambient": [
+    "Droplets cling to the ceiling before falling in slow, irregular intervals.",
+    "The silence here feels thicker than in the tunnel outside.",
+    "A faint mineral tang lingers in the air."
+  ],
+  "exits": {
+    "west": "cave_descent"
+  },
+  "line_of_sight": [],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["search", "look"],
+      "targets": ["ground", "floor"],
+      "text": "You scan the uneven ground. Among the damp stones, something small catches your eye before slipping back into shadow.",
+      "requires": null
+    },
+    {
+      "commands": ["touch", "feel"],
+      "targets": ["wall", "walls"],
+      "text": "The walls are slick and cold. Your fingers trace shallow grooves, as if something has scraped along them repeatedly.",
+      "requires": null
+    }
+  ],
+}

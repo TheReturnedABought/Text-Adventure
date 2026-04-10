@@ -13,7 +13,7 @@
   ],
   "exits": {
     "south": "cave_bridge_south",
-    "up": "cave_entrance"
+    "north": "cave_descent"
   },
   "line_of_sight": [
     "cave_bridge_south",

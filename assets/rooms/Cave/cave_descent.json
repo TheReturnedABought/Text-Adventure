@@ -1,0 +1,38 @@
+{
+  "id": "cave_descent",
+  "name": "Sloping Tunnel",
+  "description": "A narrow tunnel slopes downward, the rock worn smooth by ages of dripping water. The air grows colder as you descend, and the faint light from above quickly fades into shadow. The narrow tunnel continues south with a narrower tunnel east",
+  "material": "stone",
+  "is_outdoor": false,
+  "is_start": false,
+  "light_level": 3,
+  "ambient": [
+    "Water trickles along the edges of the path, disappearing into cracks.",
+    "Your footsteps echo softly in the confined space."
+  ],
+  "exits": {
+    "up": "cave_entrance",
+    "south": "cave_bridge_north",
+    "east": "cave_side_chamber"
+  },
+  "line_of_sight": [
+    "cave_entrance"
+  ],
+  "objects": [],
+  "items_on_ground": [],
+  "enemy_spawns": [],
+  "interaction_rules": [
+    {
+      "commands": ["listen"],
+      "targets": [],
+      "text": "You pause and listen. Beneath the dripping water, there’s a deep, distant emptiness below.",
+      "requires": null
+    },
+    {
+      "commands": ["touch", "feel"],
+      "targets": ["wall", "walls"],
+      "text": "The walls are damp and unnaturally smooth, as if worn down over countless years.",
+      "requires": null
+    }
+  ]
+}

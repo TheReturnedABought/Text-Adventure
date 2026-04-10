@@ -12,7 +12,7 @@
     "A few pale roots dangle from the ceiling, motionless."
   ],
   "exits": {
-    "down": "cave_bridge_north",
+    "down": "cave_descent",
     "east": "foot_of_mountain"
   },
   "line_of_sight": [],
