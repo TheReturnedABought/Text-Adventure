@@ -1,0 +1,25 @@
+{
+  "id": "giant_rat",
+  "name": "Giant Rat",
+  "description": "A mangy rat the size of a dog. Its yellow teeth are bared.",
+  "material": "flesh",
+  "max_hp": 8,
+  "attack": 3,
+  "defense": 0,
+  "total_ap": 12,
+  "ai_profile": "aggressive",
+  "intent_pool": [
+    {
+      "id": "bite",
+      "intent_type": "attack",
+      "description": "bites you with its filthy teeth",
+      "dice_expression": "1d4+1",
+      "ap_cost": 5,
+      "weight": 4
+    }
+  ],
+  "loot_table": [
+    { "item_id": "copper_coin", "chance": 0.6, "count_expression": "1d2" }
+  ],
+  "xp_reward": 15
+}

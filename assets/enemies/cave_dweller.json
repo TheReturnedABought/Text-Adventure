@@ -1,0 +1,34 @@
+{
+  "id": "cave_dweller",
+  "name": "Cave Dweller",
+  "description": "A pale, eyeless creature with long limbs and a toothless maw. It moves silently in the dark.",
+  "material": "flesh",
+  "max_hp": 12,
+  "attack": 6,
+  "defense": 0,
+  "total_ap": 18,
+  "ai_profile": "ambusher",
+  "vulnerabilities": ["light", "fire"],
+  "intent_pool": [
+    {
+      "id": "ambush",
+      "intent_type": "attack",
+      "description": "strikes from the shadows",
+      "dice_expression": "1d8+2",
+      "ap_cost": 7,
+      "weight": 4
+    },
+    {
+      "id": "retreat",
+      "intent_type": "flee",
+      "description": "scurries back into the darkness",
+      "ap_cost": 4,
+      "weight": 1,
+      "condition": "hp_below_half"
+    }
+  ],
+  "loot_table": [
+    { "item_id": "copper_coin", "chance": 0.4, "count_expression": "1d2" }
+  ],
+  "xp_reward": 18
+}
