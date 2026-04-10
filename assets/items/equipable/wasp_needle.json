@@ -2,6 +2,7 @@
   "id": "wasp_needle",
   "name": "Wasp Needle",
   "slot": "weapon",
+  "damage_type": "piercing",
   "description": "A thin dagger that leaves venom in the blood.",
   "material": "metal",
   "tier": 2,

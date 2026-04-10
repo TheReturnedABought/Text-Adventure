@@ -75,7 +75,8 @@ class AssetLoader:
             ability_cost_reductions=dict(data.get("ability_cost_reductions", {})), abilities=abilities,
             equip_requirements=dict(data.get("equip_requirements", {})), upgrade_path=data.get("upgrade_path"),
             item_flags=data.get("item_flags", []), on_hit_effects=dict(data.get("on_hit_effects", {})),
-            passive_effects=dict(data.get("passive_effects", {})), value=int(data.get("value", 0))
+            passive_effects=dict(data.get("passive_effects", {})), value=int(data.get("value", 0)),
+            damage_type=data.get("damage_type")   # NEW
         )
 
     def load_all_items(self) -> Dict[str, EquippableItem]:

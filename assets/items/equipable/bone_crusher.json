@@ -2,6 +2,7 @@
   "id": "bone_crusher",
   "name": "Bone Crusher",
   "slot": "weapon",
+  "damage_type": "bludgeoning",
   "description": "A brutal mace that splinters brittle foes.",
   "material": "metal",
   "tier": 2,

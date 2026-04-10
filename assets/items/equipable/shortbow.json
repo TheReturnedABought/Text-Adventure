@@ -2,6 +2,7 @@
   "id": "shortbow",
   "name": "Shortbow",
   "slot": "weapon",
+  "damage_type": "piercing",
   "item_type": "bow",
   "description": "A well‑strung shortbow. The limbs still have some spring.",
   "material": "wood",

@@ -2,6 +2,7 @@
   "id": "fungal_shiv",
   "name": "Fungal Shiv",
   "slot": "weapon",
+  "damage_type": "piercing",
   "description": "A pitted dagger packed with toxic spores.",
   "material": "metal",
   "tier": 2,

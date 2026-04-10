@@ -1,8 +1,4 @@
-"""Combat controller – turn order, AP costs, targeting, zone-based LOS.
-
-Enemies enter/leave combat based on line of sight (combat zone).
-Ranged attacks reach any visible room; melee requires same room.
-"""
+"""Combat controller – turn order, AP costs, targeting, zone-based LOS."""
 from __future__ import annotations
 
 import random
@@ -55,7 +51,6 @@ class CombatController:
             print(f"[DEBUG] {msg}")
 
     # --- Zone helpers ---
-
     def _zone_ids(self, room_id: str) -> set[str]:
         room = self.world.get_room(room_id) if self.world else None
         return {room.id, *room.line_of_sight} if room else set()
@@ -79,23 +74,17 @@ class CombatController:
         return in_zone
 
     def _has_ranged_weapon(self) -> bool:
-        """Return True if any equipped item has a ranged flag (regardless of slot)."""
         for item in self.player.equipped.values():
             flags = [f.lower() for f in getattr(item, "item_flags", [])]
             if "ranged" in flags or "ranged_attack" in flags:
-                self._log(f"Ranged weapon detected: {item.name} (slot {item.slot}) with flags {flags}")
                 return True
-        self._log("No ranged weapon equipped.")
         return False
 
     def _eligible_targets(self, ranged: bool) -> list["Enemy"]:
         living = [e for e in self.enemies if e.is_alive and self._enemy_in_zone(e)]
-        self._log(f"Living enemies in zone: {[e.name for e in living]}")
         if ranged or self._has_ranged_weapon():
-            self._log(f"Ranged attack (ranged={ranged}, has_ranged={self._has_ranged_weapon()}) – all visible enemies eligible.")
             return living
         same_room = [e for e in living if e.combat_room_id == self.player_room_id]
-        self._log(f"Melee only – eligible: {[e.name for e in same_room]}")
         return same_room
 
     def _refresh_movement_hints(self) -> None:
@@ -103,7 +92,6 @@ class CombatController:
             enemy.movement_hint = self._direction_hint_to_enemy(enemy)
 
     # --- Encounter ---
-
     def start_encounter(self) -> str:
         self._refresh_combat_zone()
         self._refresh_movement_hints()
@@ -114,7 +102,6 @@ class CombatController:
         return f"Combat begins! You face: {', '.join(e.name for e in self.enemies if e.is_alive)}."
 
     # --- Player input ---
-
     def player_input(self, raw: str) -> TurnResult:
         result = TurnResult()
         if self._pending_disambiguation:
@@ -227,7 +214,6 @@ class CombatController:
             result.outcome = end.outcome
 
     # --- Turn flow ---
-
     def end_player_turn(self) -> TurnResult:
         result = TurnResult()
         self.player.clear_block()
@@ -251,7 +237,7 @@ class CombatController:
             e.plan_turn(self.player)
         for line in self.player.tick_effects(EffectTrigger.ON_TURN_START):
             result.add(line)
-        self._refresh_movement_hints()  # refresh at start of player's new turn
+        self._refresh_movement_hints()
         result.outcome = self.check_outcome()
         return result
 
@@ -279,7 +265,6 @@ class CombatController:
         return CombatOutcome.ONGOING
 
     # --- Combat movement ---
-
     def _handle_combat_movement(self, parsed: ParsedCommand, result: TurnResult) -> TurnResult:
         direction = parsed.target_name
         if not direction:
@@ -323,17 +308,34 @@ class CombatController:
         return result
 
     def _move_player(self, room_id: str, result: TurnResult) -> None:
-        """Reposition player; refresh zone and hints from new room; describe room."""
         self.player_room_id = room_id
         self.world.current_room_id = room_id
         self._refresh_combat_zone()
-        self._refresh_movement_hints()  # computed from new position
+        self._refresh_movement_hints()
         new_room = self.world.current_room()
         if new_room:
             result.add(new_room.get_description(verbose=False))
 
-    # --- Attack resolution ---
+    # --- Damage type for attack ---
+    def _get_damage_type_for_attack(self, parsed: ParsedCommand, weapon, cmd: CommandDefinition) -> DamageType:
+        intent = parsed.intent or ""
+        # Basic attack uses weapon's damage_type
+        if intent == "attack":
+            if weapon and getattr(weapon, "damage_type", None):
+                dt = coerce_damage_type(weapon.damage_type)
+                if dt:
+                    return dt
+            # Unarmed
+            return DamageType.BLUDGEONING
+        # Other commands use command tags
+        if cmd:
+            for tag in cmd.tags:
+                dt = coerce_damage_type(tag)
+                if dt:
+                    return dt
+        return DamageType.SLASHING
 
+    # --- Attack resolution ---
     def _resolve_attack(self, parsed: ParsedCommand, result: TurnResult,
                         forced_target: "Enemy | None" = None) -> bool:
         target = forced_target or self._resolve_target(parsed, result)
@@ -343,28 +345,47 @@ class CombatController:
         self._pending_attack_parsed = None
 
         cmd = self.registry.get_command(parsed.intent or "attack")
-        damage_type = DamageType.SLASHING
-        if cmd:
-            for tag in cmd.tags:
-                dt = coerce_damage_type(tag)
-                if dt:
-                    damage_type = dt
-                    break
-
-        dice = self._build_attack_dice(cmd, parsed)
-        total, rolls, _ = dice.roll_with_breakdown()
-
         weapon = self._active_weapon(parsed.item_name)
+        damage_type = self._get_damage_type_for_attack(parsed, weapon, cmd)
+
+        # Build dice expression
+        base_dice = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(self.player.attack_value())
+        dice = self._apply_modifiers(base_dice, parsed.modifiers)
+        dice_roll, rolls, mod = dice.roll_with_breakdown()
+
         base_attack = self.player.base_attack_value()
+        # Determine formula components
+        if cmd and cmd.base_dice:
+            # Attack uses command dice + base attack
+            formula_parts = [f"base {base_attack}", f"{dice_str}"]
+            roll_sum = dice_roll + base_attack
+        else:
+            formula_parts = [dice_str]
+            roll_sum = dice_roll
+            base_attack = 0
+
+        weapon_bonus = 0
         if parsed.item_name:
-            bonus = self.player.weapon_attack_bonus(parsed.item_name)
-            if not bonus:
+            weapon_bonus = self.player.weapon_attack_bonus(parsed.item_name)
+            if not weapon_bonus:
                 result.add(f"You don't have '{parsed.item_name}' equipped.")
                 return False
-            total += bonus
-        else:
-            total += base_attack
+            roll_sum += weapon_bonus
+            formula_parts.append(f"weapon {weapon_bonus}")
 
+        # Article bonuses
+        article_bonus = 0
+        if parsed.article == ArticleType.GENERIC:
+            article_bonus = self.registry.article_rule.generic_flat_bonus
+        elif parsed.article == ArticleType.SPECIFIC:
+            article_bonus = self.registry.article_rule.specific_flat_bonus
+        if article_bonus:
+            roll_sum += article_bonus
+            formula_parts.append(f"article {article_bonus}")
+
+        total_before_mult = roll_sum
+
+        # Material interactions
         room_mat = Material.STONE
         if self.world and self.player_room_id:
             room = self.world.get_room(self.player_room_id)
@@ -375,25 +396,52 @@ class CombatController:
         except ValueError:
             target_mat = Material.FLESH
 
-        total = int(total * resolve_material_interaction(damage_type, room_mat).damage_multiplier)
+        total = int(total_before_mult * resolve_material_interaction(damage_type, room_mat).damage_multiplier)
         total = int(total * resolve_material_interaction(damage_type, target_mat).damage_multiplier)
+
+        # Vulnerability / resistance
+        vuln_mult = 1.0
+        eff_msg = ""
         if damage_type.value in getattr(target, "vulnerabilities", []):
-            total = int(total * 2.0)
-        if damage_type.value in getattr(target, "resistances", []):
-            total = int(total * 0.5)
+            vuln_mult = 2.0
+            eff_msg = " It's super effective!"
+        elif damage_type.value in getattr(target, "resistances", []):
+            vuln_mult = 0.5
+            eff_msg = " It's not very effective..."
+        total = int(total * vuln_mult)
+
+        # Weapon-specific bonuses (bone crusher)
         if weapon and "bone_crusher" in weapon.item_flags and "skeleton" in target.template_id:
             total += 2
-        if parsed.article == ArticleType.GENERIC:
-            total += self.registry.article_rule.generic_flat_bonus
-        elif parsed.article == ArticleType.SPECIFIC:
-            total += self.registry.article_rule.specific_flat_bonus
 
-        dealt = target.receive_damage(total)
-        # Clearer damage breakdown
-        if parsed.item_name:
-            result.add(f"You hit {target.name} for {dealt} damage (weapon bonus + {dice} -> {rolls} = {total}).")
+        dealt = target.receive_damage(max(0, total))
+
+        # Build the attack message with clear breakdown
+        # Example: "You hit Skeleton Archer for 7 slashing damage. (4 + 1d6+2 → 4+[3]+2 = 9) It's super effective!"
+        formula_str = " + ".join(formula_parts)
+        # Show individual component rolls: base_attack (plain), dice rolls, etc.
+        # We'll reconstruct the breakdown visually
+        breakdown_parts = []
+        if base_attack:
+            breakdown_parts.append(str(base_attack))
+        if cmd and cmd.base_dice:
+            breakdown_parts.append(f"[{'+'.join(map(str, rolls))}]")
+            if mod:
+                breakdown_parts.append(str(mod))
         else:
-            result.add(f"You hit {target.name} for {dealt} damage (base {base_attack} + {dice} -> {rolls} = {total}).")
+            # For flat dice without base_attack
+            breakdown_parts.append(f"[{'+'.join(map(str, rolls))}]")
+            if mod:
+                breakdown_parts.append(str(mod))
+        if weapon_bonus:
+            breakdown_parts.append(str(weapon_bonus))
+        if article_bonus:
+            breakdown_parts.append(str(article_bonus))
+        breakdown = " + ".join(breakdown_parts)
+        total_display = total_before_mult
+        result.add(f"You hit {target.name} for {dealt} {damage_type.value} damage. ({formula_str} → {breakdown} = {total_display}){eff_msg}")
+
+        # On-hit effects
         for line in self._weapon_on_hit_effects(weapon, target, dealt):
             result.add(line)
         if self.world and self.player_room_id:
@@ -404,7 +452,6 @@ class CombatController:
         return True
 
     # --- Ability ---
-
     def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:
         name = (parsed.item_name or parsed.target_name or "").lower()
         for item in self.player.equipped.values():
@@ -450,7 +497,6 @@ class CombatController:
         return (0, 0)
 
     # --- Enemy turns ---
-
     def _resolve_enemy_intent(self, enemy: "Enemy", intent, result: TurnResult) -> None:
         kind = getattr(intent.intent_type, "name", "ATTACK")
 
@@ -522,7 +568,6 @@ class CombatController:
         return True
 
     # --- Passive / DOT effects ---
-
     def _tick_enemy_dot(self) -> list[str]:
         lines: list[str] = []
         for enemy in [e for e in self.enemies if e.is_alive]:
@@ -595,7 +640,6 @@ class CombatController:
         result.add("Gambeson of Scars hardens. Defense +1 (combat).")
 
     # --- Target selection ---
-
     def _resolve_target(self, parsed: ParsedCommand, result: TurnResult) -> "Enemy | None":
         cmd = self.registry.get_command(parsed.intent or "")
         ranged = (bool(cmd and "ranged" in [t.lower() for t in cmd.tags])) or self._has_ranged_weapon()
@@ -662,7 +706,6 @@ class CombatController:
         return None
 
     # --- Movement hints ---
-
     def _direction_hint_to_enemy(self, enemy: "Enemy") -> str:
         if not self.world or not self.player_room_id:
             return "?"
@@ -688,7 +731,6 @@ class CombatController:
         return direction
 
     # --- Dice helpers ---
-
     def _build_attack_dice(self, cmd: "CommandDefinition | None", parsed: ParsedCommand) -> DiceExpression:
         base = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(self.player.attack_value())
         return self._apply_modifiers(base, parsed.modifiers)

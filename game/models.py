@@ -37,9 +37,11 @@ class EquippableItem:
     on_hit_effects: Dict = field(default_factory=dict)
     passive_effects: Dict = field(default_factory=dict)
     value: int = 0
+    damage_type: Optional[str] = None   # "slashing", "piercing", "bludgeoning"
 
     def __post_init__(self):
-        if self.value == 0: self.value = self.tier * 10
+        if self.value == 0:
+            self.value = self.tier * 10
 
 @dataclass
 class PassiveTrait:
