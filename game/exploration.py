@@ -1,5 +1,6 @@
 # game/exploration.py
 import re
+import random
 from typing import List, Optional
 
 from game.commands import CommandContext
@@ -33,7 +34,7 @@ class ExplorationController:
         self.world = world
         self.puzzle_flags = puzzle_flags or {}
         self.item_catalog = item_catalog or {}
-        self.game = None  # will be set by game.py after creation
+        self.game = None
         self._handlers = {
             "go": self._go,
             "look": self._look,
@@ -61,18 +62,38 @@ class ExplorationController:
     def player_input(self, raw: str) -> ExplorationResult:
         result = ExplorationResult()
         parsed = self.parser.parse(raw, self.player, CommandContext.WORLD)
+
+        # --- Handle parser errors (including unlock failures) ---
         if not parsed.valid:
-            if not self._resolve_garnish_rule(raw, result):
-                result.add(parsed.error or "Invalid command.")
+            # If the parser returned an error, display it and do NOT fall back to garnish rules
+            # (garnish rules are only for completely unrecognized commands)
+            result.add(parsed.error or "Invalid command.")
             return result
 
         intent = (parsed.intent or "").lower()
+
+        # --- Extra unlock check (safety) ---
+        cmd_def = self.registry.get_command(intent)
+        if cmd_def and cmd_def.requires_unlock and not self.player.has_unlocked(intent):
+            result.add(f"You don't know how to '{intent}' yet. (Unlock it by leveling up your class.)")
+            return result
+
         handler = self._handlers.get(intent)
         if handler:
             handler(parsed, result)
         else:
+            # Only try data/garnish rules if the command is not a standard handler
             if not self._resolve_data_rule(parsed, result) and not self._resolve_garnish_rule(raw, result):
                 result.add("Nothing happens.")
+
+        # Dread mechanic (world flag)
+        if self.puzzle_flags.get("dweller_stalking", False) and random.random() < 0.2:
+            result.add(random.choice([
+                "A chill runs down your spine. You feel as if you're being watched.",
+                "You hear the faintest scrape of stone from the darkness behind you.",
+                "Something moves in the corner of your eye, but when you turn, there's nothing.",
+                "The air grows colder. Your breath fogs slightly."
+            ]))
 
         for line in apply_turn_passives(self.player, self.world, self.world.current_room_id):
             result.add(line)
@@ -87,25 +108,16 @@ class ExplorationController:
         return result
 
     def _visible_enemies_including_los(self) -> List[Enemy]:
-        """Return all alive enemies that are either in the current room or in
-        a room that is in the current room's line_of_sight (and where light
-        level permits visibility)."""
         room = self.world.current_room()
         if not room:
             return []
-
-        # enemies in the same room (already filtered by light)
         enemies = self.world.enemies_visible_from_current()
-
-        # also check line-of-sight rooms
         for other_id in room.line_of_sight:
             other = self.world.get_room(other_id)
-            if other and other.light_level > 1:  # can see into that room
+            if other and other.light_level > 1:
                 for e in other.enemies:
                     if e.is_alive:
                         enemies.append(e)
-
-        # remove duplicates (if an enemy somehow appears twice)
         seen = set()
         unique = []
         for e in enemies:
@@ -133,6 +145,11 @@ class ExplorationController:
                             revealed += 1
                     if revealed:
                         result.add(f"Mirror Shield gleams and reveals {revealed} hidden object(s).")
+            if self.puzzle_flags.get("dweller_stalking", False) and random.random() < 0.2:
+                result.add(random.choice([
+                    "You hear soft scraping behind you, but when you turn, nothing is there.",
+                    "The shadows seem to stretch toward you as you move."
+                ]))
 
     def _look(self, parsed: ParsedCommand, result: ExplorationResult):
         room = self.world.current_room()
@@ -154,6 +171,14 @@ class ExplorationController:
         result.add("You don't see that.")
 
     def _object_command(self, parsed: ParsedCommand, result: ExplorationResult):
+        """Handle commands that target world objects (open, close, smash, etc.)."""
+        intent = parsed.intent or ""
+        # Extra safety: verify command is unlocked
+        cmd_def = self.registry.get_command(intent)
+        if cmd_def and cmd_def.requires_unlock and not self.player.has_unlocked(intent):
+            result.add(f"You don't know how to '{intent}' yet. (Unlock it by leveling up your class.)")
+            return
+
         room = self.world.current_room()
         if not room:
             result.add("No room loaded.")
@@ -165,13 +190,13 @@ class ExplorationController:
         if not obj:
             result.add("No such object here.")
             return
-        ok, reason = obj.can_interact_with(parsed.intent or "", self.player)
+        ok, reason = obj.can_interact_with(intent, self.player)
         if not ok:
             result.add(reason)
             return
-        text, revealed = obj.interact(parsed.intent or "", self.player, room)
+        text, revealed = obj.interact(intent, self.player, room)
         result.add(text)
-        for key, value in obj.set_flags_on_interact.get(parsed.intent or "", {}).items():
+        for key, value in obj.set_flags_on_interact.get(intent, {}).items():
             self.puzzle_flags[str(key)] = bool(value)
             self.world.global_flags[str(key)] = bool(value)
         for new_obj_id in revealed:
@@ -189,7 +214,6 @@ class ExplorationController:
             result.add("Take what?")
             return
 
-        # Check for custom item first (from previous drops)
         for item_id in list(room.items_on_ground):
             if target in item_id.lower():
                 if item_id in room.custom_items:
@@ -198,7 +222,6 @@ class ExplorationController:
                     self.player.pick_up(item)
                     result.add(f"Picked up {item.name}.")
                     return
-                # fallback to catalog
                 item = self.item_catalog.get(item_id)
                 if item:
                     room.items_on_ground.remove(item_id)
@@ -209,19 +232,16 @@ class ExplorationController:
                     result.add(f"Unknown item: {item_id}")
                     return
 
-        # Check moveable object
         obj = room.find_object(target)
         if obj and obj.is_moveable:
-            # First, try to find a matching catalog item by ID
             if obj.id in self.item_catalog:
                 item = self.item_catalog[obj.id]
-                # Ensure the item's name matches object's name (optional)
-                item.name = obj.name  # override if needed
+                item.name = obj.name
             else:
-                # Create a generic item
                 item = EquippableItem(
                     id=obj.id, name=obj.name, slot="misc", description=obj.description,
-                    material=obj.material.value, readable_text=obj.on_interact.get("read") or obj.on_interact.get("look")
+                    material=obj.material.value,
+                    readable_text=obj.on_interact.get("read") or obj.on_interact.get("look")
                 )
             if "compass" in item.item_flags:
                 self.player.unlock_command("compass")
@@ -230,7 +250,6 @@ class ExplorationController:
                     self.world.global_flags["compass_unlock_shown"] = True
                     result.add("You now know how to use 'compass' (or 'exits') to check your bearings.")
             del room.objects[obj.id]
-            # Store in custom_items for future drops
             room.custom_items[obj.id] = item
             self.player.inventory.append(item)
             result.add(f"Picked up {obj.name}.")
@@ -287,7 +306,6 @@ class ExplorationController:
         item, msg = self.player.drop(parsed.target_name)
         result.add(msg)
         if item:
-            # If the item isn't in the catalog (e.g., a custom letter), store it
             if item.id not in self.item_catalog:
                 room.custom_items[item.id] = item
             room.items_on_ground.append(item.id)
@@ -333,7 +351,6 @@ class ExplorationController:
                 return
         for item_id in room.items_on_ground:
             if target in item_id.lower():
-                # Check custom_items first
                 if item_id in room.custom_items:
                     item = room.custom_items[item_id]
                     text = getattr(item, "readable_text", None) or item.description

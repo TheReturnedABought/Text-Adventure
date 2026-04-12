@@ -1,0 +1,43 @@
+{
+  "id": "hydra_head",
+  "name": "Hydra Head",
+  "description": "A serpentine head on a thick neck, eyes burning with hatred. It hisses and snaps.",
+  "material": "flesh",
+  "max_hp": 15,
+  "attack": 4,
+  "defense": 1,
+  "total_ap": 14,
+  "ai_profile": "guard",
+  "vulnerabilities": ["fire", "cold"],
+  "resistances": ["slashing", "piercing", "bludgeoning"],
+  "intent_pool": [
+    {
+      "id": "bite",
+      "intent_type": "attack",
+      "description": "bites with its fanged maw",
+      "dice_expression": "1d8+2",
+      "ap_cost": 6,
+      "weight": 4
+    },
+    {
+      "id": "spit",
+      "intent_type": "attack",
+      "description": "spits a glob of acid",
+      "dice_expression": "1d6+1",
+      "ap_cost": 7,
+      "weight": 2,
+      "tags": ["acid"]
+    }
+  ],
+  "loot_table": [
+    { "item_id": "hydra_scale", "chance": 0.5, "count_expression": "1" }
+  ],
+  "xp_reward": 25,
+  "split": {
+    "trigger_damage_types": ["slashing", "piercing", "bludgeoning"],
+    "spawn_template": "hydra_head",
+    "spawn_count": "2",
+    "max_total": 4,
+    "message": "The severed neck writhes and grows {count} new head(s)!"
+  }
+}

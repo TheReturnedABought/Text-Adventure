@@ -13,6 +13,7 @@ _TYPO_MAP = {
 _ARTICLES = {"the": ArticleType.SPECIFIC, "a": ArticleType.GENERIC, "an": ArticleType.GENERIC}
 _ITEM_PREPS = frozenset({"with", "using"})
 
+
 class CommandParser:
     def __init__(self, registry: CommandRegistry):
         self.registry = registry
@@ -29,6 +30,12 @@ class CommandParser:
         cmd_def = self.registry.get_command(verb)
         if cmd_def is None:
             return self._make_error(raw, self._unknown_feedback(verb, player, context), article)
+
+        # --- Specific availability check with detailed error ---
+        avail_error = self._availability_error(cmd_def, player, context)
+        if avail_error:
+            return self._make_error(raw, avail_error, article)
+
         target_name, target_index = None, None
         if cmd_def.name == "go" and not rest:
             target_name = verb
@@ -38,11 +45,10 @@ class CommandParser:
         for prep in _ITEM_PREPS:
             if prep in rest:
                 idx = rest.index(prep)
-                item_name = " ".join(rest[idx+1:]) or None
+                item_name = " ".join(rest[idx + 1:]) or None
                 rest = rest[:idx]
                 break
-        if not self._is_available(cmd_def, player, context):
-            return self._make_error(raw, f"You can't use '{cmd_def.name}' here.", article)
+
         ap_cost, mp_cost = self._compute_costs(cmd_def, player, normalised)
         return ParsedCommand(
             raw=raw, intent=cmd_def.intent, target_name=target_name,
@@ -69,25 +75,28 @@ class CommandParser:
         for i, token in enumerate(tokens):
             if token in _ARTICLES:
                 article = _ARTICLES[token]
-                remaining = tokens[:i] + tokens[i+1:]
+                remaining = tokens[:i] + tokens[i + 1:]
                 return article, remaining
         return ArticleType.NONE, tokens
 
     def _extract_target(self, tokens: List[str]) -> Tuple[Optional[str], Optional[int]]:
-        if not tokens: return None, None
+        if not tokens:
+            return None, None
         if len(tokens) == 1 and tokens[0].isdigit():
             return None, int(tokens[0])
         return " ".join(tokens), None
 
-    def _is_available(self, cmd_def, player, context: CommandContext) -> bool:
-        if context not in cmd_def.valid_contexts and CommandContext.ANY not in cmd_def.valid_contexts:
-            return False
-        if cmd_def.requires_unlock and not player.has_unlocked(cmd_def.name):
-            return False
-        if cmd_def.unlock_class and getattr(player, "char_class_name", "").lower() != cmd_def.unlock_class.lower():
-            return False
-        if player.level < cmd_def.unlock_level: return False
-        return True
+    def _availability_error(self, cmd, player, context: CommandContext) -> Optional[str]:
+        """Return None if available, else an error string."""
+        if context not in cmd.valid_contexts and CommandContext.ANY not in cmd.valid_contexts:
+            return f"You can't use '{cmd.name}' in this situation."
+        if cmd.requires_unlock and not player.has_unlocked(cmd.name):
+            return f"You don't know how to '{cmd.name}' yet. (Unlock it by leveling up your class.)"
+        if cmd.unlock_class and getattr(player, "char_class_name", "").lower() != cmd.unlock_class.lower():
+            return f"Only the {cmd.unlock_class.title()} class can use '{cmd.name}'."
+        if player.level < cmd.unlock_level:
+            return f"You need to be level {cmd.unlock_level} to use '{cmd.name}'."
+        return None
 
     def _compute_costs(self, cmd_def, player, raw_text: str) -> Tuple[int, int]:
         base_ap = max(1, len(raw_text.strip()))
@@ -104,9 +113,11 @@ class CommandParser:
         return ap, mp
 
     def _unknown_feedback(self, verb: str, player, context: CommandContext) -> str:
-        if not verb: return "What do you want to do?"
+        if not verb:
+            return "What do you want to do?"
         close = get_close_matches(verb, self._known_commands, n=1, cutoff=0.6)
-        if close: return f"I don't know the word '{verb}'. Did you mean '{close[0]}'?"
+        if close:
+            return f"I don't know the word '{verb}'. Did you mean '{close[0]}'?"
         return f"I don't know the word '{verb}'."
 
     def _make_error(self, raw: str, error: str, article: ArticleType) -> ParsedCommand:

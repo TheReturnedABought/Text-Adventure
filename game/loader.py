@@ -121,9 +121,10 @@ class AssetLoader:
                 weight=int(i.get("weight", 1)), condition=i.get("condition"), effect_on_hit=i.get("effect_on_hit"),
                 effect_duration=int(i.get("effect_duration", 1)), tags=i.get("tags", [])
             ))
-        loot = [LootEntry(item_id=row["item_id"], chance=float(row["chance"]), count_expression=str(row.get("count_expression", "1")))
+        loot = [LootEntry(item_id=row["item_id"], chance=float(row["chance"]),
+                          count_expression=str(row.get("count_expression", "1")))
                 for row in t.get("loot_table", [])]
-        return Enemy(
+        enemy = Enemy(
             template_id=template_id, name=t.get("name", template_id), max_hp=int(t.get("max_hp", 10)),
             attack=int(t.get("attack", 3)), defense=int(t.get("defense", 0)), material=t.get("material", "flesh"),
             ai_profile=t.get("ai_profile", "basic"), total_ap=int(t.get("ap", t.get("total_ap", 18))),
@@ -133,6 +134,11 @@ class AssetLoader:
             vulnerabilities=t.get("vulnerabilities", []), resistances=t.get("resistances", []),
             art_asset=t.get("art_asset")
         )
+        # Copy any extra fields from the template onto the enemy instance
+        for key, value in t.items():
+            if not hasattr(enemy, key):
+                setattr(enemy, key, value)
+        return enemy
 
     def instantiate_enemies_for_room(self, spawn_list: List[dict], templates: Dict[str, dict], room_id: str) -> List[Enemy]:
         enemies = []

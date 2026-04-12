@@ -152,7 +152,9 @@ class TextAdventureGame:
             self.parser, self.registry, self.player, aggressors,
             self.world, self.world.current_room_id,
             self.exploration.puzzle_flags if self.exploration else {},
-            debug=self.debug
+            debug=self.debug,
+            loader=self.loader,
+            enemy_templates=self.enemy_templates
         )
         window.append_log(self.combat.start_encounter())
         self.state = GameState.COMBAT

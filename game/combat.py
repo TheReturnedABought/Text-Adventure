@@ -29,7 +29,9 @@ class CombatController:
                  world: "WorldMap | None" = None,
                  player_room_id: str | None = None,
                  puzzle_flags: dict | None = None,
-                 debug: bool = False) -> None:
+                 debug: bool = False,
+                 loader: "AssetLoader | None" = None,
+                 enemy_templates: dict | None = None) -> None:
         self.parser = parser
         self.registry = registry
         self.player = player
@@ -42,6 +44,8 @@ class CombatController:
         self._pending_disambiguation: list["Enemy"] | None = None
         self._pending_attack_parsed: ParsedCommand | None = None
         self._debug = debug
+        self.loader = loader
+        self.enemy_templates = enemy_templates or {}
         self._refresh_combat_zone()
         self.player.combat_defense_bonus = 0
         for e in enemies: e.reset_ap(); e.plan_turn(player)
@@ -317,7 +321,7 @@ class CombatController:
             result.add(new_room.get_description(verbose=False))
 
     # --- Damage type for attack ---
-    def _get_damage_type_for_attack(self, parsed: ParsedCommand, weapon, cmd: CommandDefinition) -> DamageType:
+    def _get_damage_type_for_attack(self, parsed: ParsedCommand, weapon, cmd: CommandDefinition) -> Optional[DamageType]:
         intent = parsed.intent or ""
         # Basic attack uses weapon's damage_type
         if intent == "attack":
@@ -417,10 +421,7 @@ class CombatController:
         dealt = target.receive_damage(max(0, total))
 
         # Build the attack message with clear breakdown
-        # Example: "You hit Skeleton Archer for 7 slashing damage. (4 + 1d6+2 → 4+[3]+2 = 9) It's super effective!"
         formula_str = " + ".join(formula_parts)
-        # Show individual component rolls: base_attack (plain), dice rolls, etc.
-        # We'll reconstruct the breakdown visually
         breakdown_parts = []
         if base_attack:
             breakdown_parts.append(str(base_attack))
@@ -429,7 +430,6 @@ class CombatController:
             if mod:
                 breakdown_parts.append(str(mod))
         else:
-            # For flat dice without base_attack
             breakdown_parts.append(f"[{'+'.join(map(str, rolls))}]")
             if mod:
                 breakdown_parts.append(str(mod))
@@ -449,7 +449,51 @@ class CombatController:
             if room:
                 for line in room.apply_elemental_effect(damage_type.value, self.player):
                     result.add(line)
+
+        # --- SPLITTING LOGIC (flag-based) ---
+        if not target.is_alive:
+            split_data = getattr(target, 'split', None)
+            if split_data:
+                trigger_types = split_data.get('trigger_damage_types', [])
+                if trigger_types:
+                    if damage_type and damage_type.value in trigger_types:
+                        spawn_template = split_data.get('spawn_template', target.template_id)
+                        # Count current living enemies of that template
+                        current_count = sum(1 for e in self.enemies
+                                            if e.is_alive and e.template_id == spawn_template)
+                        max_total = split_data.get('max_total', 99)
+                        if current_count < max_total:
+                            # Parse spawn count (dice expression or integer)
+                            count_expr = split_data.get('spawn_count', '2')
+                            try:
+                                to_spawn = DiceExpression.parse(count_expr).roll()
+                            except Exception:
+                                to_spawn = int(count_expr) if str(count_expr).isdigit() else 2
+                            to_spawn = min(to_spawn, max_total - current_count)
+
+                            if to_spawn > 0:
+                                for _ in range(to_spawn):
+                                    new_enemy = self._create_enemy_from_template(spawn_template)
+                                    # Copy split config so new heads can also split
+                                    new_enemy.split = split_data
+                                    self.enemies.append(new_enemy)
+                                    if self.world and target.combat_room_id:
+                                        room = self.world.get_room(target.combat_room_id)
+                                        if room:
+                                            room.add_enemy(new_enemy)
+                                # Show custom message
+                                msg = split_data.get('message', f"The {target.name} splits into {to_spawn} new enemies!")
+                                result.add(msg.format(count=to_spawn, name=target.name))
         return True
+
+    def _create_enemy_from_template(self, template_id: str) -> Enemy:
+        """Instantiate an enemy from the loaded templates."""
+        if not self.loader or not self.enemy_templates:
+            raise RuntimeError("Enemy loader or templates not available in CombatController")
+        template = self.enemy_templates.get(template_id)
+        if not template:
+            raise ValueError(f"Unknown enemy template: {template_id}")
+        return self.loader.instantiate_enemy(template_id, self.enemy_templates)
 
     # --- Ability ---
     def _resolve_ability(self, parsed: ParsedCommand, result: TurnResult) -> tuple[int, int]:

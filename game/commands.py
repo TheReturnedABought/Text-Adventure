@@ -48,9 +48,13 @@ class CommandDefinition:
     unlocked_by_default: bool = False
 
     @property
-    def intent(self) -> str: return self.name
+    def intent(self) -> str:
+        return self.name
+
     @property
-    def requires_unlock(self) -> bool: return self.unlock_level > 0 or self.unlock_class is not None
+    def requires_unlock(self) -> bool:
+        """Return True if this command needs to be unlocked via class progression."""
+        return self.unlock_level > 0 or self.unlock_class is not None
 
 class CommandRegistry:
     def __init__(self):
@@ -123,17 +127,24 @@ class CommandRegistry:
     def get_modifier(self, word: str) -> Optional[CommandModifier]:
         return self._modifiers.get(word.lower())
 
-    def all_modifier_names(self) -> List[str]: return list(self._modifiers.keys())
-    def all_commands(self) -> List[CommandDefinition]: return list(self._commands.values())
-    def all_intents(self) -> List[str]: return list(self._commands.keys())
+    def all_modifier_names(self) -> List[str]:
+        return list(self._modifiers.keys())
+
+    def all_commands(self) -> List[CommandDefinition]:
+        return list(self._commands.values())
+
+    def all_intents(self) -> List[str]:
+        return list(self._commands.keys())
 
     def available_for(self, player, context: CommandContext) -> List[CommandDefinition]:
         return [c for c in self.all_commands() if self.is_available_for(player, c.name, context)]
 
     def is_available_for(self, player, command_name: str, context: CommandContext) -> bool:
         cmd = self.get_command(command_name)
-        if not cmd: return False
-        if cmd.unlocked_by_default: return True
+        if not cmd:
+            return False
+        if cmd.unlocked_by_default:
+            return True
         if context not in (CommandContext.ANY,) and CommandContext.ANY not in cmd.valid_contexts and context not in cmd.valid_contexts:
             return False
         if cmd.unlock_class and getattr(player, "char_class_name", "").lower() != cmd.unlock_class.lower():
@@ -144,8 +155,10 @@ class CommandRegistry:
 
     @staticmethod
     def _coerce_context(raw):
-        if isinstance(raw, CommandContext): return raw
-        if raw is None: return None
+        if isinstance(raw, CommandContext):
+            return raw
+        if raw is None:
+            return None
         val = str(raw).strip().upper()
         return CommandContext[val] if val in CommandContext.__members__ else None
 
@@ -170,7 +183,9 @@ class UnlockTable:
         for cls, payload in data.items():
             for lvl_str, cmds in payload.get("level_unlocks", {}).items():
                 lvl = int(lvl_str)
-                for cmd in cmds: self.add_unlock(cls, lvl, cmd)
+                for cmd in cmds:
+                    self.add_unlock(cls, lvl, cmd)
             for lvl_str, groups in payload.get("choice_unlocks", {}).items():
                 lvl = int(lvl_str)
-                for group in groups: self.add_choice_unlock(cls, lvl, group)
+                for group in groups:
+                    self.add_choice_unlock(cls, lvl, group)
