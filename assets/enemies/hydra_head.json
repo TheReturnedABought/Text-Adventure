@@ -26,7 +26,7 @@
       "dice_expression": "1d6+1",
       "ap_cost": 7,
       "weight": 2,
-      "tags": ["acid"]
+      "tags": ["acid", "ranged"]
     }
   ],
   "loot_table": [
