@@ -25,6 +25,12 @@
       }
     }
   ],
+    "exits": {
+    "west": "wyrmwood_a",
+    "north": "wyrmwood_b",
+    "east": "wyrmwood_c",
+    "south": "wyrmwood_d"
+  },
   "enemy_spawns": [
     {
       "template_id": "skeleton",

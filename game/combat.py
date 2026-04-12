@@ -13,15 +13,29 @@ from game.entities import Enemy, Player
 from game.models import ParsedCommand, ArticleType
 from game.world import DamageType, Material, coerce_damage_type, resolve_material_interaction
 
+
 class CombatOutcome(Enum):
-    ONGOING = auto(); PLAYER_WON = auto(); PLAYER_FLED = auto(); PLAYER_DEFEATED = auto()
+    ONGOING = auto()
+    PLAYER_WON = auto()
+    PLAYER_FLED = auto()
+    PLAYER_DEFEATED = auto()
+
 
 @dataclass
 class TurnResult:
-    lines: List[str] = field(default_factory=list); ap_spent: int = 0; outcome: CombatOutcome = CombatOutcome.ONGOING
-    def add(self, line: str) -> None: self.lines.append(line)
-    def is_finished(self) -> bool: return self.outcome != CombatOutcome.ONGOING
-    def display(self) -> str: return "\n".join(self.lines)
+    lines: List[str] = field(default_factory=list)
+    ap_spent: int = 0
+    outcome: CombatOutcome = CombatOutcome.ONGOING
+
+    def add(self, line: str) -> None:
+        self.lines.append(line)
+
+    def is_finished(self) -> bool:
+        return self.outcome != CombatOutcome.ONGOING
+
+    def display(self) -> str:
+        return "\n".join(self.lines)
+
 
 class CombatController:
     def __init__(self, parser: "CommandParser", registry: "CommandRegistry",
@@ -48,7 +62,9 @@ class CombatController:
         self.enemy_templates = enemy_templates or {}
         self._refresh_combat_zone()
         self.player.combat_defense_bonus = 0
-        for e in enemies: e.reset_ap(); e.plan_turn(player)
+        for e in enemies:
+            e.reset_ap()
+            e.plan_turn(player)
 
     def _log(self, msg: str) -> None:
         if self._debug:
@@ -110,7 +126,8 @@ class CombatController:
         result = TurnResult()
         if self._pending_disambiguation:
             target = self._resolve_disambiguation(raw, result)
-            if target is None: return result
+            if target is None:
+                return result
             if self._pending_attack_parsed:
                 parsed = self._pending_attack_parsed
                 self._pending_attack_parsed = None
@@ -234,7 +251,8 @@ class CombatController:
                 result.outcome = enemy_result.outcome
                 return result
         self.round += 1
-        if self.world: self.world.advance_turn()
+        if self.world:
+            self.world.advance_turn()
         self.player.reset_ap()
         for e in self.enemies:
             e.reset_ap()
@@ -356,6 +374,7 @@ class CombatController:
         base_dice = DiceExpression.parse(cmd.base_dice) if cmd and cmd.base_dice else DiceExpression.flat(self.player.attack_value())
         dice = self._apply_modifiers(base_dice, parsed.modifiers)
         dice_roll, rolls, mod = dice.roll_with_breakdown()
+        dice_str = str(dice)  # <-- FIX: define dice_str
 
         base_attack = self.player.base_attack_value()
         # Determine formula components
@@ -736,7 +755,7 @@ class CombatController:
         if not (1 <= idx <= len(self._pending_disambiguation)):
             result.add("Number out of range.")
             return None
-        enemy = self._pending_disambiguation[idx-1]
+        enemy = self._pending_disambiguation[idx - 1]
         self._pending_disambiguation = None
         return enemy
 
